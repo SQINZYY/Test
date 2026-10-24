@@ -172,7 +172,7 @@ const SPECS = {
   ],
   keyboard: [{ l: 'Schalter', g: p => p.kind }, { l: 'Layout', g: p => p.layout }],
   mouse: [{ l: 'Gewicht', g: p => p.weight + ' g', v: p => p.weight, better: 'low' }, { l: 'Kabellos', g: p => yesNo(p.wireless) }],
-  headset: [{ l: 'Kabellos', g: p => yesNo(p.wireless) }],
+  headset: [{ l: 'Bauart', g: p => p.kind }, { l: 'Kabellos', g: p => yesNo(p.wireless) }, { l: 'Mikrofon', g: p => yesNo(p.mic) }],
   chair: [{ l: 'Art', g: p => p.kind }],
   desk: [{ l: 'Größe', g: p => p.size }, { l: 'Höhenverstellbar', g: p => yesNo(p.adjustable) }],
   extras: [{ l: 'Art', g: p => p.kind }],
@@ -190,7 +190,7 @@ const CHIPS = {
   monitor: p => [p.res, p.hz + ' Hz', p.size + '"', p.panel],
   keyboard: p => [p.kind, p.layout],
   mouse: p => [p.weight + ' g', p.wireless ? 'kabellos' : 'Kabel'],
-  headset: p => [p.wireless ? 'kabellos' : 'Kabel'],
+  headset: p => [p.kind, p.wireless == null ? null : p.wireless ? 'kabellos' : 'Kabel'],
   chair: p => [p.kind],
   desk: p => [p.size, p.adjustable ? 'höhenverstellbar' : 'fest'],
   extras: p => [p.kind],
@@ -541,7 +541,7 @@ function constraintText(b, cat) {
 const pickerState = { q: '', sort: 'price', showAll: false, compare: [] };
 const catalogCount = cat => (typeof CATALOG !== 'undefined' && CATALOG[cat] ? CATALOG[cat].length.toLocaleString('de-DE') : 0);
 const CATALOG_HINT = { cpu: 'Ryzen 5 3600', mb: 'B550M', ram: 'Vengeance 32', gpu: 'RTX 3070', storage: '980 Pro', cooler: 'Kraken', psu: 'RM750',
-  case: 'Meshify 2', monitor: 'Odyssey', keyboard: 'Huntsman', mouse: 'Viper', headset: 'Arctis' };
+  case: 'Meshify 2', monitor: 'Odyssey', keyboard: 'Huntsman', mouse: 'Viper', headset: 'Arctis', extras: 'Webcam' };
 
 function pickerItems(b, cat, idx) {
   // Beim Tauschen eines Mehrfach-Teils (z. B. 2. SSD) das alte Teil vorher herausnehmen
@@ -610,6 +610,11 @@ function openPicker(cat, idx = null) {
         ${pickerState.q.trim().length < 2 && catalogCount(cat) ? `<p class="muted small">Unten: ${DB[cat].length} vollständig geprüfte Teile. Für alle weiteren Modelle einfach den Namen suchen (z. B. „${CATALOG_HINT[cat] || 'Modellname'}“).</p>` : ''}
         <div class="seg">${sorts.map(([k, l]) => `<button class="${pickerState.sort === k ? 'on' : ''}" data-a="pick-sort" data-k="${k}">${l}</button>`).join('')}</div>
         <div class="items">${ok.map(row).join('') || '<p class="muted center">Keine passenden Teile gefunden.</p>'}</div>
+        <div class="card own-add">
+          <p class="small muted">Dein Teil ist nicht dabei? Such es im Shop und trag es selbst ein.</p>
+          <div class="row"><button class="btn small" data-a="own-add" data-cat="${cat}">${icon('plus')}Eigenes Teil</button>
+            <button class="btn ghost small" data-a="amazon" data-q="${esc(pickerState.q.trim() || c.name)}">${icon('link')}Amazon</button></div>
+        </div>
         ${bad.length ? `<button class="btn ghost wide" data-a="pick-all">${pickerState.showAll ? 'Unpassende ausblenden' : `${bad.length} unpassende Teile anzeigen`}</button>
           ${pickerState.showAll ? `<p class="muted small">Diese Teile passen nicht zu deinem Build. Ändere zuerst das blockierende Teil, um sie zu wählen.</p><div class="items">${bad.map(row).join('')}</div>` : ''}` : ''}`;
     },
@@ -695,7 +700,8 @@ function openDetail(cat, idx) {
         <div class="card"><label class="field"><span>Dein Preis (€)</span>
           <input type="number" inputmode="decimal" min="0" value="${price}" data-input="price" data-cat="${cat}" data-id="${p.id}"></label>
           <p class="muted small">${(b.priceInfo || {})[cat + ':' + p.id] ? `Geizhals-Preis vom ${new Date(b.priceInfo[cat + ':' + p.id]).toLocaleDateString('de-DE')} · ` : ''}Richtpreis: ${fmtEur(p.price)}${price !== p.price ? ` · <button class="link" data-a="reset-price" data-cat="${cat}" data-id="${p.id}">zurücksetzen</button>` : ''}</p>
-          <button class="btn ghost small" data-a="geizhals" data-cat="${cat}" data-id="${p.id}">${icon('link')}Auf Geizhals ansehen</button></div>
+          <div class="row link-row"><button class="btn ghost small" data-a="geizhals" data-cat="${cat}" data-id="${p.id}">${icon('link')}Geizhals</button>
+            <button class="btn ghost small" data-a="amazon" data-q="${esc(geizhalsQuery(p))}">${icon('link')}Amazon</button></div></div>
         <div class="card"><table class="spec">${SPECS[cat].map(s => `<tr><th>${s.l}</th><td>${esc(clean(s.g(p)))}</td></tr>`).join('')}</table></div>
         ${issues.length ? `<div class="card issues"><ul>${issues.map(i => `<li class="${i.level === 'error' ? 'err' : i.level}">${icon(i.level === 'error' ? 'x' : i.level === 'warn' ? 'warn' : 'info')}<span>${esc(i.msg)}</span></li>`).join('')}</ul></div>`
           : `<div class="banner ok">${icon('check')}<b>Passt zu deinem Build</b></div>`}`;
@@ -712,6 +718,7 @@ function geizhalsQuery(p) {
   return p.name.replace(/\([^)]*\)/g, ' ').replace(/×/g, 'x').replace(/"/g, '').replace(/\s+/g, ' ').trim();
 }
 const geizhalsUrl = p => 'https://geizhals.de/?fs=' + encodeURIComponent(geizhalsQuery(p));
+const amazonUrl = q => 'https://www.amazon.de/s?k=' + encodeURIComponent(q);
 
 function openExternal(url) {
   if (Native && Native.openUrl) Native.openUrl(url); else window.open(url, '_blank');
@@ -1220,6 +1227,21 @@ const A = {
   'prices-refresh': () => { if (!priceState.busy) refreshPrices(cur()); },
   'prices-cancel': () => { priceState.cancel = true; toast('Wird nach dem aktuellen Teil abgebrochen'); },
   'geizhals': d => openExternal(geizhalsUrl(findPart(d.cat, d.id))),
+  amazon: d => openExternal(amazonUrl(d.q)),
+  'own-add': async d => {
+    const name = await ask({ title: 'Eigenes Teil hinzufügen', text: `${CAT[d.cat].name}, das nicht in der Liste ist – z. B. von Amazon. Es zählt fürs Budget, wird aber nicht auf Kompatibilität geprüft.`,
+      input: true, value: pickerState.q.trim(), placeholder: 'Name des Teils', ok: 'Weiter' });
+    if (!name || !name.trim()) return;
+    const price = await ask({ title: 'Preis (optional)', input: true, numeric: true, value: '', placeholder: 'z. B. 49', ok: 'Hinzufügen' });
+    if (price == null) return;
+    const b = cur();
+    b.customs = b.customs || [];
+    if (!CAT[d.cat].multi) { delete b.parts[d.cat]; b.customs = b.customs.filter(c => c.cat !== d.cat); }
+    b.customs.push({ id: 'c' + Math.random().toString(36).slice(2, 9), cat: d.cat, name: name.trim().slice(0, 120), price: Math.max(0, Math.round(+price || 0)) });
+    sheets.length = 0; renderSheets();
+    touch(b);
+    toast('Eigenes Teil hinzugefügt');
+  },
   'imp-paste': () => {
     let clip = '';
     try { clip = Native && Native.getClipboard ? Native.getClipboard() || '' : ''; } catch (e) { clip = ''; }

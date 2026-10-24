@@ -1,13 +1,18 @@
-// Baut app/assets/www/catalog.json aus dem PC-Part-Dataset (https://github.com/docyx/pc-part-dataset, MIT,
-// Daten von PCPartPicker). Aufruf: node tools/build-catalog.js <pfad-zum-dataset>
+// Baut app/assets/www/catalog.json aus offenen Datenquellen:
+//  - PC-Part-Dataset (https://github.com/docyx/pc-part-dataset, MIT, Daten von PCPartPicker) – Pflicht
+//  - The Keyboard Catalogue (https://github.com/patrickgil/The-Keyboard-Catalogue, MIT) – optional, Custom-Tastaturen
+//  - AutoEq (https://github.com/jaakkopasanen/AutoEq, MIT) – optional, Kopfhörer-Modelle
+// Aufruf: node tools/build-catalog.js <pc-part-dataset> [--keyboards <keyboard-catalogue>] [--autoeq <autoeq-git-repo>]
 // Teile, die schon in der eigenen Datenbank (data.js) stehen, werden übersprungen.
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { execFileSync } = require('child_process');
 
 const src = process.argv[2];
-if (!src) { console.error('Aufruf: node tools/build-catalog.js <pfad-zum-pc-part-dataset>'); process.exit(1); }
+const opt = name => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null; };
+if (!src) { console.error('Aufruf: node tools/build-catalog.js <pc-part-dataset> [--keyboards <dir>] [--autoeq <dir>]'); process.exit(1); }
 const www = path.join(__dirname, '..', 'app', 'assets', 'www');
 const ctx = vm.createContext({ console, TextEncoder, TextDecoder, btoa, atob });
 for (const f of ['data.js', 'engine.js', 'import.js']) vm.runInContext(fs.readFileSync(path.join(www, f), 'utf8'), ctx, { filename: f });
@@ -83,7 +88,7 @@ CHIPS.sort((a, b) => b.key.length - a.key.length);
 const chipOf = s => { const t = normText(s); return CHIPS.find(c => c.re.test(t)) || null; };
 
 // ---------- Umwandeln ----------
-const out = { v: 1, source: 'docyx/pc-part-dataset (Daten von PCPartPicker), Stand Juli 2025', fields: {}, data: {} };
+const out = { v: 1, source: 'docyx/pc-part-dataset (PCPartPicker, Juli 2025), The Keyboard Catalogue, AutoEq', fields: {}, data: {} };
 const stats = {};
 function emit(cat, fields, rows) {
   const seen = new Set();
@@ -203,19 +208,74 @@ emit('monitor', ['id', 'name', 'price', 'res', 'resText', 'hz', 'size', 'panel']
   return [idOf('monitor', name), name, eur(m.price), resClass(w, h), w && h ? `${w}×${h}` : null, m.refresh_rate || null, m.screen_size || null, m.panel_type || null];
 }));
 
-emit('keyboard', ['id', 'name', 'price', 'kind', 'layout', 'wireless'], read('keyboard').map(k => {
+const keyboards = read('keyboard').map(k => {
   if (known('keyboard', k.name)) return null;
   return [idOf('keyboard', k.name + '|' + (k.color || '')), k.name, eur(k.price), lower(k.switches || k.style), k.tenkeyless ? 'TKL' : 'Fullsize',
     /wireless/i.test(k.connection_type || '') ? 1 : 0];
-}));
+});
+// Custom-Tastaturen aus The Keyboard Catalogue (Markdown-Seiten mit Spezifikationstabelle)
+const kbDir = opt('--keyboards');
+if (kbDir) {
+  const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  for (const f of walk(path.join(kbDir, '_posts')).filter(f => f.endsWith('.md'))) {
+    const md = fs.readFileSync(f, 'utf8');
+    const title = (/^title:\s*"([^"]+)"/m.exec(md) || [])[1];
+    if (!title) continue;
+    const spec = k => ((new RegExp('\\|\\s*' + k + '\\s*\\|\\s*([^|]+)\\|', 'i').exec(md) || [])[1] || '').trim();
+    const size = spec('Size');
+    const mount = spec('Mount');
+    const cost = /\$\s*([\d,]+)/.exec(spec('Cost'));
+    const layout = /^\d+$/.test(size) ? size + ' %' : size || null;
+    keyboards.push([idOf('keyboard', 'kbc|' + title), title, cost ? eur(+cost[1].replace(/,/g, '')) : null,
+      'Custom' + (mount && mount !== '???' ? ` (${/mount/i.test(mount) ? mount : mount + '-Mount'})` : ''), layout, 0]);
+  }
+}
+emit('keyboard', ['id', 'name', 'price', 'kind', 'layout', 'wireless'], keyboards);
 emit('mouse', ['id', 'name', 'price', 'wireless', 'dpi'], read('mouse').map(m => {
   if (known('mouse', m.name)) return null;
   return [idOf('mouse', m.name + '|' + (m.color || '')), m.name, eur(m.price), /wireless/i.test(m.connection_type || '') ? 1 : 0, m.max_dpi || null];
 }));
-emit('headset', ['id', 'name', 'price', 'wireless', 'mic'], read('headphones').map(h => {
+const HP_KIND = { Circumaural: 'Over-Ear', Supraaural: 'On-Ear', 'In Ear': 'In-Ear', Earbud: 'Earbuds' };
+const headsets = read('headphones').map(h => {
   if (known('headset', h.name)) return null;
-  return [idOf('headset', h.name + '|' + (h.color || '')), h.name, eur(h.price), h.wireless ? 1 : 0, h.microphone ? 1 : 0];
-}));
+  return [idOf('headset', h.name + '|' + (h.color || '')), h.name, eur(h.price), h.wireless ? 1 : 0, h.microphone ? 1 : 0, HP_KIND[h.type] || h.type || null];
+});
+// Kopfhörer-Modelle aus AutoEq (Messdatenbank; nur Name und Bauart, keine Preise)
+const aeDir = opt('--autoeq');
+if (aeDir) {
+  const have = new Set(headsets.filter(Boolean).map(r => normText(r[1])));
+  const files = execFileSync('git', ['-C', aeDir, 'ls-tree', '-r', '--name-only', 'HEAD', 'results'], { maxBuffer: 64 << 20 }).toString().split('\n');
+  const seen = new Set();
+  for (const f of files) {
+    const p = f.split('/');
+    if (p.length < 5) continue;
+    const name = p[p.length - 2].replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+    const n = normText(name);
+    if (!name || seen.has(n) || have.has(n) || known('headset', name)) continue;
+    seen.add(n);
+    const kind = /in-ear/.test(p[2]) ? 'In-Ear' : /earbud/.test(p[2]) ? 'Earbuds' : 'Over-Ear';
+    headsets.push([idOf('headset', 'autoeq|' + name), name, null, null, null, kind]);
+  }
+}
+emit('headset', ['id', 'name', 'price', 'wireless', 'mic', 'kind'], headsets);
+
+// Extras: weitere Kategorien aus dem PC-Part-Dataset
+const EXTRA_SOURCES = {
+  speakers: 'Lautsprecher', webcam: 'Webcam', 'case-fan': 'Gehäuselüfter', 'thermal-paste': 'Wärmeleitpaste',
+  'external-hard-drive': 'Externe Festplatte', 'wireless-network-card': 'WLAN-Karte', 'sound-card': 'Soundkarte',
+  'case-accessory': 'Gehäuse-Zubehör', 'fan-controller': 'Lüftersteuerung', ups: 'USV', 'wired-network-card': 'Netzwerkkarte',
+};
+const extras = [];
+for (const [file, kind] of Object.entries(EXTRA_SOURCES)) {
+  for (const x of read(file)) {
+    let name = x.name;
+    if (file === 'case-fan' && x.size && !new RegExp(String(x.size)).test(name)) name += ` ${x.size} mm`;
+    if (file === 'external-hard-drive' && x.capacity) name += ` ${x.capacity >= 1000 ? x.capacity / 1000 + ' TB' : x.capacity + ' GB'}`;
+    if (known('extras', name)) continue;
+    extras.push([idOf('extras', file + '|' + name + '|' + (x.color || '')), name + (x.color && file === 'case-fan' ? ` (${x.color})` : ''), eur(x.price), kind]);
+  }
+}
+emit('extras', ['id', 'name', 'price', 'kind'], extras);
 
 const file = path.join(www, 'catalog.json');
 fs.writeFileSync(file, JSON.stringify(out));

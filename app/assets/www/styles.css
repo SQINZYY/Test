@@ -317,3 +317,8 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 .price-progress .bar { margin-bottom: 12px; }
 body.has-sheet .toast { bottom: auto; top: 70px; transform: translate(-50%, -20px); }
 body.has-sheet .toast.show { transform: translate(-50%, 0); }
+
+.link-row { margin-top: 4px; }
+.link-row .btn { flex: 1; }
+.own-add { margin-top: 4px; }
+.own-add .row .btn { flex: 1; }

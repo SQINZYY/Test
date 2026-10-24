@@ -305,6 +305,15 @@ const DB = {
     { id: 'streamdeck', name: 'Elgato Stream Deck MK.2', k: ['stream deck'], kind: 'Streaming', price: 149 },
     { id: 'quadcast', name: 'HyperX QuadCast S Mikrofon', k: ['quadcast'], kind: 'Streaming', price: 129 },
     { id: 'keylight', name: 'Elgato Key Light', k: ['key light'], kind: 'Streaming', price: 179 },
+    { id: 'xbox-controller', name: 'Xbox Wireless Controller', k: ['xbox wireless controller'], kind: 'Controller', price: 59 },
+    { id: 'dualsense', name: 'Sony DualSense Wireless-Controller', k: ['dualsense'], kind: 'Controller', price: 69 },
+    { id: 'hd60x', name: 'Elgato HD60 X Capture Card', k: ['hd60 x'], kind: 'Streaming', price: 169 },
+    { id: 'psa1plus', name: 'RØDE PSA1+ Mikrofonarm', k: ['psa1'], kind: 'Streaming', price: 119 },
+    { id: 'z407', name: 'Logitech Z407 Lautsprecher (2.1)', k: ['z407'], kind: 'Lautsprecher', price: 79 },
+    { id: 'pebble-v3', name: 'Creative Pebble V3 Lautsprecher', k: ['pebble v3'], kind: 'Lautsprecher', price: 39 },
+    { id: 'screenbar', name: 'BenQ ScreenBar Monitorlampe', k: ['screenbar'], kind: 'Beleuchtung', price: 109 },
+    { id: 'cable-kit', name: 'Kabelmanagement-Set (Kabelkanal + Klettbänder)', k: ['kabelkanal'], kind: 'Zubehör', price: 25 },
+    { id: 'usb-hub', name: 'Anker USB-C-Hub 7-in-1', k: ['anker usb c hub'], kind: 'Zubehör', price: 35 },
   ],
 };
 
