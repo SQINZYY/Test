@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monitor + PC-Gehäuse, innerhalb der 66dp-Sicherheitszone -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#00000000" android:strokeColor="#FF2DD4BF" android:strokeWidth="3.5"
+        android:strokeLineJoin="round" android:strokeLineCap="round"
+        android:pathData="M31,38 h30 a3,3 0 0 1 3,3 v20 a3,3 0 0 1 -3,3 h-30 a3,3 0 0 1 -3,-3 v-20 a3,3 0 0 1 3,-3 z M46,64 v7 M38,72 h16" />
+    <path android:fillColor="#00000000" android:strokeColor="#FF2DD4BF" android:strokeWidth="3.5"
+        android:strokeLineJoin="round"
+        android:pathData="M69,36 h10 a2,2 0 0 1 2,2 v32 a2,2 0 0 1 -2,2 h-10 a2,2 0 0 1 -2,-2 v-32 a2,2 0 0 1 2,-2 z" />
+    <path android:fillColor="#FF5EEAD4" android:pathData="M74,47 m-2.5,0 a2.5,2.5 0 1 0 5,0 a2.5,2.5 0 1 0 -5,0 M74,57 m-2.5,0 a2.5,2.5 0 1 0 5,0 a2.5,2.5 0 1 0 -5,0" />
+    <path android:fillColor="#552DD4BF" android:pathData="M33,52 l7,-6 5,4 7,-7 9,9 v6 h-28 z" />
+</vector>
