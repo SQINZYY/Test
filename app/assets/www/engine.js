@@ -247,10 +247,13 @@ function upgrades(b) {
   const cost = (v, changes) => changes.reduce((s, [cat, p]) => s + priceOf(v, cat, p), 0);
   const gainOf = v => Math.round((fpsAt(v, res) / base - 1) * 100);
 
-  if (!cpu || !mb) return { res, base: 0, items: [] };
+  // Eigene Teile (nicht in der Datenbank) lassen sich nicht bewerten – diese Bereiche überspringen
+  const own = c => customsOf(b, c).length > 0;
+  const ownParts = customsOf(b).filter(c => CAT[c.cat] && CAT[c.cat].group === 'pc');
+  if (!cpu || !mb) return { res, base: 0, items: [], ownParts };
 
   // Dringende Dinge zuerst
-  if (psu) {
+  if (psu && !own('gpu') && !own('cpu')) {
     const pw = power(b);
     if (psu.watt < pw.recommended) {
       const p = cheapest(DB.psu.filter(x => x.watt >= pw.recommended && noErrors(withPart(b, 'psu', x.id), ['psu'])));
@@ -266,7 +269,7 @@ function upgrades(b) {
 
   // Grafikkarte (passend zu Mainboard, Gehäuse, ggf. mit neuem Netzteil)
   const gpuCands = [];
-  for (const g of DB.gpu) {
+  for (const g of own('gpu') || own('psu') || own('case') ? [] : DB.gpu) {
     if (gpu && g.score < gpu.score * 1.12) continue;
     let v = withPart(b, 'gpu', g.id);
     if (!noErrors(v, ['gpu', 'case', 'mb'])) continue;
@@ -286,7 +289,7 @@ function upgrades(b) {
 
   // CPU auf gleichem Sockel (kein neues Mainboard nötig)
   const cpuCands = [];
-  for (const c of DB.cpu) {
+  for (const c of own('cpu') ? [] : DB.cpu) {
     if (c.socket !== cpu.socket || c.score < cpu.score * 1.08) continue;
     const v = withPart(b, 'cpu', c.id);
     if (!noErrors(v, ['cpu', 'mb', 'gpu'])) continue;
@@ -299,7 +302,7 @@ function upgrades(b) {
   list.push(...pickSpread(cpuCands, 2));
 
   // Plattform-Wechsel bei älteren Sockeln
-  if (['AM4', 'LGA1700'].includes(cpu.socket)) {
+  if (['AM4', 'LGA1700'].includes(cpu.socket) && !own('cpu') && !own('ram') && !own('case')) {
     const plat = [];
     for (const c of DB.cpu.filter(x => ['AM5', 'LGA1851'].includes(x.socket) && x.score > cpu.score * 1.15)) {
       const boards = DB.mb.filter(m => m.socket === c.socket && (!cs || cs.ff.includes(m.ff)));
@@ -331,7 +334,7 @@ function upgrades(b) {
   }
 
   // RAM
-  if (ram && ram.size < 32) {
+  if (ram && ram.size < 32 && !own('ram')) {
     const r = cheapest(DB.ram.filter(x => x.type === mb.mem && x.size >= 32 && x.modules <= mb.ramSlots && x.size <= mb.maxRam));
     if (r) {
       const v = withPart(b, 'ram', r.id);
@@ -359,7 +362,7 @@ function upgrades(b) {
   }
 
   for (const it of list) it.value = it.cost ? it.gain / (it.cost / 100) : 0;
-  return { res, base, items: list };
+  return { res, base, items: list, ownParts };
 }
 
 // Aus vielen Kandidaten: bestes Preis-Leistungs-Verhältnis, größter Sprung und ein Mittelweg.

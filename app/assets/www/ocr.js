@@ -140,6 +140,40 @@ function cropProductImage(img, box) {
   return out.toDataURL('image/jpeg', 0.82);
 }
 
+// Steht links neben dem Text ein Produktbild, liest Tesseract oft ein paar Zeichen des Bildes mit
+// ("men | egend WiFi" statt "Legend WiFi"). Solche Zeilen ab der Textspalte noch einmal lesen.
+async function cleanLeftNoise(worker, canvas, scale, lines) {
+  const counts = {};
+  for (const l of lines) if (l.text.length > 12) { const x = Math.round(l.bbox.x0 / 8) * 8; counts[x] = (counts[x] || 0) + 1; }
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  if (!top || top[1] < 3) return;
+  const col = +top[0];
+  const lh = Math.max(10, ...lines.slice(0, 50).map(l => l.bbox.y1 - l.bbox.y0).sort((a, b) => a - b).slice(0, 1));
+  const inCol = lines.filter(l => Math.abs(l.bbox.x0 - col) <= 16);
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const b = l.bbox;
+    if (b.x0 >= col - 16 || b.x1 < col + 40) continue;
+    if (categoryLine(l.text)) continue;
+    // Nur innerhalb einer Produktkarte (andere Zeilen in der Textspalte direkt darüber/darunter),
+    // nicht bei Fließtext über die ganze Breite
+    if (!inCol.some(c => Math.abs(c.bbox.y0 - b.y0) < lh * 4)) continue;
+    const pad = 4;
+    const rect = {
+      left: Math.round((col - 8) * scale), top: Math.round((b.y0 - pad) * scale),
+      width: Math.round((b.x1 - col + 8 + pad) * scale), height: Math.round((b.y1 - b.y0 + 2 * pad) * scale),
+    };
+    try {
+      const { data } = await worker.recognize(canvas, { rectangle: rect });
+      const prev = i > 0 ? normText(lines[i - 1].text) : '';
+      // Ist die vorige Zeile mit im Ausschnitt gelandet, nicht doppelt übernehmen
+      const t = (data.text || '').split('\n').map(s => s.trim()).filter(s => s && !(prev && prev.includes(normText(s))))
+        .join(' ').replace(/\s+/g, ' ').trim();
+      if (t.length >= 3) { l.text = t; l.bbox = { ...b, x0: col }; }
+    } catch (e) { /* alte Zeile behalten */ }
+  }
+}
+
 // Ein oder mehrere Screenshots (Data-URLs) -> Import-Kandidaten
 async function itemsFromScreenshots(sources, onProgress) {
   const worker = await getOcrWorker(m => {
@@ -157,7 +191,8 @@ async function itemsFromScreenshots(sources, onProgress) {
       lines.push({ text: line.text.trim(), conf: line.confidence, bbox: { x0: b.x0 / scale, y0: b.y0 / scale, x1: b.x1 / scale, y1: b.y1 / scale } });
     }
     lines.sort((a, b) => a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0);
-    const items = itemsFromLines(lines, 'screenshot');
+    await cleanLeftNoise(worker, canvas, scale, lines);
+    const items = itemsFromBlocks(lines);
     for (const it of items) {
       if (it.line) {
         try { it.img = cropProductImage(img, it.line.bbox); } catch (e) { it.img = null; }

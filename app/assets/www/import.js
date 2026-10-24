@@ -55,6 +55,7 @@ function attrScore(cat, p, a) {
   if (cat === 'storage') cmp(a.gb, p.size);
   if (cat === 'gpu' && a.gb && a.gb <= 32) cmp(a.gb, p.vram);
   if (cat === 'psu') cmp(a.watt, p.watt);
+  if (cat === 'mb') cmp(a.ddr, p.mem);
   return { ok, bad };
 }
 
@@ -77,7 +78,7 @@ function guessCategory(t) {
 }
 
 // Ein Text (eine Zeile / ein Produktname) -> bestes Teil aus der Datenbank
-function matchLine(raw) {
+function matchLine(raw, hint) {
   const t = normText(raw);
   if (t.length < 3) return null;
   const a = attrsOf(t);
@@ -95,7 +96,7 @@ function matchLine(raw) {
     return { cat: best.cat, id: best.p.id, quality };
   }
   // Kein Modell erkannt: über Merkmale das ähnlichste Teil suchen
-  const cat = guessCategory(t);
+  const cat = guessCategory(t) || hint || null;
   if (cat === 'ram' && a.ddr && a.gb) {
     const c = DB.ram.filter(r => r.type === a.ddr && r.size === a.gb)
       .sort((x, y) => Math.abs(x.speed - (a.speed || x.speed)) - Math.abs(y.speed - (a.speed || y.speed)))[0];
@@ -116,7 +117,8 @@ function matchLine(raw) {
 
 // Preis und Anzahl aus einer Zeile wie "2x Samsung … € 129,90"
 function parsePrice(s) {
-  const m = /(?:€\s*(\d{1,3}(?:[.\s]\d{3})*|\d+)(?:,(\d{2}))?)|(?:(\d{1,3}(?:[.\s]\d{3})*|\d+),(\d{2}|-{1,2})\s*€)/.exec(s);
+  // Tausender nur mit Trennzeichen ("1.307,35"), sonst ganze Zahl ("1307,35")
+  const m = /(?:€\s*(\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,(\d{2}|-{1,2}))?)|(?:(\d{1,3}(?:[.\s]\d{3})+|\d+),(\d{2}|-{1,2})\s*€)/.exec(s);
   if (!m) return null;
   const whole = (m[1] || m[3]).replace(/[.\s]/g, '');
   const cents = /^\d+$/.test(m[2] || m[4] || '') ? +(m[2] || m[4]) : 0;
@@ -125,36 +127,69 @@ function parsePrice(s) {
 }
 
 function parseQty(s) {
-  const m = /^\s*(\d{1,2})\s*[x×]\s+/i.exec(s);
+  const m = /^\s*(\d{1,2})\s*[x×]\s+/i.exec(s) || /^\s*(\d)\s*[x×]\s*$/i.exec(s);
   return m ? Math.min(+m[1], 4) : 1;
 }
 
 function cleanName(s) {
-  return String(s).replace(/^\s*\d{1,2}\s*[x×]\s+/i, '').replace(/(?:€\s*[\d.,]+|[\d.,]+\s*€).*$/, '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return String(s).replace(/^\s*\d{1,2}\s*[x×]\s+/i, '')
+    .replace(/\bab\s*[€£]\s*[\d.,\-]+\S*/gi, ' ')          // "ab € 310,00"
+    .replace(/[€£]\s*[+\-]\s*[\d.,]+\S*/g, ' ')               // Preisänderungen "€ +191,11"
+    .replace(/\d+\s*Angebote?\b/gi, ' ').replace(/\(\d+\)/g, ' ').replace(/[®©@]/g, ' ')
+    .replace(/(?:€\s*[\d.,]+|[\d.,]+\s*€).*$/, '')
+    .replace(/\s+/g, ' ').replace(/[\s,;/-]+$/, '').trim().slice(0, 120);
+}
+
+// Preisangaben und Bewertungen aus einer Zeile entfernen (stehen in Screenshots oft mitten im Namen)
+function stripPriceNoise(s) {
+  return String(s).replace(/\bab\s*[€£]\s*[\d.,\-]+\S*/gi, ' ').replace(/[€£]\s*[+\-]?\s*[\d.,]+\S*/g, ' ')
+    .replace(/\d+\s*Angebote?\b/gi, ' ').replace(/\(\d+\)/g, ' ').replace(/[®©@]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Geizhals-Kategoriezeile wie "Hardware / Netzteile & USV / Netzteile"
+function categoryLine(text) {
+  if ((text.match(/\//g) || []).length < 2 || /\d{3}/.test(text)) return null;
+  const t = normText(text);
+  if (/wasserk(ü|ue|ii|u)hlung|k(ü|ue|ii|u)hler/.test(t)) return 'cooler';
+  if (/geh(ä|ae|a)use/.test(t)) return 'case';
+  if (/netzteil/.test(t)) return 'psu';
+  if (/mainboard/.test(t)) return 'mb';
+  if (/arbeitsspeicher/.test(t)) return 'ram';
+  if (/festplatten|ssd/.test(t)) return 'storage';
+  if (/grafikkarte/.test(t)) return 'gpu';
+  if (/prozessor/.test(t)) return 'cpu';
+  if (/monitor/.test(t)) return 'monitor';
+  if (/tastatur/.test(t)) return 'keyboard';
+  if (/m(ä|a)use|maus/.test(t)) return 'mouse';
+  if (/headset|kopfh/.test(t)) return 'headset';
+  return guessCategory(t);
 }
 
 // Zeilen (Text oder OCR) -> Kandidaten. Zeilen ohne Treffer werden mit der nächsten Zeile kombiniert,
 // weil Produktnamen in Shops oft umbrechen.
 function itemsFromLines(lines, source) {
   const out = [];
+  let hint = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const text = typeof line === 'string' ? line : line.text;
     if (!text || text.trim().length < 3) continue;
-    let m = matchLine(text);
+    const cl = categoryLine(text);
+    if (cl) { hint = cl; continue; }
+    let m = matchLine(text, hint);
     let used = 1;
     if ((!m || !m.id) && i + 1 < lines.length) {
       const next = typeof lines[i + 1] === 'string' ? lines[i + 1] : lines[i + 1].text;
-      const m2 = matchLine(text + ' ' + next);
+      const m2 = matchLine(text + ' ' + next, hint);
       const alone = matchLine(next);
       if (m2 && m2.id && !(alone && alone.id === m2.id)) { m = m2; used = 2; }
     }
     if (!m) continue;
-    // Preis in derselben oder einer der nächsten beiden Zeilen
+    // Preis in derselben oder einer der nächsten Zeilen (bis zum nächsten Produkt bzw. zur nächsten Kategorie)
     let price = parsePrice(text);
-    for (let j = i + 1; price == null && j < Math.min(lines.length, i + used + 2); j++) {
+    for (let j = i + 1; price == null && j < Math.min(lines.length, i + used + 5); j++) {
       const nt = typeof lines[j] === 'string' ? lines[j] : lines[j].text;
-      if (matchLine(nt) && matchLine(nt).id) break;
+      if (categoryLine(nt) || (matchLine(nt) && matchLine(nt).id)) break;
       price = parsePrice(nt);
     }
     let full = used === 2 ? text + ' ' + (typeof lines[i + 1] === 'string' ? lines[i + 1] : lines[i + 1].text) : text;
@@ -170,8 +205,48 @@ function itemsFromLines(lines, source) {
     // Gleiches Teil direkt hintereinander (z. B. Name über zwei Zeilen) nur einmal
     if (prev && m.id && prev.id === m.id && prev.lineIndex >= i - 1) { prev.lineIndex = i; continue; }
     out.push({ ...m, name, price, qty: parseQty(text), source, line: typeof line === 'string' ? null : line, lineIndex: i + used - 1,
-      checked: m.quality !== 'custom' || source === 'link' });
+      checked: m.quality !== 'custom' || source === 'link' || !!hint, hinted: !!hint });
+    hint = null;
     i += used - 1;
+  }
+  return out;
+}
+
+// Screenshot-Zeilen (mit Position) zu Produktkarten gruppieren: Zeilen mit kleinem Abstand gehören zusammen.
+// Ein Block = normalerweise ein Produkt (Name über mehrere Zeilen, Preis, Artikelnummer …).
+function itemsFromBlocks(lines) {
+  const hs = lines.map(l => l.bbox.y1 - l.bbox.y0).sort((a, b) => a - b);
+  const lh = hs[Math.floor(hs.length / 2)] || 20;
+  const blocks = [];
+  let curBlock = null;
+  for (const l of lines) {
+    const isCat = !!categoryLine(l.text);
+    if (curBlock && !isCat && !curBlock.isCat && l.bbox.y0 - curBlock.y1 < lh * 1.0) {
+      curBlock.lines.push(l);
+      curBlock.y1 = Math.max(curBlock.y1, l.bbox.y1);
+    } else {
+      curBlock = { lines: [l], y1: l.bbox.y1, isCat };
+      blocks.push(curBlock);
+    }
+  }
+  const out = [];
+  let hint = null;
+  for (const bl of blocks) {
+    if (bl.isCat) { hint = categoryLine(bl.lines[0].text); continue; }
+    // Mehrere Produkte in einem Block (dichte Liste)? Dann zeilenweise.
+    const perLine = itemsFromLines(bl.lines, 'screenshot').filter(i => i.id);
+    const exactIds = new Set(perLine.filter(i => i.quality === 'exact').map(i => i.id));
+    if (new Set(perLine.map(i => i.cat)).size >= 2 || exactIds.size >= 2) { out.push(...perLine); hint = null; continue; }
+    const text = bl.lines.map(l => stripPriceNoise(l.text)).join(' ');
+    const m = matchLine(text, hint);
+    if (!m) continue;
+    const name = cleanName(bl.lines.slice(0, 2).map(l => stripPriceNoise(l.text)).join(' '));
+    if (!m.id && (name.length < 10 || !/\d/.test(name))) continue;
+    let price = null;
+    for (const l of bl.lines) if (price == null) price = parsePrice(l.text);
+    const q = bl.lines.map(l => parseQty(l.text)).find(n => n > 1) || 1;
+    out.push({ ...m, name, price, qty: q, source: 'screenshot', line: bl.lines[0], checked: !!m.id || !!hint });
+    hint = null;
   }
   return out;
 }
@@ -188,6 +263,10 @@ const stripTags = s => decodeEntities(s.replace(/<[^>]*>/g, ' ')).replace(/\s+/g
 // HTML einer Geizhals-Wunschliste (oder einer anderen Shop-Seite) -> Kandidaten
 function itemsFromHtml(html) {
   html = String(html || '');
+  // Aus dem eingebauten Browser kommt zusätzlich der sichtbare Text der Seite
+  let visibleText = null;
+  const cut = html.indexOf('<!--SB-TEXT-->');
+  if (cut >= 0) { visibleText = html.slice(cut + 14); html = html.slice(0, cut); }
   // 1) Geizhals-Produktlinks: …/name-a1234567.html
   const re = /<a\b[^>]*href="([^"]*?-a(\d{4,})\.html[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
   const found = new Map();
@@ -227,9 +306,9 @@ function itemsFromHtml(html) {
   const fromLd = itemsFromLines(names, 'link').filter(i => i.id);
   if (fromLd.length) return fromLd;
   // 3) Notlösung: sichtbarer Text der Seite, Zeile für Zeile
-  const text = decodeEntities(html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ')
+  const text = visibleText != null ? visibleText : decodeEntities(html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<(br|\/p|\/div|\/li|\/tr|\/h\d|\/a)[^>]*>/gi, '\n').replace(/<[^>]*>/g, ' '));
-  return itemsFromLines(text.split('\n').map(s => s.trim()).filter(Boolean), 'text').filter(i => i.id);
+  return itemsFromLines(text.split('\n').map(s => s.trim()).filter(Boolean), 'text').filter(i => i.id || i.hinted);
 }
 
 function itemsFromText(text) {

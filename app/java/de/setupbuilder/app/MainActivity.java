@@ -9,7 +9,12 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Base64;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -18,16 +23,20 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -43,9 +52,17 @@ public class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
     private static final String START = "https://" + HOST + "/www/index.html";
     private static final int PICK_FILES = 1;
-    private static final int MAX_DOWNLOAD = 6 * 1024 * 1024;
+    private static final int BG = 0xFF071116;
+    // Liest die Seite im eingebauten Browser aus: HTML + sichtbarer Text
+    private static final String EXTRACT_JS = "(function(){return document.documentElement.outerHTML+'\\n<!--SB-TEXT-->\\n'+(document.body?document.body.innerText:'')})()";
 
+    private FrameLayout root;
     private WebView web;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    // Eingebauter Browser für Geizhals-Listen und Preisabfragen
+    private LinearLayout browserBox;
+    private WebView browser;
+    private String browseId;
     private SharedPreferences prefs;
     private String pendingImport;
     private final List<String> pendingImages = new ArrayList<>();
@@ -58,7 +75,7 @@ public class MainActivity extends Activity {
         prefs = getSharedPreferences("setupbuilder", Context.MODE_PRIVATE);
 
         web = new WebView(this);
-        web.setBackgroundColor(0xFF071116);
+        web.setBackgroundColor(BG);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -105,7 +122,9 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
-        setContentView(web);
+        root = new FrameLayout(this);
+        root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        setContentView(root);
 
         handleIntent(getIntent());
         web.loadUrl(START);
@@ -216,6 +235,10 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (browser != null) {
+            cancelBrowser();
+            return;
+        }
         web.evaluateJavascript("window.SB ? SB.back() : false", new ValueCallback<String>() {
             @Override
             public void onReceiveValue(String handled) {
@@ -243,45 +266,136 @@ public class MainActivity extends Activity {
         return out.toByteArray();
     }
 
-    /** Lädt eine Seite (z. B. eine Geizhals-Wunschliste) im Hintergrund. */
-    private void download(final String id, final String address) {
-        new Thread(new Runnable() {
+    /**
+     * Öffnet eine Seite (z. B. eine Geizhals-Wunschliste) im eingebauten Browser. Er verhält sich wie
+     * ein normaler Browser (JavaScript, Cookies, Weiterleitungen wie bei gh.de-Kurzlinks) und schickt
+     * den Inhalt nach dem Laden an die Oberfläche. Sichtbar, damit z. B. ein Cookie-Hinweis bestätigt
+     * werden kann; unsichtbar für Preisabfragen.
+     */
+    private void openBrowser(String id, String url, boolean visible) {
+        closeBrowser();
+        browseId = id;
+        browser = new WebView(this);
+        WebSettings s = browser.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setUseWideViewPort(true);
+        s.setLoadWithOverviewMode(true);
+        browser.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String scheme = request.getUrl().getScheme();
+                return !("http".equals(scheme) || "https".equals(scheme));
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                for (int delay : new int[]{800, 2500, 5000, 9000}) scheduleExtract(delay);
+            }
+        });
+
+        browserBox = new LinearLayout(this);
+        browserBox.setOrientation(LinearLayout.VERTICAL);
+        browserBox.setBackgroundColor(BG);
+        TextView hint = new TextView(this);
+        hint.setText("Liste wird gelesen … Falls ein Cookie-Hinweis erscheint, bitte kurz bestätigen.");
+        hint.setTextColor(0xFFE7F4F2);
+        hint.setTextSize(14);
+        int pad = dp(12);
+        hint.setPadding(pad, pad, pad, pad);
+        browserBox.addView(hint);
+        browserBox.addView(browser, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER);
+        bar.setPadding(pad, pad / 2, pad, pad / 2);
+        Button cancel = new Button(this);
+        cancel.setText("Abbrechen");
+        cancel.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                cancelBrowser();
+            }
+        });
+        Button take = new Button(this);
+        take.setText("Teile übernehmen");
+        take.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                extract(true);
+            }
+        });
+        bar.addView(cancel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        bar.addView(take, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        browserBox.addView(bar);
+        // Unsichtbar bleibt die WebView trotzdem im Fenster, damit die Seite normal lädt
+        browserBox.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        root.addView(browserBox, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        browser.loadUrl(url);
+    }
+
+    private void scheduleExtract(int delay) {
+        final String id = browseId;
+        handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                int status = 0;
-                String body = "";
-                HttpURLConnection con = null;
-                try {
-                    URL url = new URL(address);
-                    String protocol = url.getProtocol();
-                    if (!"https".equals(protocol) && !"http".equals(protocol)) throw new IOException("Ungültiger Link");
-                    con = (HttpURLConnection) url.openConnection();
-                    con.setConnectTimeout(15000);
-                    con.setReadTimeout(20000);
-                    con.setInstanceFollowRedirects(true);
-                    con.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36");
-                    con.setRequestProperty("Accept", "text/html,application/xhtml+xml");
-                    con.setRequestProperty("Accept-Language", "de-DE,de;q=0.9");
-                    status = con.getResponseCode();
-                    InputStream in = status >= 400 ? con.getErrorStream() : con.getInputStream();
-                    if (in != null) {
-                        body = new String(readAll(in, MAX_DOWNLOAD), "UTF-8");
-                        in.close();
-                    }
-                } catch (Exception e) {
-                    body = String.valueOf(e.getMessage());
-                } finally {
-                    if (con != null) con.disconnect();
-                }
-                final String js = "window.SB && SB.onFetch(" + JSONObject.quote(id) + "," + status + "," + JSONObject.quote(body) + ")";
-                web.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        web.evaluateJavascript(js, null);
-                    }
-                });
+                if (browser != null && id != null && id.equals(browseId)) extract(false);
             }
-        }).start();
+        }, delay);
+    }
+
+    private void extract(final boolean fin) {
+        if (browser == null) return;
+        final String id = browseId;
+        final String url = browser.getUrl();
+        browser.evaluateJavascript(EXTRACT_JS, new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String json) {
+                // json ist bereits ein JavaScript-String-Literal
+                web.evaluateJavascript("window.SB && SB.onBrowse(" + JSONObject.quote(id) + "," + JSONObject.quote(url == null ? "" : url)
+                        + "," + (json == null ? "null" : json) + "," + fin + ")", null);
+            }
+        });
+    }
+
+    private void cancelBrowser() {
+        String id = browseId;
+        closeBrowser();
+        if (id != null) web.evaluateJavascript("window.SB && SB.onBrowseCancel(" + JSONObject.quote(id) + ")", null);
+    }
+
+    private void closeBrowser() {
+        browseId = null;
+        if (browserBox != null) root.removeView(browserBox);
+        if (browser != null) browser.destroy();
+        browser = null;
+        browserBox = null;
+    }
+
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    /** Teilt ein Bild (PNG als Base64) zusammen mit Text, z. B. die Build-Karte mit Import-Code. */
+    private void shareImage(String base64, String text, String title) {
+        try {
+            File dir = new File(getCacheDir(), ShareProvider.DIR);
+            if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Ordner");
+            File file = new File(dir, "setupbuilder-build.png");
+            try (FileOutputStream out = new FileOutputStream(file)) {
+                out.write(Base64.decode(base64, Base64.DEFAULT));
+            }
+            Uri uri = Uri.parse("content://" + ShareProvider.AUTHORITY + "/" + file.getName());
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType("image/png");
+            send.putExtra(Intent.EXTRA_STREAM, uri);
+            send.putExtra(Intent.EXTRA_TEXT, text);
+            send.putExtra(Intent.EXTRA_SUBJECT, title);
+            send.setClipData(ClipData.newRawUri("", uri));
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(send, "Build teilen"));
+        } catch (Exception e) {
+            Toast.makeText(this, "Bild konnte nicht geteilt werden", Toast.LENGTH_SHORT).show();
+        }
     }
 
     /** Wird von JavaScript als window.Android aufgerufen. */
@@ -328,8 +442,33 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void fetchUrl(String id, String url) {
-            download(id, url);
+        public void browse(final String id, final String url, final boolean visible) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    openBrowser(id, url, visible);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void closeBrowser() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    MainActivity.this.closeBrowser();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void shareImage(final String base64, final String text, final String title) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    MainActivity.this.shareImage(base64, text, title);
+                }
+            });
         }
 
         @JavascriptInterface

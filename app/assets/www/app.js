@@ -340,6 +340,8 @@ function statusPill(b) {
 }
 
 function fpsBlock(b) {
+  const own = ['cpu', 'gpu'].filter(c => !partsOf(b, c).length && customsOf(b, c).length);
+  if (own.length) return `<p class="muted small">Keine FPS-Schätzung: ${own.map(c => CAT[c].short).join(' und ')} ${own.length > 1 ? 'sind eigene Teile' : 'ist ein eigenes Teil'} ohne Leistungsdaten. Wähle ein ähnliches Teil aus der Datenbank.</p>`;
   const pf = perf(b);
   if (!pf || !pf.fps['1080p']) return '<p class="muted small">Wähle CPU und Grafikkarte, um eine FPS-Schätzung zu sehen.</p>';
   const max = 240;
@@ -672,7 +674,8 @@ function openDetail(cat, idx) {
         ${safeImg(img) ? `<p class="muted small">Bild aus deinem Screenshot · <button class="link" data-a="remove-img" data-key="${cat}:${p.id}">Bild entfernen</button></p>` : ''}
         <div class="card"><label class="field"><span>Dein Preis (€)</span>
           <input type="number" inputmode="decimal" min="0" value="${price}" data-input="price" data-cat="${cat}" data-id="${p.id}"></label>
-          <p class="muted small">Richtpreis: ${fmtEur(p.price)}${price !== p.price ? ` · <button class="link" data-a="reset-price" data-cat="${cat}" data-id="${p.id}">zurücksetzen</button>` : ''}</p></div>
+          <p class="muted small">${(b.priceInfo || {})[cat + ':' + p.id] ? `Geizhals-Preis vom ${new Date(b.priceInfo[cat + ':' + p.id]).toLocaleDateString('de-DE')} · ` : ''}Richtpreis: ${fmtEur(p.price)}${price !== p.price ? ` · <button class="link" data-a="reset-price" data-cat="${cat}" data-id="${p.id}">zurücksetzen</button>` : ''}</p>
+          <button class="btn ghost small" data-a="geizhals" data-cat="${cat}" data-id="${p.id}">${icon('link')}Auf Geizhals ansehen</button></div>
         <div class="card"><table class="spec">${SPECS[cat].map(s => `<tr><th>${s.l}</th><td>${esc(s.g(p))}</td></tr>`).join('')}</table></div>
         ${issues.length ? `<div class="card issues"><ul>${issues.map(i => `<li class="${i.level === 'error' ? 'err' : i.level}">${icon(i.level === 'error' ? 'x' : i.level === 'warn' ? 'warn' : 'info')}<span>${esc(i.msg)}</span></li>`).join('')}</ul></div>`
           : `<div class="banner ok">${icon('check')}<b>Passt zu deinem Build</b></div>`}`;
@@ -680,6 +683,82 @@ function openDetail(cat, idx) {
     footer: () => `<div class="row"><button class="btn ghost" data-a="remove" data-cat="${cat}" data-idx="${idx}">${icon('trash')}Entfernen</button>
       <button class="btn primary" data-a="swap" data-cat="${cat}" data-idx="${idx}">Anderes Teil wählen</button></div>`,
   });
+}
+
+// ---------- Preise von Geizhals ----------
+const priceState = { busy: false, done: 0, total: 0, current: '', cancel: false };
+
+function geizhalsQuery(p) {
+  return p.name.replace(/\([^)]*\)/g, ' ').replace(/×/g, 'x').replace(/"/g, '').replace(/\s+/g, ' ').trim();
+}
+const geizhalsUrl = p => 'https://geizhals.de/?fs=' + encodeURIComponent(geizhalsQuery(p));
+
+function openExternal(url) {
+  if (Native && Native.openUrl) Native.openUrl(url); else window.open(url, '_blank');
+}
+
+// Sucht jedes Teil des Builds auf Geizhals und übernimmt den günstigsten Preis ("ab …").
+async function refreshPrices(b) {
+  const list = [];
+  const seen = new Set();
+  for (const c of CATS) for (const p of partsOf(b, c.key)) {
+    if (seen.has(c.key + ':' + p.id)) continue;
+    seen.add(c.key + ':' + p.id);
+    list.push([c.key, p]);
+  }
+  if (!list.length) { toast('Keine Teile im Build'); return; }
+  Object.assign(priceState, { busy: true, done: 0, total: list.length, current: '', cancel: false });
+  refresh();
+  let updated = 0, diff = 0;
+  const missing = [];
+  b.priceInfo = b.priceInfo || {};
+  for (const [cat, p] of list) {
+    if (priceState.cancel) break;
+    priceState.current = p.name;
+    refreshBudgetProgress();
+    const find = html => itemsFromHtml(html || '').filter(i => i.cat === cat && i.id === p.id && i.price)
+      .sort((x, y) => (x.quality === 'exact' ? 0 : 1) - (y.quality === 'exact' ? 0 : 1))[0];
+    let hit = null;
+    try {
+      const html = await browsePage(geizhalsUrl(p), { visible: false, timeout: 15000, accept: h => (find(h) ? 1 : 0) });
+      hit = find(html);
+    } catch (e) { hit = null; }
+    if (hit) {
+      const key = cat + ':' + p.id;
+      diff += hit.price - priceOf(b, cat, p);
+      b.prices[key] = hit.price;
+      b.priceInfo[key] = Date.now();
+      updated++;
+    } else missing.push(p.name);
+    priceState.done++;
+    refreshBudgetProgress();
+  }
+  priceState.busy = false;
+  b.updated = Date.now();
+  persist();
+  refresh();
+  if (!updated) toast('Keine Preise gefunden – Geizhals ist evtl. nicht erreichbar.');
+  else toast(`${updated} von ${list.length} Preisen aktualisiert (${diff > 0 ? '+' : ''}${fmtEur(diff)})${missing.length ? ` · ${missing.length} nicht gefunden` : ''}`);
+}
+
+function refreshBudgetProgress() {
+  const el = document.querySelector('.price-progress');
+  if (!el) return;
+  el.querySelector('span').textContent = `${priceState.done} von ${priceState.total}: ${priceState.current}`;
+  el.querySelector('i').style.width = Math.round(priceState.done / Math.max(1, priceState.total) * 100) + '%';
+}
+
+function priceCard(b) {
+  const keys = Object.keys(b.priceInfo || {});
+  const last = keys.length ? Math.max(...keys.map(k => b.priceInfo[k])) : 0;
+  return `<h2 class="section">Aktuelle Preise</h2><div class="card">
+    ${priceState.busy ? `<div class="price-progress"><span>${priceState.done} von ${priceState.total}: ${esc(priceState.current)}</span>
+        <div class="bar"><i style="width:${Math.round(priceState.done / Math.max(1, priceState.total) * 100)}%"></i></div></div>
+      <button class="btn ghost wide" data-a="prices-cancel">Abbrechen</button>`
+    : `<p>Hol dir die aktuellen Bestpreise („ab …“) von Geizhals für alle Teile in „${esc(b.name)}“.</p>
+      ${last ? `<p class="muted small">Zuletzt aktualisiert: ${new Date(last).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} · ${keys.length} Teile</p>` : ''}
+      <button class="btn primary wide" data-a="prices-refresh">${icon('wallet')}Preise von Geizhals abrufen</button>`}
+  </div>`;
 }
 
 // ---------- Ansicht: Budget ----------
@@ -740,6 +819,7 @@ function viewBudget() {
       <div><small>${CAT[s.cat].short}: statt ${esc(s.from.name)}</small><b>${esc(s.x.name)}</b>
       <span class="muted small">spart ${fmtEur(s.save)}${s.loss > 0 ? ` · ca. ${s.loss} % weniger FPS` : ''}</span></div>
       <button class="btn small" data-a="apply-save" data-cat="${s.cat}" data-id="${s.x.id}">Tauschen</button></div>`).join('')}</div>` : ''}
+  ${priceCard(b)}
   <h2 class="section">Auto-Build</h2>
   <div class="card">
     <p>Lass die App den schnellsten kompatiblen Gaming-PC für dein Budget zusammenstellen.</p>
@@ -794,6 +874,7 @@ function viewUpgrades() {
   };
   return head + `
     <div class="card"><h3 class="card-title">${esc(b.name)} heute</h3>${fpsBlock(b)}</div>
+    ${up.ownParts.length ? `<div class="banner todo">${icon('info')}<b>Eigene Teile (${up.ownParts.map(o => esc(o.name)).join(', ')}) werden bei den Tipps nicht bewertet.</b></div>` : ''}
     ${fit.length ? fit.map(card).join('') : '<div class="card center"><p>Keine sinnvollen Upgrades in diesem Budget gefunden – dein PC ist gut aufgestellt!</p></div>'}
     ${over ? `<p class="muted small center">${over} weitere${over > 1 ? '' : 's'} Upgrade${over > 1 ? 's' : ''} über deinem Budget.</p>` : ''}`;
 }
@@ -834,18 +915,33 @@ function openShare(id) {
     title: 'Build teilen',
     render() {
       const text = shareText(b, S.author);
-      const pf = perf(b);
-      return `<div class="share-card">${scene(DEFAULT_THEME, Math.max(1, partsOf(b, 'monitor').length))}
-          <div class="share-info"><small>${b.kind === 'mine' ? 'Mein PC' : 'PC-Build'}${S.author ? ' von ' + esc(S.author) : ''}</small><b>${esc(b.name)}</b>
-          <span>${fmtEur(totals(b).all)}${pf && pf.fps['1440p'] ? ` · ~${pf.fps['1440p']} FPS 1440p` : ''}</span></div></div>
+      return `<div class="share-preview"><img alt="Vorschau der Build-Karte" data-share-preview></div>
         ${!pc ? '<div class="banner todo">' + icon('info') + '<b>Der Build ist noch leer.</b></div>' : ''}
         <label class="field"><span>Dein Name (optional)</span><input type="text" maxlength="40" value="${esc(S.author)}" placeholder="z. B. Max" data-input="author"></label>
-        <p class="muted small">So sieht die Nachricht aus. Freunde mit SetupBuilder können den Code unten importieren – oder die Nachricht direkt mit SetupBuilder teilen.</p>
+        <p class="muted small">Das Bild wird zusammen mit dieser Nachricht geteilt. Freunde mit SetupBuilder können den Code importieren – oder die Nachricht direkt an SetupBuilder teilen.</p>
         <pre class="share-text">${esc(text)}</pre>`;
     },
-    footer: () => `<div class="row"><button class="btn ghost" data-a="copy-code" data-id="${b.id}">${icon('copy')}Code kopieren</button>
-      <button class="btn primary" data-a="do-share" data-id="${b.id}">${icon('share')}Teilen</button></div>`,
+    mount(el) {
+      const img = el.querySelector('[data-share-preview]');
+      renderShareCard(b, S.author).then(cv => { img.src = cv.toDataURL('image/png'); }, () => img.remove());
+    },
+    footer: () => `<button class="btn primary wide" data-a="do-share-img" data-id="${b.id}">${icon('share')}Als Bild teilen</button>
+      <div class="row foot-row"><button class="btn ghost" data-a="copy-code" data-id="${b.id}">${icon('copy')}Code kopieren</button>
+      <button class="btn ghost" data-a="do-share" data-id="${b.id}">${icon('text')}Nur Text</button></div>`,
   });
+}
+
+async function doShareImage(b) {
+  const text = shareText(b, S.author);
+  let cv;
+  try { cv = await renderShareCard(b, S.author); } catch (e) { doShare(b); return; }
+  const url = cv.toDataURL('image/png');
+  if (Native && Native.shareImage) { Native.shareImage(url.split(',')[1], text, b.name); return; }
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'setupbuilder-build.png';
+  a.click();
+  copyText(text, 'Bild gespeichert, Text kopiert');
 }
 
 async function openImport(prefill = '') {
@@ -887,19 +983,29 @@ function copyText(text, msg) {
 
 // ---------- Teile importieren (Geizhals-Link, Screenshots, Text) ----------
 const importState = { link: '', text: '', busy: false, msg: '', progress: 0, error: '' };
-const fetchWaiters = {};
+const browseWaiters = {};
 
-function fetchPage(url) {
+// Lädt eine Seite im eingebauten Browser der App (wie ein normaler Browser, inkl. Weiterleitungen und JavaScript).
+// accept(html) entscheidet, ob der Inhalt schon reicht; sonst wird nach ein paar Sekunden erneut gelesen.
+// Sichtbar für Wunschlisten (Cookie-Hinweis bestätigen), unsichtbar mit Zeitlimit für Preisabfragen.
+function browsePage(url, { visible = true, accept = () => true, timeout = 0 } = {}) {
+  if (!Native || !Native.browse) {
+    return fetch(url).then(r => r.text(), () => { throw new Error('Links laden funktioniert nur in der App.'); });
+  }
   return new Promise((resolve, reject) => {
-    if (!Native || !Native.fetchUrl) {
-      fetch(url).then(r => r.text().then(body => resolve({ status: r.status, body })), () => reject(new Error('Links laden funktioniert nur in der App.')));
-      return;
-    }
-    const id = 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const timer = setTimeout(() => { delete fetchWaiters[id]; reject(new Error('Die Seite hat zu lange nicht geantwortet.')); }, 45000);
-    fetchWaiters[id] = (status, body) => { clearTimeout(timer); resolve({ status, body }); };
-    Native.fetchUrl(id, url);
+    const id = 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const w = { resolve, reject, accept, last: null, lastHtml: '' };
+    if (timeout) w.timer = setTimeout(() => { delete browseWaiters[id]; Native.closeBrowser(); resolve(w.lastHtml); }, timeout);
+    browseWaiters[id] = w;
+    Native.browse(id, url, visible);
   });
+}
+
+function finishBrowse(id, w, value, error) {
+  delete browseWaiters[id];
+  clearTimeout(w.timer);
+  if (Native && Native.closeBrowser) Native.closeBrowser();
+  if (error) w.reject(error); else w.resolve(value);
 }
 
 function setBusy(msg, progress) {
@@ -925,7 +1031,7 @@ function openImportHub() {
       ${importState.error ? `<div class="banner err">${icon('warn')}<b>${esc(importState.error)}</b></div>` : ''}
       <div class="card imp">
         <h3>${icon('link')}Geizhals-Wunschliste</h3>
-        <p class="muted small">Auf Geizhals deine Wunschliste öffnen → „Teilen“ bzw. Link kopieren → hier einfügen. Du kannst den Link auch direkt aus dem Browser an SetupBuilder teilen.</p>
+        <p class="muted small">Auf Geizhals deine Wunschliste öffnen → „Teilen“ bzw. Link kopieren (auch Kurzlinks wie gh.de/g/…) → hier einfügen. Die Liste öffnet sich kurz in der App und wird automatisch ausgelesen.</p>
         <input type="url" inputmode="url" placeholder="https://geizhals.de/wishlists/…" value="${esc(importState.link)}" data-input="imp-link">
         <div class="row"><button class="btn ghost" data-a="imp-paste" ${busy ? 'disabled' : ''}>${icon('copy')}Einfügen</button>
           <button class="btn primary" data-a="imp-load" ${busy ? 'disabled' : ''}>Teile laden</button></div>
@@ -951,8 +1057,8 @@ async function runLinkImport() {
   importState.error = '';
   setBusy('Liste wird geladen …', 0.2);
   try {
-    const { status, body } = await fetchPage(parsed.url);
-    if (!status || status >= 400 || !body) throw new Error(status ? `Die Seite antwortet mit Fehler ${status}.` : String(body || 'Keine Verbindung.'));
+    // Fertig, sobald zweimal hintereinander gleich viele Teile gefunden werden (Seite fertig geladen)
+    const body = await browsePage(parsed.url, { visible: true, accept: html => itemsFromHtml(html).length });
     setBusy('Teile werden erkannt …', 0.8);
     const items = itemsFromHtml(body);
     setBusy('');
@@ -1039,7 +1145,7 @@ function openReview(items, title) {
       const st = buildStatus(preview);
       const err = st.errors.filter(i => !i.missing)[0];
       return `<div class="imp-opts">
-          <select data-input="imp-target"><option value="current" ${reviewState.target === 'current' ? 'selected' : ''}>In „${esc(cur().name)}“ einfügen</option>
+          <select data-input="imp-target"><option value="current" ${reviewState.target === 'current' ? 'selected' : ''}>In aktuellen Build</option>
             <option value="new" ${reviewState.target === 'new' ? 'selected' : ''}>Als neuen Build speichern</option></select>
           <label class="check-label"><input type="checkbox" data-input="imp-prices" ${reviewState.usePrices ? 'checked' : ''}>Preise übernehmen</label></div>
         ${err ? `<p class="small neg imp-warn">${icon('warn')}${esc(err.msg)}</p>` : st.ok ? `<p class="small pos imp-warn">${icon('check')}Alle Teile passen zusammen.</p>` : ''}
@@ -1090,6 +1196,9 @@ function openCustomDetail(id) {
 // ---------- Aktionen ----------
 const A = {
   'import-hub': () => openImportHub(),
+  'prices-refresh': () => { if (!priceState.busy) refreshPrices(cur()); },
+  'prices-cancel': () => { priceState.cancel = true; toast('Wird nach dem aktuellen Teil abgebrochen'); },
+  'geizhals': d => openExternal(geizhalsUrl(findPart(d.cat, d.id))),
   'imp-paste': () => {
     let clip = '';
     try { clip = Native && Native.getClipboard ? Native.getClipboard() || '' : ''; } catch (e) { clip = ''; }
@@ -1115,6 +1224,7 @@ const A = {
   share: () => openShare(cur().id),
   'share-build': d => openShare(d.id),
   'do-share': d => doShare(S.builds.find(x => x.id === d.id)),
+  'do-share-img': d => doShareImage(S.builds.find(x => x.id === d.id)),
   'copy-code': d => copyText(encodeBuild(S.builds.find(x => x.id === d.id), S.author), 'Code kopiert – schick ihn deinen Freunden!'),
   import: () => openImport(),
   preset: d => openPreset(d.id),
@@ -1156,7 +1266,7 @@ const A = {
   'pick-sort': d => { pickerState.sort = d.k; rerenderTop(); },
   'pick-all': () => { pickerState.showAll = !pickerState.showAll; rerenderTop(); },
   compare: d => openCompare(d.cat),
-  'reset-price': d => { const b = cur(); delete b.prices[d.cat + ':' + d.id]; b.updated = Date.now(); persist(); rerenderTop(); refreshBehind(); },
+  'reset-price': d => { const b = cur(); delete b.prices[d.cat + ':' + d.id]; if (b.priceInfo) delete b.priceInfo[d.cat + ':' + d.id]; b.updated = Date.now(); persist(); rerenderTop(); refreshBehind(); },
   rename: async d => {
     const b = S.builds.find(x => x.id === d.id);
     const name = await ask({ title: 'Umbenennen', input: true, value: b.name, ok: 'Speichern' });
@@ -1290,6 +1400,7 @@ document.addEventListener('change', e => {
     const b = cur();
     const v = Math.max(0, Math.round(+el.value || 0));
     b.prices[el.dataset.cat + ':' + el.dataset.id] = v;
+    if (b.priceInfo) delete b.priceInfo[el.dataset.cat + ':' + el.dataset.id];
     b.updated = Date.now(); persist(); rerenderTop(); refreshBehind();
   }
   if (k === 'author') { S.author = el.value.trim().slice(0, 40); persist(); if (sheets.length) rerenderTop(); }
@@ -1343,10 +1454,18 @@ window.SB = {
     if (!sheets.some(x => x.hub)) openImportHub();
     runScreenshotImport(list || []);
   },
-  onFetch(id, status, body) {
-    const w = fetchWaiters[id];
-    delete fetchWaiters[id];
-    if (w) w(status, body);
+  // Inhalt aus dem eingebauten Browser (mehrmals während des Ladens, final = "Teile übernehmen" gedrückt)
+  onBrowse(id, url, html, final) {
+    const w = browseWaiters[id];
+    if (!w) return;
+    w.lastHtml = html || '';
+    const n = Number(w.accept(w.lastHtml)) || 0;
+    if (final || (n > 0 && n === w.last)) finishBrowse(id, w, w.lastHtml);
+    else w.last = n;
+  },
+  onBrowseCancel(id) {
+    const w = browseWaiters[id];
+    if (w) finishBrowse(id, w, null, new Error('Abgebrochen.'));
   },
 };
 

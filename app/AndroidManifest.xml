@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="de.setupbuilder.app">
 
-    <!-- Nur zum Laden von Geizhals-Wunschlisten und anderen Teilelisten -->
+    <!-- Nur zum Laden von Geizhals-Wunschlisten und Geizhals-Preisen -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
@@ -36,5 +36,12 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+
+        <!-- Stellt das Bild der Build-Karte zum Teilen bereit -->
+        <provider
+            android:name=".ShareProvider"
+            android:authorities="de.setupbuilder.app.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

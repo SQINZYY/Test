@@ -84,11 +84,13 @@ const cases = [
   ['Intel Core i5-14600K, 6C+8c/20T', 'cpu', 'i5-14600k', 'exact'],
   ['Intel Core i5-14600KF', 'cpu', null, null],
   ['Sapphire Pulse Radeon RX 9070 XT, 16GB GDDR6', 'gpu', 'rx9070xt', 'exact'],
-  ['PowerColor Hellhound Radeon RX 9070 XT, 16GB', 'gpu', 'rx9070xt', 'similar'],
+  ['PowerColor Hellhound Radeon RX 9070 XT, 16GB', 'gpu', 'rx9070xt-hellhound', 'exact'],
+  ['XFX Swift Radeon RX 9070 XT, 16GB', 'gpu', 'rx9070xt', 'similar'],
   ['PowerColor Reaper Radeon RX 9070, 16GB GDDR6', 'gpu', 'rx9070', 'exact'],
-  ['ASUS TUF Gaming GeForce RTX 5070 Ti OC, 16GB GDDR7', 'gpu', 'rtx5070ti', 'similar'],
+  ['ASUS TUF Gaming GeForce RTX 5070 Ti OC, 16GB GDDR7', 'gpu', 'rtx5070ti-tuf', 'exact'],
+  ['Gainward GeForce RTX 5070 Ti Phoenix, 16GB GDDR7', 'gpu', 'rtx5070ti', 'similar'],
   ['Gigabyte GeForce RTX 5070 Windforce OC SFF 12G', 'gpu', 'rtx5070', 'exact'],
-  ['GeForce RTX5070Ti', 'gpu', 'rtx5070ti', 'similar'],
+  ['GeForce RTX5070Ti 16GB', 'gpu', 'rtx5070ti', 'similar'],
   ['MSI GeForce RTX 4070 Ti SUPER Ventus 2X', 'gpu', 'rtx4070tis', 'similar'],
   ['MSI PRO B650M-A WIFI', 'mb', 'b650m-a', 'exact'],
   ['ASUS TUF Gaming B650-PLUS WIFI', 'mb', 'b650-tuf', 'exact'],
@@ -106,7 +108,15 @@ const cases = [
   ['Lian Li Lancool 216 RGB schwarz', 'case', 'lancool216', 'exact'],
   ['Fractal Design North Charcoal Black TG Dark', 'case', 'north', 'exact'],
   ['Samsung Odyssey G5 G55C, 27"', 'monitor', 'g5-27', 'exact'],
-  ['Montech XR schwarz, Glasfenster', 'case', null, 'custom'],
+  ['Lexar NM790 2TB, M.2 2280 / M-Key / PCIe 4.0 x4', 'storage', 'nm790-2tb', 'exact'],
+  ['Kingston FURY Beast RGB weiß UDIMM 32GB Kit, DDR5-6000, CL30-36-36', 'ram', 'ddr5-32-6000kw', 'exact'],
+  ['INNO3D GeForce RTX 5070 Ti X3 OC White, 16GB GDDR7, HDMI, 3x DP', 'gpu', 'rtx5070ti-inno', 'exact'],
+  ['ASRock B850 Steel Legend WiFi (AMD AM5)', 'mb', 'b850-steel-legend', 'exact'],
+  ['Endorfy Arx 700 ARGB White, Glasfenster', 'case', 'arx700', 'exact'],
+  ['Phanteks Glacier One 360M25 G2 weiß', 'cooler', 'glacier-one-360', 'exact'],
+  ['Endorfy Supremo FM6 Gold 850W, ATX 3.1', 'psu', 'supremo-fm6-850', 'exact'],
+  ['MSI PRO B760M-A WIFI DDR4', 'mb', 'b760m-d4', 'exact'],
+  ['Jonsbo D31 Mesh schwarz, Glasfenster', 'case', null, 'custom'],
   ['Montech HyperFlow 360 ARGB, Wasserkühlung', 'cooler', 'lf3-360', 'similar'],
 ];
 for (const [text, cat, id, q] of cases) {
@@ -122,7 +132,7 @@ const html = `<html><body><div class="wishlist">
     <span class="price">&euro; 459,00</span></div>
   <div class="row"><a href="https://geizhals.de/msi-mag-b650-tomahawk-wifi-a2823000.html" title="MSI MAG B650 Tomahawk WIFI">MSI MAG B650 Tomahawk WIFI</a> <span>€ 189,90</span></div>
   <div class="row"><a href="/sapphire-pulse-radeon-rx-9070-xt-a3400000.html">Sapphire Pulse Radeon RX 9070 XT, 16GB GDDR6, HDMI, 2x DP</a> <span>ab € 649,-</span></div>
-  <div class="row"><a href="/montech-xr-a3000000.html">Montech XR schwarz, Glasfenster</a> <span>€ 79,90</span></div>
+  <div class="row"><a href="/jonsbo-d31-a3000000.html">Jonsbo D31 Mesh schwarz, Glasfenster</a> <span>€ 79,90</span></div>
 </div></body></html>`;
 const hi = E.itemsFromHtml(html);
 ok(hi.length === 4 && hi[0].id === 'r7-9800x3d' && hi[0].price === 459 && hi[1].id === 'b650-tomahawk' && hi[1].price === 190 && hi[2].id === 'rx9070xt' && hi[2].price === 649 && hi[3].quality === 'custom' && hi[3].cat === 'case',
@@ -144,7 +154,27 @@ ok(applied.parts.cpu === 'r7-9800x3d' && applied.prices['gpu:rx9070xt'] === 649 
 const st2 = E.buildStatus(applied);
 ok(!st2.todo.some(t => t.cats[0] === 'case'), 'eigenes Gehäuse zählt als vorhanden');
 const rt = E.decodeBuild(E.encodeBuild(applied));
-ok(rt.build.customs.length === 1 && rt.build.customs[0].name.startsWith('Montech XR'), 'eigene Teile im Code');
+ok(rt.build.customs.length === 1 && rt.build.customs[0].name.startsWith('Jonsbo D31'), 'eigene Teile im Code');
+
+// Sichtbarer Text einer Geizhals-Seite (Fallback, wenn keine Produktlinks gefunden werden)
+const gtext = `<html><body>x</body></html>\n<!--SB-TEXT-->\nWunschlisten > Endorfy White Build 07_25
+Hardware / Festplatten & SSDs / Solid State Drives (SSD)
+Lexar NM790 2TB, M.2 2280 / M-Key / PCIe 4.0 x4
+LNM790X002T-RNNNG
+(95)
+ab € 310,00
+39 Angebote
+Hardware / Wasserkühlung / Komplettsets
+Phanteks Glacier One 360M25 G2 weiß
+ab € 99,88
+Hardware / Gehäuse / PC-Gehäuse
+Jonsbo D31 Mesh Screen, Glasfenster
+ab € 89,19
+Gesamtpreis: € 3121,17`;
+const gi = E.itemsFromHtml(gtext);
+ok(gi.length === 3 && gi[0].id === 'nm790-2tb' && gi[0].price === 310 && gi[1].id === 'glacier-one-360' && gi[1].price === 100 && gi[2].cat === 'case' && !gi[2].id && gi[2].price === 89,
+  'Geizhals-Seitentext: ' + JSON.stringify(gi.map(i => [i.cat, i.id, i.price])));
+ok(E.parsePrice('ab €1307,35') === 1307 && E.parsePrice('€ 1.307,35') === 1307, 'Preis ohne Tausenderpunkt');
 
 console.log(E.shareText(b, 'Max').split('\n').slice(0, 3).join('\n'));
 console.log(failed ? `${failed} Test(s) fehlgeschlagen` : 'Alle Tests bestanden');
