@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dark Fantasy Generator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="embers" aria-hidden="true"></div>
+
+  <main id="view-create" class="view active">
+    <header class="hero">
+      <div class="hero-title">ERSCHAFFE</div>
+      <div class="hero-sub">legendäre Charaktere</div>
+      <div class="counter" id="counter"></div>
+    </header>
+
+    <section class="panel">
+      <div class="row-head"><h2>Stil wählen</h2></div>
+      <div class="styles" id="styles"></div>
+
+      <div class="option">
+        <div class="option-label">Geschlecht</div>
+        <div class="chips" id="gender">
+          <button data-v="r" class="chip">Zufällig</button>
+          <button data-v="m" class="chip">Männlich</button>
+          <button data-v="f" class="chip">Weiblich</button>
+        </div>
+      </div>
+
+      <button class="option mode" id="mode">
+        <div>
+          <div class="option-label">Modus</div>
+          <div class="option-value" id="mode-value"></div>
+        </div>
+        <svg viewBox="0 0 24 24" class="mode-icon"><path d="M12 2l2.4 6.6L21 9l-5.2 4.3L17.6 21 12 17.3 6.4 21l1.8-7.7L3 9l6.6-.4z"/></svg>
+      </button>
+    </section>
+
+    <button class="summon" id="summon"><span>Charakter beschwören</span></button>
+
+    <section id="result"></section>
+  </main>
+
+  <main id="view-collection" class="view">
+    <header class="page-head">
+      <h1>Sammlung</h1>
+      <button class="ghost" id="import-btn">Code einfügen</button>
+    </header>
+    <div class="chips filter" id="filter"></div>
+    <div id="collection-list" class="list"></div>
+  </main>
+
+  <main id="view-history" class="view">
+    <header class="page-head">
+      <h1>Verlauf</h1>
+      <button class="ghost" id="clear-history">Leeren</button>
+    </header>
+    <div id="history-list" class="list"></div>
+  </main>
+
+  <div id="detail" class="overlay" hidden>
+    <div class="overlay-bar"><button class="ghost" id="detail-close">← Zurück</button></div>
+    <div id="detail-body"></div>
+  </div>
+
+  <div id="dialog" class="overlay dialog" hidden>
+    <div class="dialog-box">
+      <h3>Charakter-Code einfügen</h3>
+      <p class="muted">Codes beginnen mit <b>DF1.</b> – du kannst auch die ganze geteilte Nachricht einfügen.</p>
+      <textarea id="import-text" rows="4" placeholder="DF1.dark.rb.…"></textarea>
+      <div class="dialog-actions">
+        <button class="ghost" id="paste">Aus Zwischenablage</button>
+        <span class="grow"></span>
+        <button class="ghost" id="import-cancel">Abbrechen</button>
+        <button class="primary" id="import-ok">Laden</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <nav class="tabs">
+    <button data-view="create" class="active">
+      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 9l-5.2 4.3L17.6 21 12 17.3 6.4 21l1.8-7.7L3 9l6.6-.4z"/></svg>Erschaffen</button>
+    <button data-view="collection">
+      <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.3C1 8 3.5 4 7.2 4c2 0 3.6 1.1 4.8 2.8C13.2 5.1 14.8 4 16.8 4 20.5 4 23 8 21.5 11.7 19.5 16.4 12 21 12 21z"/></svg>Sammlung</button>
+    <button data-view="history">
+      <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.05-4.95L14 10h7V3l-2.64 2.64A8.96 8.96 0 0 0 12 3zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8z"/></svg>Verlauf</button>
+  </nav>
+
+  <script src="data.js"></script>
+  <script src="generator.js"></script>
+  <script src="sigil.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
