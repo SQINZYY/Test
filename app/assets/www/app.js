@@ -26,6 +26,7 @@ const P = {
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
   text: '<path d="M5 6h14M5 10h14M5 14h10M5 18h7"/>',
+  pc: '<rect x="2" y="4" width="14" height="10" rx="1.5"/><path d="M6 18h6M9 14v4"/><rect x="18" y="4" width="4" height="14" rx="1"/>',
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
   cpu: '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
@@ -278,6 +279,7 @@ function refresh() {
 function openSheet(s) { sheets.push(s); renderSheets(); }
 function closeSheet() { sheets.pop(); renderSheets(); refresh(); }
 function renderSheets() {
+  if (pcState.active && !sheets.some(s => s.pc)) stopPcLink();
   const box = $('#sheets');
   const keep = box.children.length;
   box.innerHTML = sheets.map((s, i) => `<section class="sheet ${i === sheets.length - 1 ? 'top' : ''} ${i >= keep ? 'enter' : ''}" data-i="${i}">
@@ -1096,6 +1098,10 @@ function openImportHub() {
       return `
       ${busy ? `<div class="card imp-progress"><span>${esc(importState.msg)}</span><div class="bar"><i style="width:${Math.round(clamp(importState.progress, 0.05, 1) * 100)}%"></i></div></div>` : ''}
       ${importState.error ? `<div class="banner err">${icon('warn')}<b>${esc(importState.error)}</b></div>` : ''}
+      <button class="card imp pc-card" data-a="pc-link">
+        <h3>${icon('pc')}PC verbinden</h3>
+        <p class="muted small">Erkennt automatisch die Teile deines Windows-PCs – auch Maus, Tastatur, Headset und Webcam.</p>
+      </button>
       <div class="card imp">
         <h3>${icon('link')}Geizhals-Wunschliste</h3>
         <p class="muted small">Auf Geizhals deine Wunschliste öffnen → „Teilen“ bzw. Link kopieren (auch Kurzlinks wie gh.de/g/…) → hier einfügen. Die Liste öffnet sich kurz in der App und wird automatisch ausgelesen.</p>
@@ -1144,6 +1150,8 @@ async function runLinkImport() {
 
 function runTextImport(text) {
   if (decodeBuild(text)) { openImport(text); return; }
+  const pc = decodePcCode(text);
+  if (pc) { receivePcScan(pc); return; }
   const t = String(text || '').trim();
   const url = parseListUrl(t);
   if (url && t.length < 300 && !/\n/.test(t)) { importState.link = url.url; runLinkImport(); return; }
@@ -1179,16 +1187,19 @@ function reviewBase() {
   return reviewState.target === 'new' ? newBuild(reviewState.title) : cur();
 }
 
-function openReview(items, title) {
+function openReview(items, title, opts = {}) {
   reviewState.items = items;
   reviewState.title = title;
-  reviewState.target = 'current';
+  reviewState.target = opts.target || 'current';
+  reviewState.kind = opts.kind || 'plan';
+  reviewState.note = opts.note || '';
   reviewState.usePrices = true;
   openSheet({
     title: 'Erkannte Teile',
     render() {
       const list = reviewState.items;
-      return `<p class="muted small">${list.length} Teil${list.length > 1 ? 'e' : ''} gefunden. Prüfe die Zuordnung – nimm das Häkchen weg, um ein Teil zu überspringen.
+      return `${reviewState.note ? `<div class="banner todo">${icon('info')}<b>${esc(reviewState.note)}</b></div>` : ''}
+        <p class="muted small">${list.length} Teil${list.length > 1 ? 'e' : ''} gefunden. Prüfe die Zuordnung – nimm das Häkchen weg, um ein Teil zu überspringen.
         „Ähnliches Modell“ heißt: gleicher Chip/gleiche Serie, Maße können leicht abweichen.</p>
         ${list.map((it, i) => {
           const q = it.id ? (QUALITY[it.quality] || QUALITY.exact) : QUALITY.custom;
@@ -1226,9 +1237,10 @@ function applyReview() {
   const items = reviewState.items;
   let b;
   if (reviewState.target === 'new') {
-    b = newBuild(reviewState.title);
+    b = newBuild(reviewState.title, reviewState.kind || 'plan');
     b.budget = 0;
     addBuild(b);
+    if (b.kind === 'mine') S.upgradeId = b.id;
   } else b = cur();
   const v = applyImport(b, items, reviewState.usePrices);
   b.parts = v.parts; b.prices = v.prices; b.customs = v.customs; b.images = v.images;
@@ -1259,6 +1271,68 @@ function openCustomDetail(id) {
     footer: () => `<div class="row"><button class="btn ghost" data-a="own-remove" data-id="${esc(id)}">${icon('trash')}Entfernen</button>
       <button class="btn primary" data-a="own-replace" data-id="${esc(id)}">Aus Datenbank wählen</button></div>`,
   });
+}
+
+// ---------- PC verbinden ----------
+// Das Handy startet einen kleinen Server im WLAN. Auf dem PC lädt ein PowerShell-Befehl das Skript von dort,
+// liest die Hardware aus und schickt sie zurück (siehe assets/pclink.ps1 und PcLinkServer.java).
+const pcState = { active: false, status: 'idle', cmd: '', error: '' };
+
+function openPcLink() {
+  pcState.status = 'idle';
+  pcState.error = '';
+  if (Native && Native.startPcLink) {
+    let r = {};
+    try { r = JSON.parse(Native.startPcLink()); } catch (e) { r = { ok: false, error: e.message }; }
+    if (r.ok) {
+      pcState.active = true;
+      pcState.status = 'waiting';
+      pcState.cmd = `irm http://${r.ip}:${r.port}/${r.token} | iex`;
+    } else {
+      pcState.status = 'error';
+      pcState.error = r.error === 'wlan' ? 'Dein Handy ist nicht mit einem WLAN verbunden. Verbinde Handy und PC mit demselben WLAN und versuch es noch einmal.'
+        : 'Die Verbindung konnte nicht gestartet werden: ' + r.error;
+    }
+  } else {
+    pcState.status = 'error';
+    pcState.error = 'PC verbinden funktioniert nur in der Android-App.';
+  }
+  openSheet({
+    title: 'PC verbinden',
+    pc: true,
+    render() {
+      const st = pcState.status;
+      return `<div class="pc-hero">${icon('pc')}<p>Die App erkennt automatisch die Teile deines Windows-PCs – auch angeschlossene Maus, Tastatur, Headset, Webcam und Controller.</p></div>
+        ${st === 'error' ? `<div class="banner err">${icon('warn')}<b>${esc(pcState.error)}</b></div>` : `
+        <ol class="steps">
+          <li><b>Handy und PC im selben WLAN</b><span>bzw. im selben Heimnetz (PC auch per Kabel am Router).</span></li>
+          <li><b>PowerShell öffnen</b><span>Auf dem PC die Windows-Taste drücken, „PowerShell“ eintippen und öffnen.</span></li>
+          <li><b>Diesen Befehl eintippen und Enter drücken</b>
+            <code class="pc-cmd">${esc(pcState.cmd)}</code>
+            <button class="btn ghost small" data-a="pc-copy">${icon('copy')}Befehl kopieren</button></li>
+        </ol>
+        <div class="pc-status ${st}">${st === 'fetched' ? `${icon('spark')}<b>PC verbunden – die Teile werden ausgelesen …</b>` : `${icon('info')}<b>Warte auf deinen PC …</b>`}</div>`}
+        <p class="muted small">${esc(PC_NOT_DETECTABLE)}</p>
+        <p class="muted small">Gesendet werden nur Hardware-Namen, keine Dateien oder persönlichen Daten – und nur an dein Handy. Klappt die Verbindung nicht
+          (z. B. im Gäste-WLAN), legt der PC einen Code in die Zwischenablage: den an dich selbst schicken und unter „Importieren → Text oder Build-Code“ einfügen.</p>`;
+    },
+  });
+}
+
+function receivePcScan(scan) {
+  pcState.status = 'done';
+  stopPcLink();
+  const items = pcScanToItems(scan);
+  if (!items.length) { toast('Vom PC kamen keine erkennbaren Teile.'); return; }
+  sheets.length = 0;
+  renderSheets();
+  openReview(items, 'Mein PC', { target: 'new', kind: 'mine', note: PC_NOT_DETECTABLE });
+  toast(`${items.length} Teile von deinem PC erkannt`);
+}
+
+function stopPcLink() {
+  if (pcState.active && Native && Native.stopPcLink) Native.stopPcLink();
+  pcState.active = false;
 }
 
 // ---------- Aktionen ----------
@@ -1343,7 +1417,15 @@ const A = {
     addBuild(newBuild(name.trim().slice(0, 60) || 'Neuer Gaming-PC'));
     setTab('builder');
   },
+  'pc-link': () => openPcLink(),
+  'pc-copy': () => copyText(pcState.cmd, 'Befehl kopiert'),
   'new-mine': async () => {
+    const how = await menu('Deinen PC eintragen', [
+      { label: 'Automatisch erkennen (PC verbinden)', icon: 'pc', value: 'auto' },
+      { label: 'Teile selbst auswählen', icon: 'edit', value: 'manual' },
+    ]);
+    if (how === 'auto') { openPcLink(); return; }
+    if (how !== 'manual') return;
     const name = await ask({ title: 'Deinen PC eintragen', text: 'Trag die Teile deines aktuellen PCs ein – dann kannst du ihn teilen und bekommst passende Upgrade-Tipps.', input: true, value: 'Mein Gaming-PC', ok: 'Los geht\'s' });
     if (!name) return;
     const b = newBuild(name.trim().slice(0, 60) || 'Mein Gaming-PC', 'mine');
@@ -1539,6 +1621,8 @@ window.SB = {
   receiveImport(text) {
     if (!catalogReady) { loadCatalog().then(() => SB.receiveImport(text)); return; }
     if (decodeBuild(text)) { openImport(text); return; }
+    const pc = decodePcCode(text);
+    if (pc) { receivePcScan(pc); return; }
     const url = parseListUrl(text);
     if (url) {
       importState.link = url.url;
@@ -1564,6 +1648,14 @@ window.SB = {
     const n = Number(w.accept(w.lastHtml)) || 0;
     if (final || (n > 0 && n === w.last)) finishBrowse(id, w, w.lastHtml);
     else w.last = n;
+  },
+  onPcLink(type, data) {
+    if (type === 'fetched') { pcState.status = 'fetched'; if (sheets.some(s => s.pc)) rerenderTop(); }
+    if (type === 'scan') {
+      let scan = null;
+      try { scan = JSON.parse(data); } catch (e) { scan = null; }
+      if (scan) receivePcScan(scan); else toast('Die Daten vom PC waren unvollständig – bitte noch einmal versuchen.');
+    }
   },
   onBrowseCancel(id) {
     const w = browseWaiters[id];

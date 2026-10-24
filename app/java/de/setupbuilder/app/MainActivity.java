@@ -63,6 +63,8 @@ public class MainActivity extends Activity {
     private LinearLayout browserBox;
     private WebView browser;
     private String browseId;
+    // "PC verbinden": kleiner Server im WLAN, über den der PC seine Hardware schickt
+    private PcLinkServer pcLink;
     private SharedPreferences prefs;
     private String pendingImport;
     private final List<String> pendingImages = new ArrayList<>();
@@ -213,6 +215,56 @@ public class MainActivity extends Activity {
             pendingImages.clear();
             web.evaluateJavascript("window.SB && SB.receiveImages(" + arr + ")", null);
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        stopPcLink();
+        super.onDestroy();
+    }
+
+    private String startPcLink() {
+        stopPcLink();
+        try {
+            String ip = PcLinkServer.findLanAddress();
+            if (ip == null) return "{\"ok\":false,\"error\":\"wlan\"}";
+            String script = new String(readAll(getAssets().open("pclink.ps1"), 1024 * 1024), "UTF-8");
+            pcLink = new PcLinkServer(script, new PcLinkServer.Listener() {
+                @Override
+                public void onScriptFetched() {
+                    sendPcEvent("fetched", "null");
+                }
+
+                @Override
+                public void onScan(String json) {
+                    sendPcEvent("scan", JSONObject.quote(json));
+                }
+            });
+            pcLink.start(ip);
+            JSONObject o = new JSONObject();
+            o.put("ok", true);
+            o.put("ip", pcLink.getIp());
+            o.put("port", pcLink.getPort());
+            o.put("token", pcLink.getToken());
+            return o.toString();
+        } catch (Exception e) {
+            pcLink = null;
+            return "{\"ok\":false,\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}";
+        }
+    }
+
+    private void stopPcLink() {
+        if (pcLink != null) pcLink.stop();
+        pcLink = null;
+    }
+
+    private void sendPcEvent(final String type, final String data) {
+        web.post(new Runnable() {
+            @Override
+            public void run() {
+                web.evaluateJavascript("window.SB && SB.onPcLink(" + JSONObject.quote(type) + "," + data + ")", null);
+            }
+        });
     }
 
     @Override
@@ -449,6 +501,16 @@ public class MainActivity extends Activity {
                     openBrowser(id, url, visible);
                 }
             });
+        }
+
+        @JavascriptInterface
+        public String startPcLink() {
+            return MainActivity.this.startPcLink();
+        }
+
+        @JavascriptInterface
+        public void stopPcLink() {
+            MainActivity.this.stopPcLink();
         }
 
         @JavascriptInterface

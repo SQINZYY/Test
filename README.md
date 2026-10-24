@@ -2,7 +2,7 @@
 
 Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die garantiert zusammenpassen, Teile vergleichen, Budget verwalten, den eigenen PC mit Freunden teilen und Upgrade-Tipps bekommen.
 
-**APK:** [`release/SetupBuilder.apk`](release/SetupBuilder.apk) (ab Android 7, ca. 8 MB). Internet wird nur für Geizhals (Wunschlisten und Preise) genutzt.
+**APK:** [`release/SetupBuilder.apk`](release/SetupBuilder.apk) (ab Android 7, ca. 8 MB). Internet wird nur für Geizhals (Wunschlisten, Preise, Online-Suche) und „PC verbinden“ im eigenen WLAN genutzt.
 
 ## Installieren
 
@@ -22,6 +22,12 @@ Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die ga
   Fehlt ein Teil trotzdem, sucht **„Online suchen“** in der Teileauswahl auf Geizhals nach allen aktuell erhältlichen Teilen (Name + Preis;
   passt ein Treffer zu einem Teil der Datenbank, wird dieses genommen). Außerdem lässt sich jedes Teil als **eigenes Teil** eintragen;
   „Amazon“ bzw. „Geizhals“ öffnen die Suche im Browser.
+- **PC verbinden** (Mein PC → „Automatisch erkennen“ oder Importieren → „PC verbinden“): Die App startet im WLAN einen kleinen Server
+  und zeigt einen Befehl wie `irm http://192.168.178.42:8765/k3f9a | iex`. In der PowerShell des Windows-PCs eingetippt, liest
+  [`pclink.ps1`](app/assets/pclink.ps1) CPU, Mainboard, RAM, Grafikkarte, Laufwerke, Monitore und angeschlossene Geräte (Maus, Tastatur,
+  Headset, Mikrofon, Webcam, Controller) aus und schickt nur die Namen ans Handy; die App ordnet sie den Teilen der Datenbank zu.
+  Netzteil, Gehäuse, CPU-Kühler, Lüfter und Klinken-Kopfhörer kann Windows nicht erkennen. Ist das Handy nicht erreichbar (z. B. Gäste-WLAN),
+  legt der PC einen Code (`SBPC1.…`) in die Zwischenablage, der sich unter „Importieren → Text“ einfügen lässt.
 - **Builder** – PC-Komponenten plus Setup (Monitore, Tastatur, Maus, Headset, Stuhl, Tisch, Extras).
   Die Teileauswahl zeigt **nur Teile, die zum Rest des Builds passen**. Geprüft wird u. a.:
   - CPU ↔ Mainboard-Sockel (AM4, AM5, LGA1700, LGA1851), BIOS-Hinweise
@@ -68,14 +74,16 @@ Preise sind Richtpreise und FPS-Werte grobe Schätzungen. Alle Daten bleiben auf
 - `app/java/…/MainActivity.java` – WebView-Hülle: Teilen, Zwischenablage, Speicher, eingebauter Browser für Geizhals, Bildauswahl,
   geteilte Links/Screenshots empfangen; `ShareProvider.java` stellt das Bild der Build-Karte zum Teilen bereit
 - `tools/build.sh` – baut die APK ohne Android SDK (lädt aapt2, dx und die Android-Klassen von Maven Central)
+- `app/java/…/PcLinkServer.java`, `app/assets/pclink.ps1`, `app/assets/www/pclink.js` – „PC verbinden“
 - `tools/test-engine.js` – Tests für Datenbank und Logik: `node tools/test-engine.js`
+- `tools/pclink-test/run.sh` – testet „PC verbinden“ mit PowerShell 7 und simulierter Windows-Hardware
 
 ## Selbst bauen
 
 ```sh
 pip install cryptography
 ./tools/build.sh                          # -> release/SetupBuilder.apk
-VERSION_CODE=7 VERSION_NAME=1.6 ./tools/build.sh
+VERSION_CODE=8 VERSION_NAME=1.7 ./tools/build.sh
 ```
 
 Signiert wird mit dem Debug-Schlüssel `tools/debug-signing.p12` (Passwort `android`), damit Updates sich über die alte Version installieren lassen. Für eine Veröffentlichung im Play Store einen eigenen, geheimen Schlüssel verwenden.

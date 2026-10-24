@@ -7,8 +7,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TOOLS="$ROOT/.build-tools"
 OUT="$ROOT/build"
-VERSION_CODE="${VERSION_CODE:-6}"
-VERSION_NAME="${VERSION_NAME:-1.5}"
+VERSION_CODE="${VERSION_CODE:-7}"
+VERSION_NAME="${VERSION_NAME:-1.6}"
 MAVEN="https://repo1.maven.org/maven2"
 
 fetch() { # url ziel
