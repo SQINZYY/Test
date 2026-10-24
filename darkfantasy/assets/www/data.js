@@ -26,103 +26,104 @@ var DF_DATA = (function () {
 
   // Archetypen bestimmen Fähigkeiten, Hauptattribute und das Symbol im Siegel
   var ARCHETYPES = {
-    martial: { stats: ['str', 'con', 'dex'], icon: 'sword' },
-    arcane: { stats: ['int', 'wis', 'cha'], icon: 'star' },
-    shadow: { stats: ['dex', 'int', 'cha'], icon: 'moon' },
-    holy: { stats: ['wis', 'cha', 'con'], icon: 'sun' },
-    nature: { stats: ['wis', 'dex', 'con'], icon: 'leaf' },
-    beast: { stats: ['str', 'con', 'wis'], icon: 'claw' },
-    blood: { stats: ['con', 'cha', 'str'], icon: 'drop' }
+    martial: { name: 'Kampf', stats: ['str', 'con', 'dex'], icon: 'sword' },
+    arcane: { name: 'Arkan', stats: ['int', 'wis', 'cha'], icon: 'star' },
+    shadow: { name: 'Schatten', stats: ['dex', 'int', 'cha'], icon: 'moon' },
+    holy: { name: 'Licht', stats: ['wis', 'cha', 'con'], icon: 'sun' },
+    nature: { name: 'Natur', stats: ['wis', 'dex', 'con'], icon: 'leaf' },
+    beast: { name: 'Bestie', stats: ['str', 'con', 'wis'], icon: 'claw' },
+    blood: { name: 'Blut', stats: ['con', 'cha', 'str'], icon: 'drop' }
   };
 
+  // Einträge: [Name, Beschreibung, Stufe (1 Selten, 2 Episch, 3 Legendär)]
   var ABILITIES = {
     martial: [
-      ['Klingensturm', 'Wirbelt durch die Feinde und trifft alle Gegner in der Nähe für {n} Schaden.'],
-      ['Schildwall', 'Blockt den nächsten Angriff vollständig und kontert mit {n} Schaden.'],
-      ['Eiserner Wille', 'Passiv: Unter 30 % Leben steigt die Rüstung um {n} %.'],
-      ['Kriegsschrei', 'Verbündete in Rufweite erhalten {n} % mehr Angriffskraft.'],
-      ['Spaltender Hieb', 'Ein wuchtiger Schlag, der Rüstung bricht und {n} Schaden verursacht.'],
-      ['Unerschütterlich', 'Passiv: Immun gegen Furcht; Betäubungen dauern {n} % kürzer.'],
-      ['Sturmangriff', 'Stürmt auf ein Ziel zu und wirft es für {n} Sekunden zu Boden.'],
-      ['Klingenparade', 'Pariert Nahkampfangriffe und erhält {n} % Ausweichen.'],
-      ['Narbenhaut', 'Passiv: Jede überlebte Schlacht erhöht das maximale Leben um {n}.'],
-      ['Hinrichtung', 'Tötet verwundete Gegner sofort; sonst {n} Schaden.']
+      ['Klingensturm', 'Wirbelt durch die Feinde und trifft alle Gegner in der Nähe für {n} Schaden.', 2],
+      ['Schildwall', 'Blockt den nächsten Angriff vollständig und kontert mit {n} Schaden.', 2],
+      ['Eiserner Wille', 'Passiv: Unter 30 % Leben steigt die Rüstung um {n} %.', 1],
+      ['Kriegsschrei', 'Verbündete in Rufweite erhalten {n} % mehr Angriffskraft.', 2],
+      ['Spaltender Hieb', 'Ein wuchtiger Schlag, der Rüstung bricht und {n} Schaden verursacht.', 1],
+      ['Unerschütterlich', 'Passiv: Immun gegen Furcht; Betäubungen dauern {n} % kürzer.', 1],
+      ['Sturmangriff', 'Stürmt auf ein Ziel zu und wirft es für {n} Sekunden zu Boden.', 1],
+      ['Klingenparade', 'Pariert Nahkampfangriffe und erhält {n} % Ausweichen.', 1],
+      ['Narbenhaut', 'Passiv: Jede überlebte Schlacht erhöht das maximale Leben um {n}.', 2],
+      ['Hinrichtung', 'Tötet verwundete Gegner sofort; sonst {n} Schaden.', 3]
     ],
     arcane: [
-      ['Arkane Lanze', 'Ein Strahl reiner Magie durchbohrt alle Ziele in einer Linie für {n} Schaden.'],
-      ['Zeitriss', 'Verlangsamt die Zeit um das Ziel für {n} Sekunden.'],
-      ['Spiegelbilder', 'Erschafft {n} Trugbilder, die Angriffe auf sich ziehen.'],
-      ['Manaschild', 'Wandelt erlittenen Schaden zu {n} % in Mana um.'],
-      ['Sternenfall', 'Lässt Meteore regnen, die {n} Feuerschaden verursachen.'],
-      ['Runenbann', 'Versiegelt die Magie eines Gegners für {n} Sekunden.'],
-      ['Gedankenlesen', 'Passiv: Erkennt Lügen und die nächste Absicht des Gegners.'],
-      ['Teleport', 'Springt bis zu {n} Schritt weit an einen sichtbaren Ort.'],
-      ['Frostnova', 'Friert alle Gegner in der Nähe für {n} Sekunden ein.'],
-      ['Arkanes Echo', 'Passiv: {n} % Chance, jeden Zauber kostenlos zu wiederholen.']
+      ['Arkane Lanze', 'Ein Strahl reiner Magie durchbohrt alle Ziele in einer Linie für {n} Schaden.', 2],
+      ['Zeitriss', 'Verlangsamt die Zeit um das Ziel für {n} Sekunden.', 3],
+      ['Spiegelbilder', 'Erschafft {n} Trugbilder, die Angriffe auf sich ziehen.', 1],
+      ['Manaschild', 'Wandelt erlittenen Schaden zu {n} % in Mana um.', 2],
+      ['Sternenfall', 'Lässt Meteore regnen, die {n} Feuerschaden verursachen.', 2],
+      ['Runenbann', 'Versiegelt die Magie eines Gegners für {n} Sekunden.', 2],
+      ['Gedankenlesen', 'Passiv: Erkennt Lügen und die nächste Absicht des Gegners.', 1],
+      ['Teleport', 'Springt bis zu {n} Schritt weit an einen sichtbaren Ort.', 1],
+      ['Frostnova', 'Friert alle Gegner in der Nähe für {n} Sekunden ein.', 1],
+      ['Arkanes Echo', 'Passiv: {n} % Chance, jeden Zauber kostenlos zu wiederholen.', 3]
     ],
     shadow: [
-      ['Schattenschritt', 'Verschwindet und taucht hinter dem Ziel auf; nächster Angriff +{n} % Schaden.'],
-      ['Giftklinge', 'Vergiftet das Ziel: {n} Schaden über 6 Sekunden.'],
-      ['Mantel der Nacht', 'Wird für {n} Sekunden unsichtbar.'],
-      ['Meuchelstoß', 'Ein Angriff aus dem Verborgenen für {n} kritischen Schaden.'],
-      ['Flüsterndes Grauen', 'Versetzt Gegner in Furcht; sie fliehen {n} Sekunden.'],
-      ['Seelenraub', 'Stiehlt {n} Leben und heilt sich selbst um denselben Wert.'],
-      ['Schattenfessel', 'Bindet das Ziel an seinen eigenen Schatten für {n} Sekunden.'],
-      ['Zwielicht', 'Passiv: In Dunkelheit {n} % höhere Ausweichchance.'],
-      ['Nebelgestalt', 'Wird körperlos; nimmt {n} % weniger körperlichen Schaden.'],
-      ['Fluch der Leere', 'Das Ziel erleidet für 10 Sekunden {n} % mehr Schaden.']
+      ['Schattenschritt', 'Verschwindet und taucht hinter dem Ziel auf; nächster Angriff +{n} % Schaden.', 1],
+      ['Giftklinge', 'Vergiftet das Ziel: {n} Schaden über 6 Sekunden.', 1],
+      ['Mantel der Nacht', 'Wird für {n} Sekunden unsichtbar.', 2],
+      ['Meuchelstoß', 'Ein Angriff aus dem Verborgenen für {n} kritischen Schaden.', 2],
+      ['Flüsterndes Grauen', 'Versetzt Gegner in Furcht; sie fliehen {n} Sekunden.', 1],
+      ['Seelenraub', 'Stiehlt {n} Leben und heilt sich selbst um denselben Wert.', 2],
+      ['Schattenfessel', 'Bindet das Ziel an seinen eigenen Schatten für {n} Sekunden.', 1],
+      ['Zwielicht', 'Passiv: In Dunkelheit {n} % höhere Ausweichchance.', 1],
+      ['Nebelgestalt', 'Wird körperlos; nimmt {n} % weniger körperlichen Schaden.', 2],
+      ['Fluch der Leere', 'Das Ziel erleidet für 10 Sekunden {n} % mehr Schaden.', 3]
     ],
     holy: [
-      ['Heiliges Licht', 'Heilt einen Verbündeten um {n} Leben.'],
-      ['Göttlicher Schild', 'Ein Verbündeter wird für {n} Sekunden unverwundbar.'],
-      ['Läuterung', 'Entfernt alle Flüche und verursacht {n} Schaden an Untoten.'],
-      ['Aura der Hingabe', 'Passiv: Verbündete in der Nähe erhalten {n} Rüstung.'],
-      ['Urteil', 'Ruft einen Lichtstrahl herab, der {n} heiligen Schaden verursacht.'],
-      ['Segen der Morgenröte', 'Stellt bei Sonnenaufgang {n} % Leben aller Verbündeten wieder her.'],
-      ['Sanktum', 'Weiht den Boden; Feinde darauf verlieren {n} Leben pro Sekunde.'],
-      ['Märtyrer', 'Übernimmt {n} % des Schadens eines Verbündeten.'],
-      ['Wiederauferstehung', 'Belebt einen gefallenen Verbündeten mit {n} % Leben wieder.'],
-      ['Gebet der Klarheit', 'Passiv: Immun gegen Verwirrung und Bezauberung.']
+      ['Heiliges Licht', 'Heilt einen Verbündeten um {n} Leben.', 1],
+      ['Göttlicher Schild', 'Ein Verbündeter wird für {n} Sekunden unverwundbar.', 3],
+      ['Läuterung', 'Entfernt alle Flüche und verursacht {n} Schaden an Untoten.', 1],
+      ['Aura der Hingabe', 'Passiv: Verbündete in der Nähe erhalten {n} Rüstung.', 2],
+      ['Urteil', 'Ruft einen Lichtstrahl herab, der {n} heiligen Schaden verursacht.', 2],
+      ['Segen der Morgenröte', 'Stellt bei Sonnenaufgang {n} % Leben aller Verbündeten wieder her.', 1],
+      ['Sanktum', 'Weiht den Boden; Feinde darauf verlieren {n} Leben pro Sekunde.', 1],
+      ['Märtyrer', 'Übernimmt {n} % des Schadens eines Verbündeten.', 2],
+      ['Wiederauferstehung', 'Belebt einen gefallenen Verbündeten mit {n} % Leben wieder.', 3],
+      ['Gebet der Klarheit', 'Passiv: Immun gegen Verwirrung und Bezauberung.', 1]
     ],
     nature: [
-      ['Dornenranken', 'Ranken fesseln Gegner und verursachen {n} Schaden.'],
-      ['Ruf der Wildnis', 'Beschwört einen Wolf, Bären oder Falken für {n} Sekunden.'],
-      ['Regeneration', 'Heilt {n} Leben über 10 Sekunden.'],
-      ['Gestaltwandel', 'Nimmt Tiergestalt an: +{n} % Tempo und Stärke.'],
-      ['Gewittersturm', 'Blitze schlagen in zufällige Gegner ein, je {n} Schaden.'],
-      ['Waldläufer', 'Passiv: Hinterlässt keine Spuren; +{n} % Tempo im Gelände.'],
-      ['Sporenwolke', 'Eine Wolke aus Sporen schläfert Gegner {n} Sekunden ein.'],
-      ['Rindenhaut', 'Die Haut wird hart wie Eiche: {n} % weniger Schaden.'],
-      ['Tiersprache', 'Passiv: Versteht alle Tiere und kann ihnen Fragen stellen.'],
-      ['Präziser Schuss', 'Ein Pfeil, der nie verfehlt, für {n} Schaden.']
+      ['Dornenranken', 'Ranken fesseln Gegner und verursachen {n} Schaden.', 1],
+      ['Ruf der Wildnis', 'Beschwört einen Wolf, Bären oder Falken für {n} Sekunden.', 2],
+      ['Regeneration', 'Heilt {n} Leben über 10 Sekunden.', 1],
+      ['Gestaltwandel', 'Nimmt Tiergestalt an: +{n} % Tempo und Stärke.', 2],
+      ['Gewittersturm', 'Blitze schlagen in zufällige Gegner ein, je {n} Schaden.', 2],
+      ['Waldläufer', 'Passiv: Hinterlässt keine Spuren; +{n} % Tempo im Gelände.', 1],
+      ['Sporenwolke', 'Eine Wolke aus Sporen schläfert Gegner {n} Sekunden ein.', 1],
+      ['Rindenhaut', 'Die Haut wird hart wie Eiche: {n} % weniger Schaden.', 2],
+      ['Tiersprache', 'Passiv: Versteht alle Tiere und kann ihnen Fragen stellen.', 1],
+      ['Präziser Schuss', 'Ein Pfeil, der nie verfehlt, für {n} Schaden.', 3]
     ],
     beast: [
-      ['Zerfetzen', 'Mehrere Klauenhiebe für insgesamt {n} Schaden.'],
-      ['Urgebrüll', 'Lässt den Boden beben und betäubt Gegner {n} Sekunden.'],
-      ['Flammenodem', 'Speit Feuer in einem Kegel für {n} Schaden.'],
-      ['Schuppenpanzer', 'Passiv: Ignoriert die ersten {n} Punkte jedes Treffers.'],
-      ['Jagdinstinkt', 'Passiv: Spürt verwundete Beute über {n} Meilen hinweg.'],
-      ['Schwingenschlag', 'Ein Sturmwind wirft alle Gegner {n} Schritt zurück.'],
-      ['Versteinernder Blick', 'Das Ziel erstarrt für {n} Sekunden zu Stein.'],
-      ['Uralte Regeneration', 'Wachsen abgetrennte Glieder nach; heilt {n} Leben pro Sekunde.'],
-      ['Rudelführer', 'Beschwört {n} Kreaturen seiner Art zur Hilfe.'],
-      ['Giftbiss', 'Ein Biss mit lähmendem Gift: {n} Schaden und Verlangsamung.']
+      ['Zerfetzen', 'Mehrere Klauenhiebe für insgesamt {n} Schaden.', 1],
+      ['Urgebrüll', 'Lässt den Boden beben und betäubt Gegner {n} Sekunden.', 2],
+      ['Flammenodem', 'Speit Feuer in einem Kegel für {n} Schaden.', 2],
+      ['Schuppenpanzer', 'Passiv: Ignoriert die ersten {n} Punkte jedes Treffers.', 2],
+      ['Jagdinstinkt', 'Passiv: Spürt verwundete Beute über {n} Meilen hinweg.', 1],
+      ['Schwingenschlag', 'Ein Sturmwind wirft alle Gegner {n} Schritt zurück.', 1],
+      ['Versteinernder Blick', 'Das Ziel erstarrt für {n} Sekunden zu Stein.', 3],
+      ['Uralte Regeneration', 'Wachsen abgetrennte Glieder nach; heilt {n} Leben pro Sekunde.', 3],
+      ['Rudelführer', 'Beschwört {n} Kreaturen seiner Art zur Hilfe.', 2],
+      ['Giftbiss', 'Ein Biss mit lähmendem Gift: {n} Schaden und Verlangsamung.', 1]
     ],
     blood: [
-      ['Blutpakt', 'Opfert {n} Leben für doppelte Zauberkraft.'],
-      ['Aderlass', 'Lässt das Blut der Feinde kochen: {n} Schaden.'],
-      ['Durst', 'Passiv: Jeder Treffer heilt um {n} % des Schadens.'],
-      ['Totenbeschwörung', 'Erhebt {n} Skelette aus den Gefallenen.'],
-      ['Blutnebel', 'Verwandelt sich in roten Nebel und weicht allen Angriffen aus.'],
-      ['Marionettenfaden', 'Übernimmt für {n} Sekunden die Kontrolle über einen Gegner.'],
-      ['Verderbnis', 'Eine Seuche springt von Gegner zu Gegner: {n} Schaden.'],
-      ['Knochenrüstung', 'Umgibt sich mit Knochen, die {n} Schaden absorbieren.'],
-      ['Ewiger Hunger', 'Passiv: Wird mit jedem Opfer in der Nähe {n} % stärker.'],
-      ['Seelenkette', 'Verbindet zwei Gegner; Schaden an einem trifft beide zu {n} %.']
+      ['Blutpakt', 'Opfert {n} Leben für doppelte Zauberkraft.', 2],
+      ['Aderlass', 'Lässt das Blut der Feinde kochen: {n} Schaden.', 1],
+      ['Durst', 'Passiv: Jeder Treffer heilt um {n} % des Schadens.', 2],
+      ['Totenbeschwörung', 'Erhebt {n} Skelette aus den Gefallenen.', 2],
+      ['Blutnebel', 'Verwandelt sich in roten Nebel und weicht allen Angriffen aus.', 3],
+      ['Marionettenfaden', 'Übernimmt für {n} Sekunden die Kontrolle über einen Gegner.', 3],
+      ['Verderbnis', 'Eine Seuche springt von Gegner zu Gegner: {n} Schaden.', 1],
+      ['Knochenrüstung', 'Umgibt sich mit Knochen, die {n} Schaden absorbieren.', 1],
+      ['Ewiger Hunger', 'Passiv: Wird mit jedem Opfer in der Nähe {n} % stärker.', 2],
+      ['Seelenkette', 'Verbindet zwei Gegner; Schaden an einem trifft beide zu {n} %.', 1]
     ]
   };
 
-  // Ultimative Fähigkeiten (ab Episch) und mythische Gaben
+  // Ultimative Fähigkeiten (ab Episch, Stufe Legendär) und mythische Gaben (Stufe Mythisch)
   var ULTIMATES = {
     martial: ['Zorn der Tausend Klingen', 'Wird für 12 Sekunden zum unaufhaltsamen Wirbelwind aus Stahl: {n} Schaden pro Sekunde.'],
     arcane: ['Riss im Weltgefüge', 'Öffnet ein Tor in die Leere, das alle Feinde für {n} Schaden verschlingt.'],
@@ -166,6 +167,7 @@ var DF_DATA = (function () {
       artifacts: ['die Krone der Sterne', 'das Schwert Morgenglanz', 'den Kelch von Lumeris', 'das Buch der Ersten Worte', 'den Drachenstein'],
       weapons: ['Elfenklinge „Mondsichel“', 'Stab aus Weltenbaumholz', 'Langbogen „Silberwind“', 'Mithrilhammer', 'Sternenlanze',
         'Laute mit Saiten aus Licht', 'Runenschwert „Dämmerbrecher“'],
+      weaponTiers: [2, 2, 2, 1, 1, 1, 3],
       quotes: ['„Solange ein Stern am Himmel steht, ist nichts verloren.“', '„Licht braucht keinen Zorn, um zu brennen.“',
         '„Ich habe geschworen. Das genügt.“', '„Die Lieder werden sich an uns erinnern.“', '„Hoffnung ist die schärfste Klinge.“']
     },
@@ -193,6 +195,7 @@ var DF_DATA = (function () {
         'den seelenfressenden Spiegel'],
       weapons: ['Sense „Totenernte“', 'Zweihänder aus schwarzem Stahl', 'Ritualdolch aus Obsidian', 'Knochenstab mit Schädelkrone',
         'Kettenpeitsche', 'Rostige Henkersaxt', 'Zwillingsdolche „Gift & Galle“'],
+      weaponTiers: [3, 2, 1, 2, 1, 1, 2],
       quotes: ['„Die Götter schweigen. Also spreche ich.“', '„Jeder bezahlt. Früher oder später.“', '„Ich bin nicht das Monster. Ich bin, was danach kommt.“',
         '„Die Dunkelheit hat mich nie verlassen. Sie hat gewartet.“', '„Bete, wenn es dir hilft.“', '„Blut vergisst nicht.“']
     },
@@ -218,6 +221,7 @@ var DF_DATA = (function () {
       artifacts: ['die Erste Feder', 'eine Schuppe des Weltendrachen', 'die Träne des Mondes', 'den Ring der Gezeiten', 'das Ei, aus dem alles schlüpfte'],
       weapons: ['Klauen aus Sternenstahl', 'Hörner, die Magie spalten', 'Flammenschwingen', 'Giftzähne', 'Ein Blick, der versteinert',
         'Schuppenpanzer härter als Diamant', 'Atem aus kaltem Feuer'],
+      weaponTiers: [2, 2, 2, 1, 3, 1, 2],
       quotes: ['„Ich war hier, bevor eure Könige Namen hatten.“', '„Die Welt atmet. Ich höre zu.“', '„Fürchte nicht mich. Fürchte, wenn ich gehe.“',
         '„Jedes Rätsel hat zwei Antworten. Eine davon tötet.“', '„Feuer stirbt nicht. Es wartet.“']
     },
@@ -245,6 +249,7 @@ var DF_DATA = (function () {
         'den geheimen Friedensbrief des Königs'],
       weapons: ['Langschwert mit Familienwappen', 'Morgenstern', 'Englischer Langbogen', 'Hellebarde', 'Streitkolben', 'Armbrust mit Bolzen aus Silber',
         'Bidenhänder', 'Flegel und Turmschild'],
+      weaponTiers: [2, 1, 2, 1, 1, 3, 2, 1],
       quotes: ['„Für Krone und Land – oder wenigstens für Gold.“', '„Ein Eid ist schwerer als jede Rüstung.“', '„Gott wird die Seinen erkennen.“',
         '„Ich habe Könige fallen sehen. Du bist keiner.“', '„Ehre ist teuer. Ich zahle sie trotzdem.“', '„Das Schwert lügt nicht.“']
     }

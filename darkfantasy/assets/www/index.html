@@ -43,6 +43,65 @@
     <section id="result"></section>
   </main>
 
+  <main id="view-editor" class="view">
+    <header class="page-head">
+      <h1>Selbst erstellen</h1>
+      <button class="ghost" id="ed-new">🎲 Neu</button>
+    </header>
+    <p class="hint">Stell deinen Charakter selbst zusammen. Bei jeder Auswahl siehst du die Stufe – <span class="best">★ Beste</span> ist die stärkste Wahl.</p>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Grundlagen</h3>
+      <label class="field"><span>Name</span>
+        <div class="with-btn"><input id="ed-name" maxlength="60" autocomplete="off"><button class="dice" data-dice="name" title="Zufälliger Name">🎲</button></div></label>
+      <label class="field"><span>Beiname</span>
+        <div class="with-btn"><input id="ed-epithet" maxlength="60" autocomplete="off"><button class="dice" data-dice="epithet" title="Zufälliger Beiname">🎲</button></div></label>
+      <div class="field"><span>Stil</span><div class="chips" id="ed-style"></div></div>
+      <div class="field"><span>Geschlecht</span><div class="chips" id="ed-gender">
+        <button class="chip" data-v="m">Männlich</button><button class="chip" data-v="f">Weiblich</button></div></div>
+      <label class="field"><span>Volk</span><select id="ed-race"></select></label>
+      <label class="field"><span>Klasse</span><select id="ed-cls"></select></label>
+      <label class="field"><span>Gesinnung</span><select id="ed-align"></select></label>
+    </section>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Seltenheit</h3>
+      <div id="ed-rarity" class="rarity-pick"></div>
+      <div id="ed-rarity-info" class="ed-info"></div>
+      <div class="field"><span>Stufe <b id="ed-level-v"></b></span>
+        <div class="with-btn"><input type="range" id="ed-level"><button class="chip best-btn" id="ed-level-max">Max ★ Beste</button></div></div>
+    </section>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Attribute <span class="ed-count" id="ed-points"></span></h3>
+      <div id="ed-stats"></div>
+      <button class="chip best-btn wide" id="ed-best-stats">Optimal für die Klasse verteilen ★ Beste</button>
+    </section>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Fähigkeiten <span class="ed-count" id="ed-abil-count"></span></h3>
+      <div id="ed-abilities"></div>
+    </section>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Waffe</h3>
+      <select id="ed-weapon"></select>
+      <input id="ed-weapon-own" maxlength="60" placeholder="Eigene Waffe, z. B. „Klinge der Asche“" hidden>
+    </section>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Lore & Zitat</h3>
+      <div class="field"><span class="row-between">Geschichte <button class="chip" data-dice="lore">🎲 Lore würfeln</button></span>
+        <textarea id="ed-lore" rows="6" maxlength="1500" placeholder="Woher kommt dein Charakter? Was treibt ihn an?"></textarea></div>
+      <div class="field"><span class="row-between">Zitat <button class="chip" data-dice="quote">🎲</button></span>
+        <input id="ed-quote" maxlength="200"></div>
+    </section>
+
+    <h3 class="ed-h preview-h">Vorschau</h3>
+    <div id="ed-preview"></div>
+    <button class="summon" id="ed-save"><span>In Sammlung speichern</span></button>
+  </main>
+
   <main id="view-collection" class="view">
     <header class="page-head">
       <h1>Sammlung</h1>
@@ -68,7 +127,7 @@
   <div id="dialog" class="overlay dialog" hidden>
     <div class="dialog-box">
       <h3>Charakter-Code einfügen</h3>
-      <p class="muted">Codes beginnen mit <b>DF1.</b> – du kannst auch die ganze geteilte Nachricht einfügen.</p>
+      <p class="muted">Codes beginnen mit <b>DF1.</b> oder <b>DFC1.</b> (selbst erstellt) – du kannst auch die ganze geteilte Nachricht einfügen.</p>
       <textarea id="import-text" rows="4" placeholder="DF1.dark.rb.…"></textarea>
       <div class="dialog-actions">
         <button class="ghost" id="paste">Aus Zwischenablage</button>
@@ -84,6 +143,8 @@
   <nav class="tabs">
     <button data-view="create" class="active">
       <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 9l-5.2 4.3L17.6 21 12 17.3 6.4 21l1.8-7.7L3 9l6.6-.4z"/></svg>Erschaffen</button>
+    <button data-view="editor">
+      <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Selbst erstellen</button>
     <button data-view="collection">
       <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.3C1 8 3.5 4 7.2 4c2 0 3.6 1.1 4.8 2.8C13.2 5.1 14.8 4 16.8 4 20.5 4 23 8 21.5 11.7 19.5 16.4 12 21 12 21z"/></svg>Sammlung</button>
     <button data-view="history">

@@ -3,7 +3,7 @@
 Android-App, die Fantasy-Charaktere mit zufälligen Namen, Klassen, Fähigkeiten, Seltenheiten und Lore erschafft – komplett offline,
 ohne Berechtigungen.
 
-**APK:** [`release/DarkFantasyGenerator.apk`](../release/DarkFantasyGenerator.apk) (ab Android 7, ca. 80 KB).
+**APK:** [`release/DarkFantasyGenerator.apk`](../release/DarkFantasyGenerator.apk) (ab Android 7, ca. 90 KB).
 Installieren wie SetupBuilder: APK aufs Handy laden, öffnen, „Unbekannte Apps installieren“ erlauben.
 
 ## Funktionen
@@ -17,7 +17,12 @@ Installieren wie SetupBuilder: APK aufs Handy laden, öffnen, „Unbekannte Apps
 - **Geschlecht** wählbar (zufällig/männlich/weiblich) – Klassen, Völker und Lore werden passend gebeugt.
 - **Neu würfeln** von Name, Fähigkeiten oder Lore einzeln.
 - **Sammlung** (♡ Speichern, Filter nach Seltenheit) und **Verlauf** der letzten 60 Beschwörungen.
-- **Teilen** als Text; jeder Charakter hat einen Code (`DF1.…`), der ihn exakt wiederherstellt – unter Sammlung → „Code einfügen“
+- **Selbst erstellen:** eigener Editor für Name, Beiname, Stil, Geschlecht, Volk, Klasse, Gesinnung, Seltenheit, Stufe, Attribute
+  (Punkte-Budget je Seltenheit), Fähigkeiten, Ultimative Fähigkeit, Mythische Gabe, Waffe (auch eigene), Lore und Zitat – mit 🎲 für
+  Zufallsvorschläge und Live-Vorschau der Karte. Jede Auswahl zeigt ihre Stufe (Selten/Episch/Legendär/Mythisch); die stärkste Wahl ist mit
+  **★ Beste** markiert (z. B. Seltenheit Mythisch, maximale Stufe, „Optimal verteilen“ bei Attributen, legendäre Fähigkeiten und Waffen,
+  die Ultimative der eigenen Klasse). Auch jeder beschworene Charakter lässt sich über „✎ Bearbeiten“ anpassen.
+- **Teilen** als Text; jeder Charakter hat einen Code (`DF1.…`, selbst erstellte `DFC1.…`), der ihn exakt wiederherstellt – unter Sammlung → „Code einfügen“
   oder per „Teilen“ direkt an die App.
 
 ## Aufbau
