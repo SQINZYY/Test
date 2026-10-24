@@ -1,3 +1,5 @@
+> **Neu: [DarkOS](darkos/README.md)** – futuristischer Neon-Launcher fürs Handy: [`release/DarkOS.apk`](release/DarkOS.apk)
+
 # SetupBuilder
 
 Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die garantiert zusammenpassen, Teile vergleichen, Budget verwalten, den eigenen PC mit Freunden teilen und Upgrade-Tipps bekommen.

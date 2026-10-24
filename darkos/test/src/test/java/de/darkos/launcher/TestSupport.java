@@ -161,11 +161,14 @@ final class TestSupport {
 
     static File shot(Activity a, String name) throws Exception {
         View v = a.getWindow().getDecorView();
+        // Klassische View-Animationen (Raster-Einblendung) hängen an der Zeichenzeit des Fensters,
+        // die Robolectric bei manuellem Zeichnen nicht weiterdreht – daher hier beenden
         // Robolectric zeichnet nur auf Anforderung: einmal vorzeichnen, damit View-Animationen starten und enden
         for (int i = 0; i < 4; i++) {
             Bitmap warm = Bitmap.createBitmap(Math.max(1, v.getWidth()), Math.max(1, v.getHeight()), Bitmap.Config.ARGB_8888);
             v.draw(new Canvas(warm));
             warm.recycle();
+            for (View x : find(v, View.class)) x.clearAnimation();
             idle(250);
         }
         return shot(v, name);
