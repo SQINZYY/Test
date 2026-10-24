@@ -18,6 +18,10 @@ function many(b, cat) {
 
 function partsOf(b, cat) { return CAT[cat].multi ? many(b, cat) : (one(b, cat) ? [one(b, cat)] : []); }
 
+// Eigene Teile (z. B. aus einem Import, die nicht in der Datenbank stehen) – ohne Kompatibilitätsprüfung.
+function customsOf(b, cat) { return (b.customs || []).filter(c => !cat || c.cat === cat); }
+function hasAny(b, cat) { return partsOf(b, cat).length > 0 || customsOf(b, cat).length > 0; }
+
 function priceOf(b, cat, p) {
   const o = b.prices && b.prices[cat + ':' + p.id];
   return typeof o === 'number' ? o : p.price;
@@ -37,7 +41,8 @@ function totals(b) {
   const byCat = {};
   let pc = 0, setup = 0;
   for (const c of CATS) {
-    const sum = partsOf(b, c.key).reduce((s, p) => s + priceOf(b, c.key, p), 0);
+    const sum = partsOf(b, c.key).reduce((s, p) => s + priceOf(b, c.key, p), 0)
+      + customsOf(b, c.key).reduce((s, p) => s + (p.price || 0), 0);
     byCat[c.key] = sum;
     if (c.group === 'pc') pc += sum; else setup += sum;
   }
@@ -78,6 +83,9 @@ function checkBuild(b) {
         add('error', ['ram', 'mb'], `${ram.modules} RAM-Riegel, aber das Mainboard hat nur ${mb.ramSlots} Steckplätze.`);
       if (ram.size > mb.maxRam)
         add('error', ['ram', 'mb'], `Zu viel RAM: Mainboard unterstützt max. ${mb.maxRam} GB.`);
+      const base = ram.type === 'DDR4' ? 3200 : 4800;
+      if (mb.memOC === false && ram.speed > base)
+        add('info', ['ram', 'mb'], `Der ${mb.chipset}-Chipsatz kann kein XMP – der RAM läuft nur mit ${base} MT/s statt ${ram.speed} MT/s.`);
     }
   }
 
@@ -90,8 +98,12 @@ function checkBuild(b) {
     if (gpu.slots > cs.gpuSlots)
       add('error', ['gpu', 'case'], `Grafikkarte zu dick: ${fmtNum(gpu.slots)} Slots, das Gehäuse schafft max. ${fmtNum(cs.gpuSlots)}.`);
   }
-  if (gpu && mb && gpu.pcie > mb.pcie)
-    add('info', ['gpu', 'mb'], `Die Karte läuft im PCIe-${mb.pcie}.0-x16-Slot (abwärtskompatibel, praktisch kein Leistungsverlust).`);
+  if (gpu && mb && gpu.pcie > mb.pcie) {
+    if (gpu.lanes === 8 && mb.pcie <= 3)
+      add('warn', ['gpu', 'mb'], `Die Karte hat nur 8 PCIe-Lanes – im PCIe-${mb.pcie}.0-Slot verliert sie ca. 5–10 % Leistung.`);
+    else
+      add('info', ['gpu', 'mb'], `Die Karte läuft im PCIe-${mb.pcie}.0-x16-Slot (abwärtskompatibel, praktisch kein Leistungsverlust).`);
+  }
 
   if (psu) {
     const pw = power(b);
@@ -100,8 +112,14 @@ function checkBuild(b) {
       add('error', ['psu', 'gpu', 'cpu'], `Netzteil zu schwach: ${psu.watt} W bei ca. ${pw.draw} W Verbrauch (plus Lastspitzen).`);
     else if (psu.watt < pw.recommended)
       add('warn', ['psu', 'gpu', 'cpu'], `Netzteil knapp: empfohlen sind mind. ${pw.recommended} W, du hast ${psu.watt} W.`);
-    if (gpu && gpu.conn === '12V-2×6' && !psu.native12v)
-      add('info', ['psu', 'gpu'], 'Die Grafikkarte nutzt 12V-2×6 – das Netzteil braucht den beiliegenden Adapter (natives Kabel ist besser).');
+    if (gpu && gpu.pins > psu.pcie8)
+      add('error', ['psu', 'gpu'], `Zu wenig Stromstecker: die Grafikkarte braucht ${gpu.pins}× 8-Pin-PCIe, das Netzteil hat nur ${psu.pcie8}.`);
+    if (gpu && gpu.a8 && !psu.native12v) {
+      if (gpu.a8 > psu.pcie8)
+        add('error', ['psu', 'gpu'], `Die Grafikkarte braucht 12V-2×6 – der Adapter benötigt ${gpu.a8}× 8-Pin, das Netzteil hat nur ${psu.pcie8}.`);
+      else
+        add('info', ['psu', 'gpu'], `Die Grafikkarte nutzt 12V-2×6 – angeschlossen über den beiliegenden Adapter (${gpu.a8}× 8-Pin). Ein natives Kabel ist besser.`);
+    }
     if (cs && cs.psu === 'SFX' && psu.ff !== 'SFX')
       add('error', ['psu', 'case'], `ATX-Netzteil passt nicht ins ${cs.name} – nur SFX-Netzteile.`);
     if (cs && cs.psu === 'ATX' && psu.ff === 'SFX')
@@ -118,10 +136,10 @@ function checkBuild(b) {
   }
   if (cooler && cpu && cooler.tdp < cpu.power)
     add('warn', ['cooler', 'cpu'], `Kühler knapp bemessen: ${cpu.name} zieht bis ca. ${cpu.power} W, der Kühler schafft ca. ${cooler.tdp} W.`);
-  if (!cooler && cpu && !cpu.boxCooler)
+  if (!cooler && cpu && !cpu.boxCooler && !customsOf(b, 'cooler').length)
     add('error', ['cooler', 'cpu'], `Kein Kühler: ${cpu.name} wird ohne Kühler geliefert.`, true);
 
-  if (cpu && !gpu && !cpu.igpu)
+  if (cpu && !gpu && !cpu.igpu && !customsOf(b, 'gpu').length)
     add('error', ['gpu', 'cpu'], `Keine Bildausgabe: ${cpu.name} hat keine integrierte Grafik – du brauchst eine Grafikkarte.`, true);
 
   if (mb) {
@@ -138,8 +156,12 @@ function checkBuild(b) {
   if (gpu && mons.some(m => m.res === '4K') && gpu.score < 45)
     add('info', ['gpu', 'monitor'], 'Für 4K ist die Grafikkarte eher schwach – nutze DLSS/FSR oder spiele in 1440p.');
 
+  const own = customsOf(b).filter(c => CAT[c.cat] && CAT[c.cat].group === 'pc');
+  if (own.length)
+    add('info', own.map(c => c.cat), `${own.length} eigene${own.length > 1 ? '' : 's'} Teil${own.length > 1 ? 'e' : ''} (${own.map(c => c.name).join(', ')}) ${own.length > 1 ? 'sind' : 'ist'} nicht in der Datenbank und ${own.length > 1 ? 'werden' : 'wird'} nicht auf Kompatibilität geprüft.`);
+
   for (const c of CATS)
-    if (c.required && !partsOf(b, c.key).length)
+    if (c.required && !hasAny(b, c.key))
       add('todo', [c.key], `${c.name} fehlt noch.`, true);
 
   return out;
@@ -432,6 +454,8 @@ function encodeBuild(b, author) {
   if (b.kind === 'mine') data.m = 1;
   if (Object.keys(prices).length) data.pr = prices;
   if (b.budget) data.b = b.budget;
+  const own = customsOf(b);
+  if (own.length) data.c = own.map(c => [c.cat, c.name, c.price || 0]);
   return 'SB1.' + b64urlEncode(JSON.stringify(data));
 }
 
@@ -463,8 +487,11 @@ function decodeBuild(text) {
     }
   }
   const str = (x, n) => (typeof x === 'string' ? x.slice(0, n) : '');
+  const customs = (Array.isArray(data.c) ? data.c : []).slice(0, 20)
+    .filter(c => Array.isArray(c) && CAT[c[0]] && typeof c[1] === 'string' && c[1].trim())
+    .map(c => ({ id: 'c' + Math.random().toString(36).slice(2, 9), cat: c[0], name: c[1].slice(0, 120), price: typeof c[2] === 'number' && c[2] >= 0 && c[2] <= 100000 ? Math.round(c[2]) : 0 }));
   return {
-    build: { name: str(data.n, 60) || 'Geteilter PC', parts, prices, budget: typeof data.b === 'number' && data.b > 0 && data.b < 1e6 ? Math.round(data.b) : 0 },
+    build: { name: str(data.n, 60) || 'Geteilter PC', parts, prices, customs, budget: typeof data.b === 'number' && data.b > 0 && data.b < 1e6 ? Math.round(data.b) : 0 },
     author: str(data.a, 40), wasMine: data.m === 1, unknown,
   };
 }
@@ -473,8 +500,8 @@ function shareText(b, author) {
   const t = totals(b);
   const lines = [`🖥️ ${b.kind === 'mine' ? 'Mein PC' : 'PC-Build'} „${b.name}“${author ? ' von ' + author : ''} – erstellt mit SetupBuilder`, ''];
   for (const c of CATS) {
-    const ps = partsOf(b, c.key);
-    if (ps.length) lines.push(`${c.short}: ${ps.map(p => p.name).join(' + ')}`);
+    const names = partsOf(b, c.key).map(p => p.name).concat(customsOf(b, c.key).map(p => p.name));
+    if (names.length) lines.push(`${c.short}: ${names.join(' + ')}`);
   }
   lines.push('');
   lines.push(`Gesamt: ca. ${fmtEur(t.all)}${t.setup ? ` (PC ${fmtEur(t.pc)})` : ''}`);

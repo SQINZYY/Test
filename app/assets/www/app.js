@@ -23,6 +23,9 @@ const P = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   dots: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
   import: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 19h16"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  text: '<path d="M5 6h14M5 10h14M5 14h10M5 18h7"/>',
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
   cpu: '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
@@ -353,6 +356,13 @@ function fpsBlock(b) {
 
 function priceTag(n) { return `<span class="price">${fmtEur(n)}</span>`; }
 
+// Nur selbst erzeugte Produktbilder (Ausschnitte aus Screenshots) anzeigen
+const safeImg = src => (typeof src === 'string' && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(src) ? src : null);
+function partVisual(cat, img, big) {
+  const src = safeImg(img);
+  return src ? `<img class="slot-img ${big ? 'big' : ''}" src="${src}" alt="">` : `<span class="slot-ic ${big ? 'big' : ''}">${icon(cat)}</span>`;
+}
+
 // ---------- Ansicht: Entdecken ----------
 function viewHome() {
   const b = cur();
@@ -365,7 +375,7 @@ function viewHome() {
     <button data-a="new-build">${icon('plus')}<b>Neuer Build</b><span>Von Null planen</span></button>
     <button data-a="new-mine">${icon('user')}<b>Mein PC</b><span>Eintragen & teilen</span></button>
     <button data-a="tab" data-t="budget">${icon('spark')}<b>Auto-Build</b><span>Bester PC fürs Budget</span></button>
-    <button data-a="import">${icon('import')}<b>Code importieren</b><span>PC von Freunden</span></button>
+    <button data-a="import-hub">${icon('import')}<b>Importieren</b><span>Geizhals · Screenshot · Code</span></button>
   </div>
   <button class="card continue" data-a="tab" data-t="builder">
     <div><small class="muted">Weiter planen</small><h3>${esc(b.name)}</h3><p class="muted small">${t.all ? fmtEur(t.all) : 'Noch leer'}</p></div>${statusPill(b)}
@@ -415,14 +425,20 @@ function slotRows(b, group) {
   return CATS.filter(c => c.group === group).map(c => {
     const ps = partsOf(b, c.key);
     const flag = im[c.key] && im[c.key] !== 'info' ? `<span class="dot ${im[c.key]}"></span>` : '';
+    const own = customsOf(b, c.key);
     const rows = ps.map((p, idx) => `<button class="slot filled" data-a="detail" data-cat="${c.key}" data-idx="${idx}">
-        <span class="slot-ic">${icon(c.key)}</span>
+        ${partVisual(c.key, (b.images || {})[c.key + ':' + p.id])}
         <span class="slot-main"><small>${c.name}${flag}</small><b>${esc(p.name)}</b><span class="chips">${CHIPS[c.key](p).slice(0, 4).map(x => `<i>${esc(x)}</i>`).join('')}</span></span>
-        ${priceTag(priceOf(b, c.key, p))}</button>`);
-    const canAdd = c.multi ? ps.length < c.max : !ps.length;
+        ${priceTag(priceOf(b, c.key, p))}</button>`)
+      .concat(own.map(o => `<button class="slot filled own" data-a="custom" data-id="${esc(o.id)}">
+        ${partVisual(c.key, o.img)}
+        <span class="slot-main"><small>${c.name}</small><b>${esc(o.name)}</b><span class="chips"><i class="own-chip">Eigenes Teil · nicht geprüft</i></span></span>
+        ${priceTag(o.price || 0)}</button>`));
+    const count = ps.length + own.length;
+    const canAdd = c.multi ? count < c.max : !count;
     if (canAdd) rows.push(`<button class="slot empty" data-a="pick" data-cat="${c.key}">
-        <span class="slot-ic">${icon(c.key)}</span><span class="slot-main"><small>${c.name}${!ps.length && c.required ? ' · fehlt' : ''}</small>
-        <b class="accent">${ps.length ? '+ weitere hinzufügen' : 'Auswählen'}</b></span>${icon('plus', 'add')}</button>`);
+        <span class="slot-ic">${icon(c.key)}</span><span class="slot-main"><small>${c.name}${!count && c.required ? ' · fehlt' : ''}</small>
+        <b class="accent">${count ? '+ weitere hinzufügen' : 'Auswählen'}</b></span>${icon('plus', 'add')}</button>`);
     return rows.join('');
   }).join('');
 }
@@ -452,7 +468,8 @@ function viewBuilder() {
   <div class="build-head">
     <div><small class="muted">${b.kind === 'mine' ? 'Mein PC' : b.kind === 'shared' ? 'Von ' + esc(b.author || 'Freunden') : 'Planung'}</small>
       <h1 class="build-name" data-a="rename" data-id="${b.id}">${esc(b.name)} ${icon('edit', 'sm')}</h1></div>
-    <button class="btn small" data-a="share">${icon('share')}Teilen</button>
+    <div class="head-actions"><button class="btn small" data-a="import-hub">${icon('import')}Import</button>
+      <button class="btn small" data-a="share">${icon('share')}Teilen</button></div>
   </div>
   <div class="stats">
     <div><small>PC</small><b>${fmtEur(t.pc)}</b></div>
@@ -596,11 +613,15 @@ function choosePart(cat, id) {
   else if (!CAT[cat].multi) delete base.parts[cat];
   const errs = checkCandidate(base, cat, id).filter(i => i.level === 'error');
   if (errs.length) { toast(errs[0].msg); return; }
+  if (top && top.replaceCustom) b.customs = (b.customs || []).filter(c => c.id !== top.replaceCustom);
   if (CAT[cat].multi) {
     const arr = b.parts[cat] || [];
     if (idx != null) arr[idx] = id; else arr.push(id);
     b.parts[cat] = arr;
-  } else b.parts[cat] = id;
+  } else {
+    b.parts[cat] = id;
+    b.customs = (b.customs || []).filter(c => c.cat !== cat);
+  }
   while (sheets.length) sheets.pop();
   renderSheets();
   touch(b);
@@ -646,7 +667,9 @@ function openDetail(cat, idx) {
       const b = cur();
       const issues = checkBuild(b).filter(i => !i.missing && i.cats.includes(cat) && i.level !== 'todo');
       const price = priceOf(b, cat, p);
-      return `<div class="detail-head"><span class="slot-ic big">${icon(cat)}</span><h2>${esc(p.name)}</h2></div>
+      const img = (b.images || {})[cat + ':' + p.id];
+      return `<div class="detail-head">${partVisual(cat, img, true)}<h2>${esc(p.name)}</h2></div>
+        ${safeImg(img) ? `<p class="muted small">Bild aus deinem Screenshot · <button class="link" data-a="remove-img" data-key="${cat}:${p.id}">Bild entfernen</button></p>` : ''}
         <div class="card"><label class="field"><span>Dein Preis (€)</span>
           <input type="number" inputmode="decimal" min="0" value="${price}" data-input="price" data-cat="${cat}" data-id="${p.id}"></label>
           <p class="muted small">Richtpreis: ${fmtEur(p.price)}${price !== p.price ? ` · <button class="link" data-a="reset-price" data-cat="${cat}" data-id="${p.id}">zurücksetzen</button>` : ''}</p></div>
@@ -791,7 +814,7 @@ function viewMine() {
         <button class="icon-btn" data-a="build-menu" data-id="${b.id}" aria-label="Mehr">${icon('dots')}</button></div></div>`;
   };
   return `<h1 class="page-title">Meine PCs</h1>
-    <div class="row"><button class="btn primary" data-a="new-build">${icon('plus')}Neuer Build</button><button class="btn" data-a="import">${icon('import')}Code importieren</button></div>
+    <div class="row"><button class="btn primary" data-a="new-build">${icon('plus')}Neuer Build</button><button class="btn" data-a="import-hub">${icon('import')}Importieren</button></div>
     ${groups.map(([k, l]) => {
       const list = S.builds.filter(b => (b.kind || 'plan') === k);
       if (!list.length && k !== 'mine') return '';
@@ -861,8 +884,232 @@ function copyText(text, msg) {
   if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast(msg), () => toast('Kopieren nicht möglich'));
 }
 
+
+// ---------- Teile importieren (Geizhals-Link, Screenshots, Text) ----------
+const importState = { link: '', text: '', busy: false, msg: '', progress: 0, error: '' };
+const fetchWaiters = {};
+
+function fetchPage(url) {
+  return new Promise((resolve, reject) => {
+    if (!Native || !Native.fetchUrl) {
+      fetch(url).then(r => r.text().then(body => resolve({ status: r.status, body })), () => reject(new Error('Links laden funktioniert nur in der App.')));
+      return;
+    }
+    const id = 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const timer = setTimeout(() => { delete fetchWaiters[id]; reject(new Error('Die Seite hat zu lange nicht geantwortet.')); }, 45000);
+    fetchWaiters[id] = (status, body) => { clearTimeout(timer); resolve({ status, body }); };
+    Native.fetchUrl(id, url);
+  });
+}
+
+function setBusy(msg, progress) {
+  importState.busy = !!msg;
+  importState.msg = msg || '';
+  importState.progress = progress || 0;
+  const el = document.querySelector('.sheet.top .imp-progress');
+  if (el && msg) {
+    el.querySelector('span').textContent = msg;
+    el.querySelector('i').style.width = Math.round(clamp(progress || 0, 0.05, 1) * 100) + '%';
+  } else if (sheets.length && sheets[sheets.length - 1].hub) rerenderTop();
+}
+
+function openImportHub() {
+  importState.error = '';
+  openSheet({
+    title: 'Teile importieren',
+    hub: true,
+    render() {
+      const busy = importState.busy;
+      return `
+      ${busy ? `<div class="card imp-progress"><span>${esc(importState.msg)}</span><div class="bar"><i style="width:${Math.round(clamp(importState.progress, 0.05, 1) * 100)}%"></i></div></div>` : ''}
+      ${importState.error ? `<div class="banner err">${icon('warn')}<b>${esc(importState.error)}</b></div>` : ''}
+      <div class="card imp">
+        <h3>${icon('link')}Geizhals-Wunschliste</h3>
+        <p class="muted small">Auf Geizhals deine Wunschliste öffnen → „Teilen“ bzw. Link kopieren → hier einfügen. Du kannst den Link auch direkt aus dem Browser an SetupBuilder teilen.</p>
+        <input type="url" inputmode="url" placeholder="https://geizhals.de/wishlists/…" value="${esc(importState.link)}" data-input="imp-link">
+        <div class="row"><button class="btn ghost" data-a="imp-paste" ${busy ? 'disabled' : ''}>${icon('copy')}Einfügen</button>
+          <button class="btn primary" data-a="imp-load" ${busy ? 'disabled' : ''}>Teile laden</button></div>
+      </div>
+      <div class="card imp">
+        <h3>${icon('camera')}Screenshots</h3>
+        <p class="muted small">Screenshots deiner Liste (Geizhals, Shop, Discord …) auswählen. Die App liest die Produktnamen, erkennt die Teile und schneidet die Produktbilder aus – alles direkt auf dem Handy.</p>
+        <label class="btn primary wide ${busy ? 'disabled' : ''}">${icon('camera')}Screenshots auswählen<input type="file" accept="image/*" multiple hidden data-input="imp-files" ${busy ? 'disabled' : ''}></label>
+      </div>
+      <div class="card imp">
+        <h3>${icon('text')}Text oder Build-Code</h3>
+        <p class="muted small">Teileliste aus einem Shop oder Chat kopieren – oder einen SetupBuilder-Code (SB1.…) einfügen.</p>
+        <textarea rows="4" placeholder="z. B. AMD Ryzen 7 9800X3D&#10;MSI MAG B650 Tomahawk WIFI&#10;…" data-input="imp-text">${esc(importState.text)}</textarea>
+        <button class="btn wide" data-a="imp-text" ${busy ? 'disabled' : ''}>Teile erkennen</button>
+      </div>`;
+    },
+  });
+}
+
+async function runLinkImport() {
+  const parsed = parseListUrl(importState.link);
+  if (!parsed) { importState.error = 'Das ist kein gültiger Link.'; rerenderTop(); return; }
+  importState.error = '';
+  setBusy('Liste wird geladen …', 0.2);
+  try {
+    const { status, body } = await fetchPage(parsed.url);
+    if (!status || status >= 400 || !body) throw new Error(status ? `Die Seite antwortet mit Fehler ${status}.` : String(body || 'Keine Verbindung.'));
+    setBusy('Teile werden erkannt …', 0.8);
+    const items = itemsFromHtml(body);
+    setBusy('');
+    if (!items.length) {
+      importState.error = 'Auf der Seite wurden keine Teile gefunden. Tipp: Liste im Browser öffnen, Teile markieren und kopieren → „Text“ – oder Screenshots machen.';
+      rerenderTop();
+      return;
+    }
+    openReview(items, parsed.geizhals ? 'Geizhals-Liste' : 'Importierte Liste');
+  } catch (e) {
+    setBusy('');
+    importState.error = `Laden fehlgeschlagen: ${e.message} Alternativ: Screenshots oder Text einfügen.`;
+    rerenderTop();
+  }
+}
+
+function runTextImport(text) {
+  if (decodeBuild(text)) { openImport(text); return; }
+  const t = String(text || '').trim();
+  const url = parseListUrl(t);
+  if (url && t.length < 300 && !/\n/.test(t)) { importState.link = url.url; runLinkImport(); return; }
+  const items = itemsFromText(t);
+  if (!items.length) { toast('Keine bekannten Teile im Text gefunden.'); return; }
+  openReview(items, 'Importierter Text');
+}
+
+async function runScreenshotImport(sources) {
+  if (!sources.length) return;
+  importState.error = '';
+  setBusy('Texterkennung wird geladen …', 0.05);
+  try {
+    const items = await itemsFromScreenshots(sources, (msg, p) => setBusy(msg, p));
+    setBusy('');
+    if (!items.length) {
+      importState.error = 'Auf den Screenshots wurden keine Teile erkannt. Achte darauf, dass die Produktnamen gut lesbar sind.';
+      rerenderTop();
+      return;
+    }
+    openReview(items, 'Screenshot-Import');
+  } catch (e) {
+    setBusy('');
+    importState.error = 'Texterkennung fehlgeschlagen: ' + e.message;
+    rerenderTop();
+  }
+}
+
+const reviewState = { items: [], target: 'current', usePrices: true, title: '' };
+const QUALITY = { exact: ['Erkannt', 'ok'], similar: ['Ähnliches Modell', 'warn'], custom: ['Nicht in der Datenbank', 'todo'] };
+
+function reviewBase() {
+  return reviewState.target === 'new' ? newBuild(reviewState.title) : cur();
+}
+
+function openReview(items, title) {
+  reviewState.items = items;
+  reviewState.title = title;
+  reviewState.target = 'current';
+  reviewState.usePrices = true;
+  openSheet({
+    title: 'Erkannte Teile',
+    render() {
+      const list = reviewState.items;
+      return `<p class="muted small">${list.length} Teil${list.length > 1 ? 'e' : ''} gefunden. Prüfe die Zuordnung – nimm das Häkchen weg, um ein Teil zu überspringen.
+        „Ähnliches Modell“ heißt: gleicher Chip/gleiche Serie, Maße können leicht abweichen.</p>
+        ${list.map((it, i) => {
+          const q = it.id ? (QUALITY[it.quality] || QUALITY.exact) : QUALITY.custom;
+          return `<div class="card imp-item ${it.checked ? '' : 'off'}">
+            <div class="imp-top">
+              <input type="checkbox" class="chk" data-a="imp-check" data-i="${i}" ${it.checked ? 'checked' : ''} aria-label="Übernehmen">
+              ${partVisual(it.cat, it.img)}
+              <div class="imp-main"><small>${esc(it.name)}${it.qty > 1 ? ` · ${it.qty}×` : ''}</small><span class="pill ${q[1]}">${q[0]}</span></div>
+            </div>
+            <div class="imp-fields">
+              <select data-input="imp-cat" data-i="${i}">${CATS.map(c => `<option value="${c.key}" ${c.key === it.cat ? 'selected' : ''}>${c.name}</option>`).join('')}</select>
+              <select data-input="imp-part" data-i="${i}"><option value="">Eigenes Teil (nicht geprüft)</option>
+                ${DB[it.cat].map(p => `<option value="${p.id}" ${p.id === it.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+              <div class="money"><input type="number" inputmode="numeric" min="0" placeholder="Preis" value="${it.price || ''}" data-input="imp-price" data-i="${i}"><b>€</b></div>
+            </div></div>`;
+        }).join('')}`;
+    },
+    footer() {
+      const n = reviewState.items.filter(i => i.checked).length;
+      const preview = applyImport(reviewBase(), reviewState.items, reviewState.usePrices);
+      const st = buildStatus(preview);
+      const err = st.errors.filter(i => !i.missing)[0];
+      return `<div class="imp-opts">
+          <select data-input="imp-target"><option value="current" ${reviewState.target === 'current' ? 'selected' : ''}>In „${esc(cur().name)}“ einfügen</option>
+            <option value="new" ${reviewState.target === 'new' ? 'selected' : ''}>Als neuen Build speichern</option></select>
+          <label class="check-label"><input type="checkbox" data-input="imp-prices" ${reviewState.usePrices ? 'checked' : ''}>Preise übernehmen</label></div>
+        ${err ? `<p class="small neg imp-warn">${icon('warn')}${esc(err.msg)}</p>` : st.ok ? `<p class="small pos imp-warn">${icon('check')}Alle Teile passen zusammen.</p>` : ''}
+        <button class="btn primary wide" data-a="imp-apply" ${n ? '' : 'disabled'}>${n} Teil${n === 1 ? '' : 'e'} übernehmen</button>`;
+    },
+  });
+}
+
+function applyReview() {
+  const items = reviewState.items;
+  let b;
+  if (reviewState.target === 'new') {
+    b = newBuild(reviewState.title);
+    b.budget = 0;
+    addBuild(b);
+  } else b = cur();
+  const v = applyImport(b, items, reviewState.usePrices);
+  b.parts = v.parts; b.prices = v.prices; b.customs = v.customs; b.images = v.images;
+  b.updated = Date.now();
+  persist();
+  sheets.length = 0;
+  renderSheets();
+  setTab('builder');
+  const n = items.filter(i => i.checked).length;
+  toast(`${n} Teil${n === 1 ? '' : 'e'} übernommen – prüfe die Hinweise im Builder`);
+}
+
+function openCustomDetail(id) {
+  openSheet({
+    title: 'Eigenes Teil',
+    render() {
+      const o = (cur().customs || []).find(c => c.id === id);
+      if (!o) return '<p class="muted">Teil nicht gefunden.</p>';
+      return `<div class="detail-head">${partVisual(o.cat, o.img, true)}<h2>${esc(o.name)}</h2></div>
+        <div class="banner todo">${icon('info')}<b>Nicht in der Datenbank – wird nicht auf Kompatibilität geprüft.</b></div>
+        <div class="card">
+          <label class="field"><span>Name</span><input type="text" maxlength="120" value="${esc(o.name)}" data-input="own-name" data-id="${esc(o.id)}"></label>
+          <label class="field"><span>Preis (€)</span><input type="number" inputmode="numeric" min="0" value="${o.price || 0}" data-input="own-price" data-id="${esc(o.id)}"></label>
+          ${safeImg(o.img) ? `<p class="muted small">Bild aus deinem Screenshot · <button class="link" data-a="own-noimg" data-id="${esc(o.id)}">Bild entfernen</button></p>` : ''}
+        </div>
+        <p class="muted small">Tipp: Wähle ein passendes Teil aus der Datenbank, dann prüft die App auch die Kompatibilität.</p>`;
+    },
+    footer: () => `<div class="row"><button class="btn ghost" data-a="own-remove" data-id="${esc(id)}">${icon('trash')}Entfernen</button>
+      <button class="btn primary" data-a="own-replace" data-id="${esc(id)}">Aus Datenbank wählen</button></div>`,
+  });
+}
+
 // ---------- Aktionen ----------
 const A = {
+  'import-hub': () => openImportHub(),
+  'imp-paste': () => {
+    let clip = '';
+    try { clip = Native && Native.getClipboard ? Native.getClipboard() || '' : ''; } catch (e) { clip = ''; }
+    const u = parseListUrl(clip);
+    if (u) { importState.link = u.url; rerenderTop(); } else toast('Kein Link in der Zwischenablage');
+  },
+  'imp-load': () => { if (!importState.busy) runLinkImport(); },
+  'imp-text': () => { if (!importState.busy) runTextImport(importState.text); },
+  'imp-apply': () => applyReview(),
+  custom: d => openCustomDetail(d.id),
+  'own-remove': d => { const b = cur(); b.customs = (b.customs || []).filter(c => c.id !== d.id); sheets.length = 0; renderSheets(); touch(b); },
+  'own-noimg': d => { const o = (cur().customs || []).find(c => c.id === d.id); if (o) { o.img = null; persist(); rerenderTop(); refreshBehind(); } },
+  'own-replace': d => {
+    const o = (cur().customs || []).find(c => c.id === d.id);
+    if (!o) return;
+    sheets.pop(); renderSheets();
+    openPicker(o.cat);
+    sheets[sheets.length - 1].replaceCustom = o.id;
+  },
+  'remove-img': d => { const b = cur(); if (b.images) delete b.images[d.key]; persist(); rerenderTop(); refreshBehind(); },
   tab: d => setTab(d.t),
   'close-sheet': () => closeSheet(),
   share: () => openShare(cur().id),
@@ -993,6 +1240,38 @@ document.addEventListener('click', e => {
 
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.a === 'imp-check') {
+    reviewState.items[+el.dataset.i].checked = el.checked;
+    rerenderTop();
+    return;
+  }
+  const ik = el.dataset.input;
+  if (ik === 'imp-files') {
+    const files = Array.from(el.files || []).slice(0, 10);
+    el.value = '';
+    Promise.all(files.map(fileToDataUrl)).then(runScreenshotImport, () => toast('Bilder konnten nicht gelesen werden'));
+    return;
+  }
+  if (ik && ik.startsWith('imp-') && reviewState.items.length && el.dataset.i != null) {
+    const it = reviewState.items[+el.dataset.i];
+    if (ik === 'imp-cat') { it.cat = el.value; it.id = null; it.quality = 'custom'; }
+    if (ik === 'imp-part') { it.id = el.value || null; it.quality = it.id ? 'exact' : 'custom'; }
+    if (ik === 'imp-price') it.price = Math.max(0, Math.round(+el.value || 0)) || null;
+    it.checked = true;
+    rerenderTop();
+    return;
+  }
+  if (ik === 'imp-target') { reviewState.target = el.value; rerenderTop(); return; }
+  if (ik === 'imp-prices') { reviewState.usePrices = el.checked; rerenderTop(); return; }
+  if (ik === 'own-name' || ik === 'own-price') {
+    const o = (cur().customs || []).find(c => c.id === el.dataset.id);
+    if (o) {
+      if (ik === 'own-name') o.name = el.value.trim().slice(0, 120) || o.name;
+      else o.price = Math.max(0, Math.round(+el.value || 0));
+      cur().updated = Date.now(); persist(); rerenderTop(); refreshBehind();
+    }
+    return;
+  }
   if (el.dataset.a === 'cmp') {
     const id = el.dataset.id;
     const list = pickerState.compare;
@@ -1018,6 +1297,8 @@ document.addEventListener('change', e => {
 
 document.addEventListener('input', e => {
   const el = e.target;
+  if (el.dataset.input === 'imp-link') importState.link = el.value;
+  if (el.dataset.input === 'imp-text') importState.text = el.value;
   if (el.dataset.input === 'pick-q') {
     pickerState.q = el.value;
     pickerState.focus = true;
@@ -1043,9 +1324,29 @@ window.SB = {
     if (tab !== 'home') { setTab('home'); return true; }
     return false;
   },
+  // Text/Link, der an die App geteilt wurde: Build-Code, Geizhals-Link oder Teileliste
   receiveImport(text) {
-    if (decodeBuild(text)) openImport(text);
-    else toast('Kein SetupBuilder-Code in der geteilten Nachricht gefunden.');
+    if (decodeBuild(text)) { openImport(text); return; }
+    const url = parseListUrl(text);
+    if (url) {
+      importState.link = url.url;
+      if (!sheets.some(x => x.hub)) openImportHub();
+      runLinkImport();
+      return;
+    }
+    const items = itemsFromText(text);
+    if (items.length) openReview(items, 'Geteilter Text');
+    else toast('In der geteilten Nachricht wurden keine Teile gefunden.');
+  },
+  // Screenshots, die an die App geteilt wurden
+  receiveImages(list) {
+    if (!sheets.some(x => x.hub)) openImportHub();
+    runScreenshotImport(list || []);
+  },
+  onFetch(id, status, body) {
+    const w = fetchWaiters[id];
+    delete fetchWaiters[id];
+    if (w) w(status, body);
   },
 };
 

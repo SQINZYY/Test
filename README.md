@@ -2,7 +2,7 @@
 
 Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die garantiert zusammenpassen, Teile vergleichen, Budget verwalten, den eigenen PC mit Freunden teilen und Upgrade-Tipps bekommen.
 
-**APK:** [`release/SetupBuilder.apk`](release/SetupBuilder.apk) (ab Android 7, ca. 70 KB, braucht kein Internet)
+**APK:** [`release/SetupBuilder.apk`](release/SetupBuilder.apk) (ab Android 7, ca. 7 MB). Internet wird nur zum Laden von Geizhals-Links genutzt.
 
 ## Installieren
 
@@ -18,13 +18,25 @@ Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die ga
   - CPU ↔ Mainboard-Sockel (AM4, AM5, LGA1700, LGA1851), BIOS-Hinweise
   - RAM-Typ (DDR4/DDR5), Anzahl Riegel vs. Steckplätze, max. RAM
   - Mainboard-Formfaktor ↔ Gehäuse
-  - Grafikkarte ↔ Mainboard (PCIe x16), Gehäuse (Länge in mm und Dicke in Slots) und Netzteil (Leistung, 12V-2×6-Stecker)
+  - Grafikkarte ↔ Mainboard (PCIe x16; Karten mit nur 8 Lanes im PCIe-3.0-Slot), Gehäuse (Länge in mm und Dicke in Slots)
+    und Netzteil (Leistung, Anzahl 8-Pin-PCIe-Stecker, 12V-2×6-Adapter)
+  - RAM-Takt auf Chipsätzen ohne XMP (z. B. H610)
   - Netzteil-Leistung inkl. Reserve, ATX/SFX ↔ Gehäuse
   - Kühler: Sockel, Bauhöhe bzw. Radiatorgröße ↔ Gehäuse, Kühlleistung ↔ CPU
   - M.2-/SATA-Plätze und 3,5"-Schächte
   - CPU ohne Grafikeinheit und ohne Grafikkarte, CPU ohne Kühler
 
   Unpassende Teile lassen sich einblenden – mit Begründung, warum sie nicht passen.
+- **Importieren** (Builder → „Import“ oder Startseite → „Importieren“):
+  - **Geizhals-Wunschliste:** Link einfügen (oder aus dem Browser an SetupBuilder teilen) → die Teile werden erkannt, inkl. Preisen.
+  - **Screenshots:** Screenshots einer Teileliste (Geizhals, Shop, Discord …) auswählen oder an SetupBuilder teilen. Die Texterkennung
+    ([Tesseract](https://github.com/naptha/tesseract.js), läuft komplett auf dem Handy) liest die Produktnamen, und die Produktbilder
+    werden aus dem Screenshot ausgeschnitten und im Builder angezeigt.
+  - **Text oder Build-Code** einfügen.
+
+  Danach zeigt eine Prüfseite jede Zuordnung („Erkannt“, „Ähnliches Modell“ = gleicher Chip/gleiche Serie, „Nicht in der Datenbank“)
+  und lässt dich Teil, Kategorie und Preis ändern. Teile, die nicht in der Datenbank stehen, kommen als „eigenes Teil“ in den Build –
+  sie zählen fürs Budget, werden aber nicht auf Kompatibilität geprüft.
 - **Vergleichen** – bis zu 3 Teile nebeneinander, inkl. geschätzter FPS in deinem Build.
 - **Budget** – Budget festlegen (nur PC oder PC + Setup), Aufteilung nach Kategorien, Spar-Tipps mit passenden günstigeren Teilen, eigene Preise pro Teil, **Auto-Build** (schnellster kompatibler PC fürs Budget).
 - **Mein PC & Teilen** – eigenen PC eintragen und über WhatsApp, Discord usw. teilen. Die Nachricht enthält einen Build-Code (`SB1.…`), den Freunde unter „Meine PCs → Code importieren“ einfügen oder die Nachricht direkt an SetupBuilder teilen.
@@ -34,8 +46,10 @@ Preise sind Richtpreise und FPS-Werte grobe Schätzungen. Alle Daten bleiben auf
 
 ## Aufbau
 
-- `app/assets/www/` – die Oberfläche (HTML/CSS/JS): `data.js` (Teile-Datenbank), `engine.js` (Kompatibilität, Leistung, Upgrades, Teilen), `app.js` (UI)
-- `app/java/…/MainActivity.java` – WebView-Hülle mit Teilen, Zwischenablage und Speicher
+- `app/assets/www/` – die Oberfläche (HTML/CSS/JS): `data.js` (Teile-Datenbank), `engine.js` (Kompatibilität, Leistung, Upgrades, Teilen),
+  `import.js` (Erkennung von Teilen in Geizhals-HTML/Text), `ocr.js` (Screenshots → Text → Teile + Produktbilder), `app.js` (UI)
+- `app/assets/www/vendor/tesseract/` – tesseract.js 7 mit englischen Sprachdaten (Apache-2.0)
+- `app/java/…/MainActivity.java` – WebView-Hülle: Teilen, Zwischenablage, Speicher, Laden von Links, Bildauswahl, geteilte Links/Screenshots empfangen
 - `tools/build.sh` – baut die APK ohne Android SDK (lädt aapt2, dx und die Android-Klassen von Maven Central)
 - `tools/test-engine.js` – Tests für Datenbank und Logik: `node tools/test-engine.js`
 
@@ -49,4 +63,4 @@ VERSION_CODE=2 VERSION_NAME=1.1 ./tools/build.sh
 
 Signiert wird mit dem Debug-Schlüssel `tools/debug-signing.p12` (Passwort `android`), damit Updates sich über die alte Version installieren lassen. Für eine Veröffentlichung im Play Store einen eigenen, geheimen Schlüssel verwenden.
 
-Neue Teile kommen in `app/assets/www/data.js`; danach `node tools/test-engine.js` laufen lassen.
+Neue Teile kommen in `app/assets/www/data.js` (mit Suchbegriffen `k` für den Import); danach `node tools/test-engine.js` laufen lassen.

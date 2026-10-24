@@ -279,3 +279,32 @@ main { padding: 16px; max-width: 640px; margin: 0 auto; }
 @media (min-width: 560px) {
   .presets { grid-template-columns: 1fr 1fr 1fr; }
 }
+
+/* Produktbilder aus Screenshots */
+.slot-img { width: 42px; height: 42px; border-radius: 12px; object-fit: cover; flex: none; background: var(--surface2); }
+.slot-img.big { width: 56px; height: 56px; }
+.own-chip { color: var(--warn) !important; }
+.head-actions { display: flex; gap: 6px; }
+
+/* Import */
+.imp h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; margin-bottom: 6px; }
+.imp h3 .ic { color: var(--accent); }
+.imp input, .imp textarea { margin: 8px 0 10px; }
+.imp label.btn { cursor: pointer; }
+.imp-progress span { display: block; font-size: 14px; margin-bottom: 8px; }
+.imp-progress .bar i { transition: width .3s; }
+.imp-item { padding: 12px; }
+.imp-item.off { opacity: .5; }
+.imp-top { display: flex; align-items: center; gap: 10px; }
+.imp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.imp-main small { font-size: 13px; color: var(--text); word-break: break-word; }
+.chk { width: 22px; height: 22px; accent-color: var(--accent); flex: none; margin: 0; }
+.imp-fields { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
+.imp-fields select, .imp-fields input { padding: 10px 12px; font-size: 14px; }
+.imp-opts { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+.imp-opts select { flex: 1; padding: 10px 12px; font-size: 14px; }
+.check-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.check-label input { width: 18px; height: 18px; accent-color: var(--accent); }
+.imp-warn { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 8px; }
+.imp-warn .ic { width: 16px; height: 16px; margin-top: 2px; }
+.btn[disabled] { opacity: .5; pointer-events: none; }
