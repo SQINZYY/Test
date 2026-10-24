@@ -13,13 +13,15 @@ Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die ga
 ## Funktionen
 
 - **Entdecken** – Setup-Stile (Teal Night, Budget-Einstieg, Clean White, Mini-ITX, 4K Battlestation, Streamer) als Startpunkt übernehmen.
-- **Teile:** 272 vollständig geprüfte Teile (eigene Datenbank mit allen Maßen) plus ein **Katalog mit rund 60.000 weiteren Teilen**:
+- **Teile:** 278 vollständig geprüfte Teile (eigene Datenbank mit allen Maßen) plus ein **Katalog mit rund 60.000 weiteren Teilen**:
   [PC-Part-Dataset](https://github.com/docyx/pc-part-dataset) (MIT, Daten von PCPartPicker, Stand Juli 2025; inkl. Extras wie Webcams,
   Lautsprecher, Lüfter, Wärmeleitpaste, externe Festplatten), [AutoEq](https://github.com/jaakkopasanen/AutoEq) (MIT, ~4.000 weitere
   Kopfhörer-Modelle) und [The Keyboard Catalogue](https://github.com/patrickgil/The-Keyboard-Catalogue) (MIT, Custom-Tastaturen). Katalogteile findet man
   über die Suche in der Teileauswahl; sie werden auch beim Import erkannt. Was im Katalog fehlt (z. B. max. GPU-Länge eines Gehäuses,
   Kühlerhöhe, Stromstecker), meldet die App als „nicht automatisch prüfbar“ statt zu raten. Katalogpreise sind umgerechnete US-Preise.
-  Fehlt ein Teil trotzdem, lässt es sich in der Teileauswahl als **eigenes Teil** eintragen; „Amazon“ bzw. „Geizhals“ öffnen die Suche im Browser.
+  Fehlt ein Teil trotzdem, sucht **„Online suchen“** in der Teileauswahl auf Geizhals nach allen aktuell erhältlichen Teilen (Name + Preis;
+  passt ein Treffer zu einem Teil der Datenbank, wird dieses genommen). Außerdem lässt sich jedes Teil als **eigenes Teil** eintragen;
+  „Amazon“ bzw. „Geizhals“ öffnen die Suche im Browser.
 - **Builder** – PC-Komponenten plus Setup (Monitore, Tastatur, Maus, Headset, Stuhl, Tisch, Extras).
   Die Teileauswahl zeigt **nur Teile, die zum Rest des Builds passen**. Geprüft wird u. a.:
   - CPU ↔ Mainboard-Sockel (AM4, AM5, LGA1700, LGA1851), BIOS-Hinweise
@@ -73,7 +75,7 @@ Preise sind Richtpreise und FPS-Werte grobe Schätzungen. Alle Daten bleiben auf
 ```sh
 pip install cryptography
 ./tools/build.sh                          # -> release/SetupBuilder.apk
-VERSION_CODE=6 VERSION_NAME=1.5 ./tools/build.sh
+VERSION_CODE=7 VERSION_NAME=1.6 ./tools/build.sh
 ```
 
 Signiert wird mit dem Debug-Schlüssel `tools/debug-signing.p12` (Passwort `android`), damit Updates sich über die alte Version installieren lassen. Für eine Veröffentlichung im Play Store einen eigenen, geheimen Schlüssel verwenden.

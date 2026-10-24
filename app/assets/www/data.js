@@ -282,6 +282,12 @@ const DB = {
     { id: 'blackshark-v2-pro', name: 'Razer BlackShark V2 Pro', k: ['blackshark v2 pro'], wireless: true, price: 179 },
     { id: 'hd560s', name: 'Sennheiser HD 560S (Kopfhörer)', k: ['hd 560s'], wireless: false, price: 149 },
     { id: 'nova-pro-w', name: 'SteelSeries Arctis Nova Pro Wireless', k: ['arctis nova pro'], wireless: true, price: 329 },
+    { id: 'dt990prox', name: 'Beyerdynamic DT 990 PRO X', k: ['dt 990 pro x'], kind: 'Over-Ear (offen)', wireless: false, mic: false, price: 159 },
+    { id: 'dt770prox', name: 'Beyerdynamic DT 770 PRO X Limited Edition', k: ['dt 770 pro x'], kind: 'Over-Ear (geschlossen)', wireless: false, mic: false, price: 149 },
+    { id: 'dt900prox', name: 'Beyerdynamic DT 900 PRO X', k: ['dt 900 pro x'], kind: 'Over-Ear (offen)', wireless: false, mic: false, price: 249 },
+    { id: 'cloud3w', name: 'HyperX Cloud III Wireless', k: ['cloud iii wireless'], kind: 'Over-Ear', wireless: true, mic: true, price: 149 },
+    { id: 'nova5', name: 'SteelSeries Arctis Nova 5 Wireless', k: ['arctis nova 5'], kind: 'Over-Ear', wireless: true, mic: true, price: 129 },
+    { id: 'maxwell', name: 'Audeze Maxwell', k: ['audeze maxwell'], kind: 'Over-Ear', wireless: true, mic: true, price: 329 },
   ],
   chair: [
     { id: 'markus', name: 'IKEA MARKUS Bürostuhl', k: ['markus'], kind: 'Bürostuhl', price: 199 },

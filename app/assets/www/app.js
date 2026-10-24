@@ -571,8 +571,47 @@ function pickerItems(b, cat, idx) {
   return { items, res, base };
 }
 
+// ---------- Online-Suche (Geizhals) für Teile, die in keiner Datenbank stehen ----------
+function onlineCard(cat) {
+  const q = pickerState.q.trim();
+  const st = pickerState.online;
+  const fresh = st && st.q === q;
+  let body;
+  if (q.length < 2) body = '<p class="small muted">Tipp: Gib oben einen Namen ein – findet die App ihn nicht, kann sie auf Geizhals nach allen aktuell erhältlichen Teilen suchen.</p>';
+  else if (fresh && st.busy) body = `<p class="small">${icon('spark')} Suche „${esc(q)}“ auf Geizhals …</p>`;
+  else if (fresh && st.results && st.results.length) {
+    body = `<div class="online-list">${st.results.map((r, i) => {
+      const p = r.id ? findPart(cat, r.id) : null;
+      const label = p ? (isCatalog(p) ? 'Katalog: ' : 'Datenbank: ') + p.name : 'Online-Teil (nicht geprüft)';
+      return `<div class="li"><div><b>${esc(r.name)}</b><small class="${p ? 'pos' : 'muted'}">${esc(label)}</small></div>
+        ${priceTag(r.price)}<button class="btn small" data-a="online-add" data-cat="${cat}" data-i="${i}">${icon('plus')}</button></div>`;
+    }).join('')}</div>`;
+  } else body = `${fresh && st.error ? `<p class="small neg">${esc(st.error)}</p>` : ''}
+      <button class="btn wide" data-a="online-search" data-cat="${cat}">${icon('link')}„${esc(q)}“ auf Geizhals suchen</button>`;
+  return `<div class="card online"><h3 class="card-title">Online suchen</h3>${body}</div>`;
+}
+
+async function onlineSearch(cat) {
+  const q = pickerState.q.trim();
+  if (q.length < 2) return;
+  const st = { q, busy: true, results: null, error: '' };
+  pickerState.online = st;
+  rerenderTop();
+  try {
+    const html = await browsePage(geizhalsUrl({ name: q }), { visible: false, timeout: 20000, accept: h => itemsFromHtml(h).length });
+    st.results = itemsFromHtml(html || '').filter(it => it.name).slice(0, 20)
+      .map(it => ({ name: it.name, price: it.price, id: it.cat === cat && it.id ? it.id : null }));
+    if (!st.results.length) st.error = 'Geizhals hat keine Treffer geliefert. Öffne die Suche im Browser oder trag das Teil selbst ein.';
+  } catch (e) {
+    st.error = 'Online-Suche nicht möglich: ' + e.message;
+  }
+  st.busy = false;
+  if (pickerState.online === st && sheets.length) rerenderTop();
+}
+
 function openPicker(cat, idx = null) {
   pickerState.q = '';
+  pickerState.online = null;
   pickerState.sort = 'price';
   pickerState.showAll = false;
   pickerState.compare = [];
@@ -610,8 +649,9 @@ function openPicker(cat, idx = null) {
         ${pickerState.q.trim().length < 2 && catalogCount(cat) ? `<p class="muted small">Unten: ${DB[cat].length} vollständig geprüfte Teile. Für alle weiteren Modelle einfach den Namen suchen (z. B. „${CATALOG_HINT[cat] || 'Modellname'}“).</p>` : ''}
         <div class="seg">${sorts.map(([k, l]) => `<button class="${pickerState.sort === k ? 'on' : ''}" data-a="pick-sort" data-k="${k}">${l}</button>`).join('')}</div>
         <div class="items">${ok.map(row).join('') || '<p class="muted center">Keine passenden Teile gefunden.</p>'}</div>
+        ${onlineCard(cat)}
         <div class="card own-add">
-          <p class="small muted">Dein Teil ist nicht dabei? Such es im Shop und trag es selbst ein.</p>
+          <p class="small muted">Immer noch nicht dabei? Dann trag es selbst ein.</p>
           <div class="row"><button class="btn small" data-a="own-add" data-cat="${cat}">${icon('plus')}Eigenes Teil</button>
             <button class="btn ghost small" data-a="amazon" data-q="${esc(pickerState.q.trim() || c.name)}">${icon('link')}Amazon</button></div>
         </div>
@@ -1228,6 +1268,23 @@ const A = {
   'prices-cancel': () => { priceState.cancel = true; toast('Wird nach dem aktuellen Teil abgebrochen'); },
   'geizhals': d => openExternal(geizhalsUrl(findPart(d.cat, d.id))),
   amazon: d => openExternal(amazonUrl(d.q)),
+  'online-search': d => onlineSearch(d.cat),
+  'online-add': d => {
+    const r = pickerState.online && pickerState.online.results[+d.i];
+    if (!r) return;
+    if (r.id) {
+      if (r.price) { const b = cur(); b.prices[d.cat + ':' + r.id] = r.price; (b.priceInfo = b.priceInfo || {})[d.cat + ':' + r.id] = Date.now(); }
+      choosePart(d.cat, r.id);
+      return;
+    }
+    const b = cur();
+    b.customs = b.customs || [];
+    if (!CAT[d.cat].multi) { delete b.parts[d.cat]; b.customs = b.customs.filter(c => c.cat !== d.cat); }
+    b.customs.push({ id: 'c' + Math.random().toString(36).slice(2, 9), cat: d.cat, name: r.name.slice(0, 120), price: r.price || 0 });
+    sheets.length = 0; renderSheets();
+    touch(b);
+    toast(r.name + ' hinzugefügt');
+  },
   'own-add': async d => {
     const name = await ask({ title: 'Eigenes Teil hinzufügen', text: `${CAT[d.cat].name}, das nicht in der Liste ist – z. B. von Amazon. Es zählt fürs Budget, wird aber nicht auf Kompatibilität geprüft.`,
       input: true, value: pickerState.q.trim(), placeholder: 'Name des Teils', ok: 'Weiter' });
