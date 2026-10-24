@@ -134,7 +134,7 @@ async function renderShareCard(b, author) {
     g.fillText(r.cat.short, 150, ry + 32);
     g.fillStyle = '#ffffff';
     g.font = font(700, 32);
-    const price = fmtEur(r.price);
+    const price = r.price == null ? '–' : fmtEur(r.price);
     g.fillText(fitText(g, r.name, CARD_W - 150 - 60 - 170), 150, ry + 70);
     g.font = font(700, 32);
     g.textAlign = 'right';

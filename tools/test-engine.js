@@ -5,8 +5,9 @@ const path = require('path');
 const vm = require('vm');
 const www = path.join(__dirname, '..', 'app', 'assets', 'www');
 const ctx = vm.createContext({ console, TextEncoder, TextDecoder, btoa, atob });
-for (const f of ['data.js', 'engine.js', 'import.js']) vm.runInContext(fs.readFileSync(path.join(www, f), 'utf8'), ctx, { filename: f });
-const E = vm.runInContext('({ matchLine, itemsFromHtml, itemsFromText, parseListUrl, applyImport, parsePrice, DB, CATS, PRESETS, checkBuild, checkCandidate, buildStatus, perf, upgrades, autoBuild, encodeBuild, decodeBuild, shareText, totals, power, fpsAt })', ctx);
+for (const f of ['data.js', 'engine.js', 'import.js', 'catalog.js']) vm.runInContext(fs.readFileSync(path.join(www, f), 'utf8'), ctx, { filename: f });
+vm.runInContext('registerCatalog', ctx)(JSON.parse(fs.readFileSync(path.join(www, 'catalog.json'), 'utf8')));
+const E = vm.runInContext('({ searchCatalog, findPart, matchLine, itemsFromHtml, itemsFromText, parseListUrl, applyImport, parsePrice, DB, CATS, PRESETS, checkBuild, checkCandidate, buildStatus, perf, upgrades, autoBuild, encodeBuild, decodeBuild, shareText, totals, power, fpsAt })', ctx);
 
 let failed = 0;
 const ok = (cond, msg) => { if (!cond) { failed++; console.log('FAIL', msg); } };
@@ -85,13 +86,13 @@ const cases = [
   ['Intel Core i5-14600KF', 'cpu', null, null],
   ['Sapphire Pulse Radeon RX 9070 XT, 16GB GDDR6', 'gpu', 'rx9070xt', 'exact'],
   ['PowerColor Hellhound Radeon RX 9070 XT, 16GB', 'gpu', 'rx9070xt-hellhound', 'exact'],
-  ['XFX Swift Radeon RX 9070 XT, 16GB', 'gpu', 'rx9070xt', 'similar'],
+  ['XFX Swift Radeon RX 9070 XT, 16GB', 'gpu', 'KATALOG', 'exact'],
   ['PowerColor Reaper Radeon RX 9070, 16GB GDDR6', 'gpu', 'rx9070', 'exact'],
   ['ASUS TUF Gaming GeForce RTX 5070 Ti OC, 16GB GDDR7', 'gpu', 'rtx5070ti-tuf', 'exact'],
-  ['Gainward GeForce RTX 5070 Ti Phoenix, 16GB GDDR7', 'gpu', 'rtx5070ti', 'similar'],
+  ['Gainward GeForce RTX 5070 Ti Phoenix, 16GB GDDR7', 'gpu', 'KATALOG', 'exact'],
   ['Gigabyte GeForce RTX 5070 Windforce OC SFF 12G', 'gpu', 'rtx5070', 'exact'],
   ['GeForce RTX5070Ti 16GB', 'gpu', 'rtx5070ti', 'similar'],
-  ['MSI GeForce RTX 4070 Ti SUPER Ventus 2X', 'gpu', 'rtx4070tis', 'similar'],
+  ['MSI GeForce RTX 4070 Ti SUPER Ventus 2X', 'gpu', 'KATALOG', 'exact'],
   ['MSI PRO B650M-A WIFI', 'mb', 'b650m-a', 'exact'],
   ['ASUS TUF Gaming B650-PLUS WIFI', 'mb', 'b650-tuf', 'exact'],
   ['Kingston FURY Beast DIMM Kit 32GB, DDR5-6000, CL30-36-36', 'ram', 'ddr5-32-6000k', 'exact'],
@@ -116,13 +117,14 @@ const cases = [
   ['Phanteks Glacier One 360M25 G2 weiß', 'cooler', 'glacier-one-360', 'exact'],
   ['Endorfy Supremo FM6 Gold 850W, ATX 3.1', 'psu', 'supremo-fm6-850', 'exact'],
   ['MSI PRO B760M-A WIFI DDR4', 'mb', 'b760m-d4', 'exact'],
-  ['Jonsbo D31 Mesh schwarz, Glasfenster', 'case', null, 'custom'],
-  ['Montech HyperFlow 360 ARGB, Wasserkühlung', 'cooler', 'lf3-360', 'similar'],
+  ['Fantasia Nebula X9 schwarz, Glasfenster', 'case', null, 'custom'],
+  ['Fantasia Frost 360 ARGB, Wasserkühlung', 'cooler', 'lf3-360', 'similar'],
 ];
 for (const [text, cat, id, q] of cases) {
   const m = E.matchLine(text);
   const got = m ? `${m.cat}/${m.id}/${m.quality}` : 'nichts';
-  ok(id === null && q === null ? !m || m.id !== 'i5-14600k' : m && m.cat === cat && m.id === id && m.quality === q, `Erkennung "${text}" -> ${got}`);
+  const want = id === 'KATALOG' ? m && m.cat === cat && /^pp/.test(m.id) && m.quality === q : m && m.cat === cat && m.id === id && m.quality === q;
+  ok(id === null && q === null ? !m || m.id !== 'i5-14600k' : want, `Erkennung "${text}" -> ${got}`);
 }
 
 // Geizhals-Wunschliste (vereinfachtes HTML)
@@ -132,7 +134,7 @@ const html = `<html><body><div class="wishlist">
     <span class="price">&euro; 459,00</span></div>
   <div class="row"><a href="https://geizhals.de/msi-mag-b650-tomahawk-wifi-a2823000.html" title="MSI MAG B650 Tomahawk WIFI">MSI MAG B650 Tomahawk WIFI</a> <span>€ 189,90</span></div>
   <div class="row"><a href="/sapphire-pulse-radeon-rx-9070-xt-a3400000.html">Sapphire Pulse Radeon RX 9070 XT, 16GB GDDR6, HDMI, 2x DP</a> <span>ab € 649,-</span></div>
-  <div class="row"><a href="/jonsbo-d31-a3000000.html">Jonsbo D31 Mesh schwarz, Glasfenster</a> <span>€ 79,90</span></div>
+  <div class="row"><a href="/fantasia-a3000000.html">Fantasia Nebula X9 schwarz, Glasfenster</a> <span>€ 79,90</span></div>
 </div></body></html>`;
 const hi = E.itemsFromHtml(html);
 ok(hi.length === 4 && hi[0].id === 'r7-9800x3d' && hi[0].price === 459 && hi[1].id === 'b650-tomahawk' && hi[1].price === 190 && hi[2].id === 'rx9070xt' && hi[2].price === 649 && hi[3].quality === 'custom' && hi[3].cat === 'case',
@@ -154,7 +156,7 @@ ok(applied.parts.cpu === 'r7-9800x3d' && applied.prices['gpu:rx9070xt'] === 649 
 const st2 = E.buildStatus(applied);
 ok(!st2.todo.some(t => t.cats[0] === 'case'), 'eigenes Gehäuse zählt als vorhanden');
 const rt = E.decodeBuild(E.encodeBuild(applied));
-ok(rt.build.customs.length === 1 && rt.build.customs[0].name.startsWith('Jonsbo D31'), 'eigene Teile im Code');
+ok(rt.build.customs.length === 1 && rt.build.customs[0].name.startsWith('Fantasia Nebula'), 'eigene Teile im Code');
 
 // Sichtbarer Text einer Geizhals-Seite (Fallback, wenn keine Produktlinks gefunden werden)
 const gtext = `<html><body>x</body></html>\n<!--SB-TEXT-->\nWunschlisten > Endorfy White Build 07_25
@@ -168,13 +170,34 @@ Hardware / Wasserkühlung / Komplettsets
 Phanteks Glacier One 360M25 G2 weiß
 ab € 99,88
 Hardware / Gehäuse / PC-Gehäuse
-Jonsbo D31 Mesh Screen, Glasfenster
+Fantasia Nebula X9 Mesh, Glasfenster
 ab € 89,19
 Gesamtpreis: € 3121,17`;
 const gi = E.itemsFromHtml(gtext);
 ok(gi.length === 3 && gi[0].id === 'nm790-2tb' && gi[0].price === 310 && gi[1].id === 'glacier-one-360' && gi[1].price === 100 && gi[2].cat === 'case' && !gi[2].id && gi[2].price === 89,
   'Geizhals-Seitentext: ' + JSON.stringify(gi.map(i => [i.cat, i.id, i.price])));
 ok(E.parsePrice('ab €1307,35') === 1307 && E.parsePrice('€ 1.307,35') === 1307, 'Preis ohne Tausenderpunkt');
+
+// Katalog (PC-Part-Dataset)
+const sc = E.searchCatalog('mb', 'prime b650 plus');
+ok(sc.length && sc[0].socket === 'AM5' && sc[0].mem === 'DDR5', 'Katalog-Suche Mainboard: ' + (sc[0] && sc[0].name));
+const r3600 = E.searchCatalog('cpu', 'ryzen 5 3600')[0];
+const oldPc = { parts: { cpu: r3600.id, mb: E.searchCatalog('mb', 'b450m pro4')[0].id, ram: 'ddr4-16-3200', gpu: E.searchCatalog('gpu', 'rtx 3070')[0].id,
+  psu: 'rm650e', case: E.searchCatalog('case', 'nzxt h510')[0].id, storage: ['870evo-1tb'] }, prices: {} };
+const stOld = E.buildStatus(oldPc);
+ok(!stOld.errors.length, 'alter PC aus Katalog ohne Fehler: ' + stOld.errors.map(e => e.msg));
+ok(stOld.issues.some(i => i.level === 'unknown'), 'Katalog: nicht prüfbare Angaben werden gemeldet');
+ok(E.checkCandidate(oldPc, 'cpu', 'r5-7600').some(i => i.level === 'error'), 'Katalog-Board AM4 blockiert AM5-CPU');
+ok(E.perf(oldPc).fps['1440p'] > 30, 'FPS mit Katalog-Teilen: ' + JSON.stringify(E.perf(oldPc).fps));
+const mcat = [
+  ['Asus PRIME B650-PLUS WIFI', 'mb'], ['MSI VENTUS 3X OC GeForce RTX 5070 Ti 16GB', 'gpu'], ['Corsair Vengeance RGB 32GB DDR5-6400 CL36', 'ram'],
+  ['Montech KING 95 PRO', 'case'], ['AMD Ryzen 5 3600', 'cpu'],
+];
+for (const [text, cat] of mcat) {
+  const m = E.matchLine(text);
+  const p = m && m.id && E.findPart(m.cat, m.id);
+  ok(m && m.cat === cat && p && p.src === 'katalog', `Katalog-Erkennung "${text}" -> ${m && m.cat}/${p && p.name}/${m && m.quality}`);
+}
 
 console.log(E.shareText(b, 'Max').split('\n').slice(0, 3).join('\n'));
 console.log(failed ? `${failed} Test(s) fehlgeschlagen` : 'Alle Tests bestanden');

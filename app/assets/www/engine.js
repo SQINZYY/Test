@@ -51,54 +51,73 @@ function totals(b) {
 
 function roundUp50(x) { return Math.ceil(x / 50) * 50; }
 
+const num = v => typeof v === 'number' && !isNaN(v);
+
 function power(b) {
   const cpu = one(b, 'cpu'), gpu = one(b, 'gpu'), cooler = one(b, 'cooler');
-  const draw = (cpu ? cpu.power : 0) + (gpu ? gpu.tdp : 0) + 50 + many(b, 'storage').length * 5 + (cooler && cooler.type === 'AIO' ? 10 : 0);
-  const recommended = Math.max(gpu ? gpu.psuRec : 0, roundUp50(draw * 1.25), 450);
-  return { draw, recommended };
+  // Unbekannte Werte (Katalog) vorsichtig schätzen
+  const cpuW = cpu ? (num(cpu.power) ? cpu.power : 125) : 0;
+  const gpuW = gpu ? (num(gpu.tdp) ? gpu.tdp : 250) : 0;
+  const draw = cpuW + gpuW + 50 + many(b, 'storage').length * 5 + (cooler && cooler.type === 'AIO' ? 10 : 0);
+  const recommended = Math.max(gpu && num(gpu.psuRec) ? gpu.psuRec : 0, roundUp50(draw * 1.25), 450);
+  return { draw, recommended, estimated: !!((cpu && !num(cpu.power)) || (gpu && !num(gpu.tdp))) };
 }
 
 // ---------- Kompatibilität ----------
 // Jedes Problem nennt die beteiligten Kategorien (cats), damit die Teileauswahl filtern kann.
 // missing = "etwas fehlt noch" – das blockiert keine Auswahl.
+// Fehlen bei Katalogteilen Angaben, wird die Prüfung als "nicht prüfbar" gesammelt statt geraten.
 function checkBuild(b) {
   const out = [];
   const add = (level, cats, msg, missing) => out.push({ level, cats, msg, missing: !!missing });
+  const unknown = [];
+  const cantCheck = (cats, what) => unknown.push({ cats, what });
   const cpu = one(b, 'cpu'), mb = one(b, 'mb'), ram = one(b, 'ram'), gpu = one(b, 'gpu');
   const psu = one(b, 'psu'), cs = one(b, 'case'), cooler = one(b, 'cooler');
   const st = many(b, 'storage'), mons = many(b, 'monitor');
 
-  if (cpu && mb && cpu.socket !== mb.socket)
-    add('error', ['cpu', 'mb'], `Sockel passt nicht: ${cpu.name} braucht ${cpu.socket}, das Mainboard hat ${mb.socket}.`);
-  if (cpu && mb && cpu.socket === mb.socket && cpu.newGen && mb.oldChipset)
-    add('info', ['cpu', 'mb'], `${mb.name} braucht für den ${cpu.name} evtl. ein BIOS-Update (neue Boards haben es meist schon).`);
-  if (cpu && mb && cpu.unlocked && cpu.socket.startsWith('LGA') && !mb.chipset.startsWith('Z'))
-    add('info', ['cpu', 'mb'], `Übertakten des ${cpu.name} geht nur mit Z-Chipsatz – ansonsten läuft er normal.`);
+  if (cpu && mb) {
+    if (!cpu.socket || !mb.socket) cantCheck(['cpu', 'mb'], 'CPU-Sockel');
+    else if (!mb.socket.split('/').includes(cpu.socket))
+      add('error', ['cpu', 'mb'], `Sockel passt nicht: ${cpu.name} braucht ${cpu.socket}, das Mainboard hat ${mb.socket}.`);
+    else {
+      if (cpu.newGen && mb.oldChipset)
+        add('info', ['cpu', 'mb'], `${mb.name} braucht für den ${cpu.name} evtl. ein BIOS-Update (neue Boards haben es meist schon).`);
+      if (cpu.unlocked && cpu.socket.startsWith('LGA') && mb.chipset && !mb.chipset.startsWith('Z'))
+        add('info', ['cpu', 'mb'], `Übertakten des ${cpu.name} geht nur mit Z-Chipsatz – ansonsten läuft er normal.`);
+    }
+  }
 
   if (ram && mb) {
-    if (ram.type !== mb.mem)
+    if (!mb.mem) cantCheck(['ram', 'mb'], 'RAM-Typ');
+    else if (ram.type !== mb.mem)
       add('error', ['ram', 'mb'], `RAM-Typ passt nicht: Mainboard braucht ${mb.mem}, der RAM ist ${ram.type}.`);
     else {
-      if (ram.modules > mb.ramSlots)
+      if (num(mb.ramSlots) && ram.modules > mb.ramSlots)
         add('error', ['ram', 'mb'], `${ram.modules} RAM-Riegel, aber das Mainboard hat nur ${mb.ramSlots} Steckplätze.`);
-      if (ram.size > mb.maxRam)
+      if (num(mb.maxRam) && ram.size > mb.maxRam)
         add('error', ['ram', 'mb'], `Zu viel RAM: Mainboard unterstützt max. ${mb.maxRam} GB.`);
-      const base = ram.type === 'DDR4' ? 3200 : 4800;
+      const base = ram.type === 'DDR4' ? 3200 : ram.type === 'DDR5' ? 4800 : 1600;
       if (mb.memOC === false && ram.speed > base)
         add('info', ['ram', 'mb'], `Der ${mb.chipset}-Chipsatz kann kein XMP – der RAM läuft nur mit ${base} MT/s statt ${ram.speed} MT/s.`);
     }
   }
 
-  if (mb && cs && !cs.ff.includes(mb.ff))
-    add('error', ['mb', 'case'], `${mb.ff}-Mainboard passt nicht ins ${cs.name} (unterstützt ${cs.ff.join(', ')}).`);
+  if (mb && cs) {
+    if (!mb.ff || !cs.ff) cantCheck(['mb', 'case'], 'Mainboard-Größe im Gehäuse');
+    else if (!cs.ff.includes(mb.ff))
+      add('error', ['mb', 'case'], `${mb.ff}-Mainboard passt nicht ins ${cs.name} (unterstützt ${cs.ff.join(', ')}).`);
+  }
 
   if (gpu && cs) {
-    if (gpu.len > cs.gpuLen)
+    if (!num(gpu.len) || !num(cs.gpuLen)) cantCheck(['gpu', 'case'], 'Länge der Grafikkarte im Gehäuse');
+    else if (gpu.len > cs.gpuLen)
       add('error', ['gpu', 'case'], `Grafikkarte zu lang: ${gpu.len} mm, ins Gehäuse passen max. ${cs.gpuLen} mm.`);
-    if (gpu.slots > cs.gpuSlots)
+    if (!num(gpu.slots) || !num(cs.gpuSlots)) { if (num(gpu.slots) || num(cs.gpuSlots)) cantCheck(['gpu', 'case'], 'Dicke der Grafikkarte'); }
+    else if (gpu.slots > cs.gpuSlots)
       add('error', ['gpu', 'case'], `Grafikkarte zu dick: ${fmtNum(gpu.slots)} Slots, das Gehäuse schafft max. ${fmtNum(cs.gpuSlots)}.`);
   }
-  if (gpu && mb && gpu.pcie > mb.pcie) {
+  if (gpu && mb && num(gpu.pcie) && num(mb.pcie) && gpu.pcie > mb.pcie) {
     if (gpu.lanes === 8 && mb.pcie <= 3)
       add('warn', ['gpu', 'mb'], `Die Karte hat nur 8 PCIe-Lanes – im PCIe-${mb.pcie}.0-Slot verliert sie ca. 5–10 % Leistung.`);
     else
@@ -112,53 +131,77 @@ function checkBuild(b) {
       add('error', ['psu', 'gpu', 'cpu'], `Netzteil zu schwach: ${psu.watt} W bei ca. ${pw.draw} W Verbrauch (plus Lastspitzen).`);
     else if (psu.watt < pw.recommended)
       add('warn', ['psu', 'gpu', 'cpu'], `Netzteil knapp: empfohlen sind mind. ${pw.recommended} W, du hast ${psu.watt} W.`);
-    if (gpu && gpu.pins > psu.pcie8)
-      add('error', ['psu', 'gpu'], `Zu wenig Stromstecker: die Grafikkarte braucht ${gpu.pins}× 8-Pin-PCIe, das Netzteil hat nur ${psu.pcie8}.`);
-    if (gpu && gpu.a8 && !psu.native12v) {
-      if (gpu.a8 > psu.pcie8)
-        add('error', ['psu', 'gpu'], `Die Grafikkarte braucht 12V-2×6 – der Adapter benötigt ${gpu.a8}× 8-Pin, das Netzteil hat nur ${psu.pcie8}.`);
-      else
-        add('info', ['psu', 'gpu'], `Die Grafikkarte nutzt 12V-2×6 – angeschlossen über den beiliegenden Adapter (${gpu.a8}× 8-Pin). Ein natives Kabel ist besser.`);
+    if (gpu) {
+      const needs = num(gpu.pins) ? gpu.pins : null;
+      if (needs != null && num(psu.pcie8) && needs > psu.pcie8)
+        add('error', ['psu', 'gpu'], `Zu wenig Stromstecker: die Grafikkarte braucht ${needs}× 8-Pin-PCIe, das Netzteil hat nur ${psu.pcie8}.`);
+      if (gpu.a8 && psu.native12v === false) {
+        if (num(psu.pcie8) && gpu.a8 > psu.pcie8)
+          add('error', ['psu', 'gpu'], `Die Grafikkarte braucht 12V-2×6 – der Adapter benötigt ${gpu.a8}× 8-Pin, das Netzteil hat nur ${psu.pcie8}.`);
+        else
+          add('info', ['psu', 'gpu'], `Die Grafikkarte nutzt 12V-2×6 – angeschlossen über den beiliegenden Adapter (${gpu.a8}× 8-Pin). Ein natives Kabel ist besser.`);
+      }
+      if (needs == null && !gpu.a8 || !num(psu.pcie8)) cantCheck(['psu', 'gpu'], 'Stromstecker der Grafikkarte');
     }
-    if (cs && cs.psu === 'SFX' && psu.ff !== 'SFX')
+    if (cs && cs.psu === 'SFX' && psu.ff && psu.ff !== 'SFX')
       add('error', ['psu', 'case'], `ATX-Netzteil passt nicht ins ${cs.name} – nur SFX-Netzteile.`);
     if (cs && cs.psu === 'ATX' && psu.ff === 'SFX')
       add('info', ['psu', 'case'], 'SFX-Netzteil im ATX-Gehäuse braucht eine SFX-auf-ATX-Halterung.');
+    if (cs && (!cs.psu || !psu.ff)) cantCheck(['psu', 'case'], 'Netzteil-Bauform im Gehäuse');
   }
 
-  if (cooler && cpu && !cooler.sockets.includes(cpu.socket))
-    add('error', ['cooler', 'cpu'], `Kühler unterstützt den Sockel ${cpu.socket} nicht.`);
-  if (cooler && cs) {
-    if (cooler.type === 'Luft' && cooler.height > cs.coolerH)
-      add('error', ['cooler', 'case'], `Kühler zu hoch: ${cooler.height} mm, das Gehäuse erlaubt max. ${cs.coolerH} mm.`);
-    if (cooler.type === 'AIO' && cooler.rad > cs.rad)
-      add('error', ['cooler', 'case'], cs.rad ? `Radiator zu groß: ${cooler.rad} mm, das Gehäuse schafft max. ${cs.rad} mm.` : 'Das Gehäuse hat keinen Platz für eine Wasserkühlung.');
+  if (cooler && cpu) {
+    if (!cooler.sockets || !cpu.socket) cantCheck(['cooler', 'cpu'], 'Kühler-Halterung für den Sockel');
+    else if (!cooler.sockets.includes(cpu.socket))
+      add('error', ['cooler', 'cpu'], `Kühler unterstützt den Sockel ${cpu.socket} nicht.`);
+    if (num(cooler.tdp) && num(cpu.power) && cooler.tdp < cpu.power)
+      add('warn', ['cooler', 'cpu'], `Kühler knapp bemessen: ${cpu.name} zieht bis ca. ${cpu.power} W, der Kühler schafft ca. ${cooler.tdp} W.`);
   }
-  if (cooler && cpu && cooler.tdp < cpu.power)
-    add('warn', ['cooler', 'cpu'], `Kühler knapp bemessen: ${cpu.name} zieht bis ca. ${cpu.power} W, der Kühler schafft ca. ${cooler.tdp} W.`);
-  if (!cooler && cpu && !cpu.boxCooler && !customsOf(b, 'cooler').length)
+  if (cooler && cs) {
+    if (cooler.type === 'Luft') {
+      if (!num(cooler.height) || !num(cs.coolerH)) cantCheck(['cooler', 'case'], 'Höhe des CPU-Kühlers im Gehäuse');
+      else if (cooler.height > cs.coolerH)
+        add('error', ['cooler', 'case'], `Kühler zu hoch: ${cooler.height} mm, das Gehäuse erlaubt max. ${cs.coolerH} mm.`);
+    }
+    if (cooler.type === 'AIO') {
+      if (!num(cs.rad)) cantCheck(['cooler', 'case'], 'Radiator-Größe im Gehäuse');
+      else if (cooler.rad > cs.rad)
+        add('error', ['cooler', 'case'], cs.rad ? `Radiator zu groß: ${cooler.rad} mm, das Gehäuse schafft max. ${cs.rad} mm.` : 'Das Gehäuse hat keinen Platz für eine Wasserkühlung.');
+    }
+  }
+  if (!cooler && cpu && cpu.boxCooler === false && !customsOf(b, 'cooler').length)
     add('error', ['cooler', 'cpu'], `Kein Kühler: ${cpu.name} wird ohne Kühler geliefert.`, true);
+  if (!cooler && cpu && cpu.boxCooler == null && !customsOf(b, 'cooler').length)
+    cantCheck(['cooler', 'cpu'], 'ob ein CPU-Kühler mitgeliefert wird');
 
   if (cpu && !gpu && !cpu.igpu && !customsOf(b, 'gpu').length)
     add('error', ['gpu', 'cpu'], `Keine Bildausgabe: ${cpu.name} hat keine integrierte Grafik – du brauchst eine Grafikkarte.`, true);
 
-  if (mb) {
+  if (mb && st.length) {
     const m2 = st.filter(s => s.iface === 'M.2').length;
     const sata = st.length - m2;
-    if (m2 > mb.m2) add('error', ['storage', 'mb'], `Zu viele M.2-SSDs: das Mainboard hat ${mb.m2} M.2-Slot${mb.m2 > 1 ? 's' : ''}.`);
-    if (sata > mb.sata) add('error', ['storage', 'mb'], `Zu viele SATA-Laufwerke: das Mainboard hat ${mb.sata} SATA-Anschlüsse.`);
+    if (num(mb.m2) && m2 > mb.m2) add('error', ['storage', 'mb'], `Zu viele M.2-SSDs: das Mainboard hat ${mb.m2} M.2-Slot${mb.m2 > 1 ? 's' : ''}.`);
+    if (num(mb.sata) && sata > mb.sata) add('error', ['storage', 'mb'], `Zu viele SATA-Laufwerke: das Mainboard hat ${mb.sata} SATA-Anschlüsse.`);
+    if ((m2 > 1 && !num(mb.m2)) || (sata > 0 && !num(mb.sata))) cantCheck(['storage', 'mb'], 'Anzahl M.2-/SATA-Anschlüsse');
   }
   if (cs) {
     const hdd = st.filter(s => s.iface === '3,5"').length;
-    if (hdd > cs.bays35) add('error', ['storage', 'case'], cs.bays35 ? `Nur ${cs.bays35} Platz für 3,5"-Festplatten im Gehäuse.` : 'Das Gehäuse hat keinen Platz für 3,5"-Festplatten.');
+    if (hdd && num(cs.bays35) && hdd > cs.bays35)
+      add('error', ['storage', 'case'], cs.bays35 ? `Nur ${cs.bays35} Platz für 3,5"-Festplatten im Gehäuse.` : 'Das Gehäuse hat keinen Platz für 3,5"-Festplatten.');
   }
 
-  if (gpu && mons.some(m => m.res === '4K') && gpu.score < 45)
+  if (gpu && num(gpu.score) && mons.some(m => m.res === '4K') && gpu.score < 45)
     add('info', ['gpu', 'monitor'], 'Für 4K ist die Grafikkarte eher schwach – nutze DLSS/FSR oder spiele in 1440p.');
 
   const own = customsOf(b).filter(c => CAT[c.cat] && CAT[c.cat].group === 'pc');
   if (own.length)
     add('info', own.map(c => c.cat), `${own.length} eigene${own.length > 1 ? '' : 's'} Teil${own.length > 1 ? 'e' : ''} (${own.map(c => c.name).join(', ')}) ${own.length > 1 ? 'sind' : 'ist'} nicht in der Datenbank und ${own.length > 1 ? 'werden' : 'wird'} nicht auf Kompatibilität geprüft.`);
+  if (unknown.length) {
+    // Nur melden, wenn ein Katalogteil beteiligt ist (bei eigenen Teilen gibt es schon einen Hinweis)
+    const whats = [...new Set(unknown.map(u => u.what))];
+    add('unknown', [...new Set(unknown.flatMap(u => u.cats))],
+      `Nicht automatisch prüfbar (Angaben fehlen im Teile-Katalog): ${whats.join(', ')}. Bitte beim Hersteller nachsehen.`);
+  }
 
   for (const c of CATS)
     if (c.required && !hasAny(b, c.key))
@@ -192,9 +235,9 @@ function softMin(a, b) { return Math.pow(Math.pow(a, -4) + Math.pow(b, -4), -0.2
 
 function fpsAt(b, res) {
   const cpu = one(b, 'cpu'), gpu = one(b, 'gpu'), ram = one(b, 'ram');
-  if (!cpu) return 0;
+  if (!cpu || !num(cpu.score)) return 0;
   const gScore = gpu ? gpu.score : (cpu.igpu ? 4 : 0);
-  if (!gScore) return 0;
+  if (!num(gScore) || !gScore) return 0;
   let vramF = 1;
   if (gpu && gpu.vram <= 8) vramF = res === '4K' ? 0.75 : res === '1440p' ? 0.93 : 1;
   else if (gpu && gpu.vram <= 12 && res === '4K') vramF = 0.92;
@@ -208,7 +251,7 @@ function perf(b) {
   const fps = {};
   for (const r of Object.keys(RES)) fps[r] = fpsAt(b, r);
   let bottleneck = 'none';
-  if (gpu) {
+  if (gpu && num(gpu.score) && num(cpu.score)) {
     const ratio = (cpu.score * 2) / (gpu.score * RES['1440p']);
     bottleneck = ratio < 0.9 ? 'cpu' : ratio > 1.8 ? 'gpu' : 'balanced';
   } else bottleneck = 'nogpu';
@@ -248,7 +291,8 @@ function upgrades(b) {
   const gainOf = v => Math.round((fpsAt(v, res) / base - 1) * 100);
 
   // Eigene Teile (nicht in der Datenbank) lassen sich nicht bewerten – diese Bereiche überspringen
-  const own = c => customsOf(b, c).length > 0;
+  // ... ebenso Katalogteile ohne Leistungsdaten
+  const own = c => customsOf(b, c).length > 0 || (c === 'cpu' && cpu && !num(cpu.score)) || (c === 'gpu' && gpu && !num(gpu.score));
   const ownParts = customsOf(b).filter(c => CAT[c.cat] && CAT[c.cat].group === 'pc');
   if (!cpu || !mb) return { res, base: 0, items: [], ownParts };
 
@@ -282,7 +326,7 @@ function upgrades(b) {
     if (gain < 8) continue;
     gpuCands.push({ kind: 'perf', title: `Grafikkarte: ${g.name}`, changes, cost: cost(v, changes), gain,
       reason: (gpu ? `Ersetzt deine ${gpu.name}.` : 'Eine eigene Grafikkarte statt der integrierten Grafik.') +
-        ` Passt auf dein Mainboard (PCIe x16)${cs ? ' und ins Gehäuse (' + g.len + ' / ' + cs.gpuLen + ' mm)' : ''}.` +
+        ` Passt auf dein Mainboard (PCIe x16)${cs && num(cs.gpuLen) ? ' und ins Gehäuse (' + g.len + ' / ' + cs.gpuLen + ' mm)' : cs ? '. Länge ' + g.len + ' mm – prüfe, ob sie in dein Gehäuse passt' : ''}.` +
         (f.psu ? ` Inklusive neuem Netzteil (${f.psu.watt} W), weil deins nicht reicht.` : '') });
   }
   list.push(...pickSpread(gpuCands));

@@ -12,6 +12,7 @@ function normText(s) {
     .replace(/[™®©]/g, '')
     .replace(/(\d)[o](?=\d)/g, '$10') // OCR: "5O70" -> "5070"
     .replace(/(\d)[il|](?=\d)/g, '$11')
+    .replace(/(\d)(gb|tb|mb|mhz|ghz|hz|mm|w)\b/g, '$1 $2') // "16GB" -> "16 gb"
     .replace(/[^a-z0-9äöüß]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -78,7 +79,18 @@ function guessCategory(t) {
 }
 
 // Ein Text (eine Zeile / ein Produktname) -> bestes Teil aus der Datenbank
+// Erst die eigene Datenbank (vollständige Daten), dann der große Katalog. Ein genau passendes
+// Katalogteil schlägt ein nur ähnliches Datenbankteil (z. B. andere Herstellerversion derselben Grafikkarte).
 function matchLine(raw, hint) {
+  const own = matchCurated(raw, hint);
+  if (own && own.id && own.quality === 'exact') return own;
+  if (typeof matchCatalog !== 'function') return own;
+  const cat = matchCatalog(raw, (own && own.cat) || hint);
+  if (cat && (cat.quality === 'exact' || !own || !own.id)) return cat;
+  return own;
+}
+
+function matchCurated(raw, hint) {
   const t = normText(raw);
   if (t.length < 3) return null;
   const a = attrsOf(t);

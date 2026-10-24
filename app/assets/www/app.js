@@ -99,14 +99,21 @@ function addBuild(b, open = true) {
 }
 
 // ---------- Spezifikationen ----------
-const yesNo = v => (v ? 'Ja' : 'Nein');
+const yesNo = v => (v == null ? 'unbekannt' : v ? 'Ja' : 'Nein');
+// Katalogteile haben nicht alle Angaben: fehlende Werte als "–" anzeigen
+const BAD_VALUE = /\b(null|undefined|NaN)\b/;
+const clean = v => (v == null || v === '' || BAD_VALUE.test(String(v)) ? '–' : v);
+const chipsOf = (cat, p) => CHIPS[cat](p).filter(x => x != null && x !== '' && !BAD_VALUE.test(String(x)))
+  .concat(p.src === 'katalog' ? ['Katalog'] : []);
+const isCatalog = p => p && p.src === 'katalog';
 const SPECS = {
   cpu: [
     { l: 'Sockel', g: p => p.socket },
-    { l: 'Kerne / Threads', g: p => `${p.cores} / ${p.threads}`, v: p => p.cores, better: 'high' },
+    { l: 'Kerne / Threads', g: p => (p.threads ? `${p.cores} / ${p.threads}` : p.cores), v: p => p.cores, better: 'high' },
+    { l: 'Architektur', g: p => p.arch },
     { l: 'Boost-Takt', g: p => fmtNum(p.boost) + ' GHz', v: p => p.boost, better: 'high' },
     { l: 'Verbrauch (max.)', g: p => p.power + ' W', v: p => p.power, better: 'low' },
-    { l: 'Gaming-Leistung', g: p => p.score + ' / 100', v: p => p.score, better: 'high' },
+    { l: 'Gaming-Leistung', g: p => p.score + ' / 100' + (isCatalog(p) ? ' (geschätzt)' : ''), v: p => p.score, better: 'high' },
     { l: 'Integrierte Grafik', g: p => yesNo(p.igpu) },
     { l: 'Kühler dabei', g: p => yesNo(p.boxCooler) },
   ],
@@ -125,6 +132,7 @@ const SPECS = {
     { l: 'Latenz', g: p => 'CL' + p.cl, v: p => p.cl, better: 'low' },
   ],
   gpu: [
+    { l: 'Chip', g: p => p.chip },
     { l: 'Grafikspeicher', g: p => p.vram + ' GB', v: p => p.vram, better: 'high' },
     { l: 'Gaming-Leistung', g: p => p.score + ' / 100', v: p => p.score, better: 'high' },
     { l: 'Länge', g: p => p.len + ' mm', v: p => p.len, better: 'low' },
@@ -137,13 +145,13 @@ const SPECS = {
   storage: [
     { l: 'Typ', g: p => p.type }, { l: 'Bauform', g: p => p.iface },
     { l: 'Kapazität', g: p => fmtSize(p.size), v: p => p.size, better: 'high' },
-    { l: 'Lesen', g: p => p.read.toLocaleString('de-DE') + ' MB/s', v: p => p.read, better: 'high' },
+    { l: 'Lesen', g: p => (p.read ? p.read.toLocaleString('de-DE') + ' MB/s' : null), v: p => p.read, better: 'high' },
   ],
   cooler: [
     { l: 'Art', g: p => (p.type === 'AIO' ? 'Wasserkühlung (AIO)' : 'Luftkühler') },
     { l: 'Größe', g: p => (p.type === 'AIO' ? p.rad + ' mm Radiator' : p.height + ' mm hoch') },
     { l: 'Kühlleistung', g: p => 'ca. ' + p.tdp + ' W', v: p => p.tdp, better: 'high' },
-    { l: 'Sockel', g: p => p.sockets.join(', ') },
+    { l: 'Sockel', g: p => (p.sockets ? p.sockets.join(', ') : null) },
   ],
   psu: [
     { l: 'Leistung', g: p => p.watt + ' W', v: p => p.watt, better: 'high' },
@@ -151,14 +159,15 @@ const SPECS = {
     { l: '12V-2×6-Kabel', g: p => yesNo(p.native12v) }, { l: 'Modular', g: p => yesNo(p.modular) },
   ],
   case: [
-    { l: 'Mainboards', g: p => p.ff.join(', ') },
+    { l: 'Bauart', g: p => p.type },
+    { l: 'Mainboards', g: p => (p.ff ? p.ff.join(', ') : null) },
     { l: 'Grafikkarte max.', g: p => `${p.gpuLen} mm, ${fmtNum(p.gpuSlots)} Slots`, v: p => p.gpuLen, better: 'high' },
     { l: 'CPU-Kühler max.', g: p => p.coolerH + ' mm', v: p => p.coolerH, better: 'high' },
     { l: 'Radiator max.', g: p => (p.rad ? p.rad + ' mm' : '–'), v: p => p.rad, better: 'high' },
     { l: 'Netzteil', g: p => p.psu }, { l: '3,5"-Plätze', g: p => p.bays35 }, { l: 'Farbe', g: p => p.color },
   ],
   monitor: [
-    { l: 'Auflösung', g: p => p.res }, { l: 'Bildrate', g: p => p.hz + ' Hz', v: p => p.hz, better: 'high' },
+    { l: 'Auflösung', g: p => (p.resText ? `${p.res} (${p.resText})` : p.res) }, { l: 'Bildrate', g: p => p.hz + ' Hz', v: p => p.hz, better: 'high' },
     { l: 'Größe', g: p => p.size + '"' }, { l: 'Panel', g: p => p.panel },
   ],
   keyboard: [{ l: 'Schalter', g: p => p.kind }, { l: 'Layout', g: p => p.layout }],
@@ -177,7 +186,7 @@ const CHIPS = {
   storage: p => [p.type, fmtSize(p.size), p.iface],
   cooler: p => [p.type, p.type === 'AIO' ? p.rad + ' mm' : p.height + ' mm', p.tdp + ' W'],
   psu: p => [p.watt + ' W', p.eff, p.ff],
-  case: p => [p.ff.join('/'), 'GPU ≤ ' + p.gpuLen + ' mm', 'Kühler ≤ ' + p.coolerH + ' mm', p.psu],
+  case: p => [p.ff ? p.ff.join('/') : null, 'GPU ≤ ' + p.gpuLen + ' mm', 'Kühler ≤ ' + p.coolerH + ' mm', p.psu, isCatalog(p) ? p.type : null],
   monitor: p => [p.res, p.hz + ' Hz', p.size + '"', p.panel],
   keyboard: p => [p.kind, p.layout],
   mouse: p => [p.weight + ' g', p.wireless ? 'kabellos' : 'Kabel'],
@@ -342,6 +351,8 @@ function statusPill(b) {
 function fpsBlock(b) {
   const own = ['cpu', 'gpu'].filter(c => !partsOf(b, c).length && customsOf(b, c).length);
   if (own.length) return `<p class="muted small">Keine FPS-Schätzung: ${own.map(c => CAT[c].short).join(' und ')} ${own.length > 1 ? 'sind eigene Teile' : 'ist ein eigenes Teil'} ohne Leistungsdaten. Wähle ein ähnliches Teil aus der Datenbank.</p>`;
+  const noData = ['cpu', 'gpu'].filter(c => one(b, c) && typeof one(b, c).score !== 'number');
+  if (noData.length) return `<p class="muted small">Keine FPS-Schätzung: Für ${noData.map(c => esc(one(b, c).name)).join(' und ')} gibt es keine Leistungsdaten.</p>`;
   const pf = perf(b);
   if (!pf || !pf.fps['1080p']) return '<p class="muted small">Wähle CPU und Grafikkarte, um eine FPS-Schätzung zu sehen.</p>';
   const max = 240;
@@ -356,7 +367,7 @@ function fpsBlock(b) {
   return `${rows}<p class="muted small">${txt} Schätzung für aktuelle Spiele auf hohen Details.</p>`;
 }
 
-function priceTag(n) { return `<span class="price">${fmtEur(n)}</span>`; }
+function priceTag(n) { return n == null ? '<span class="price muted">Preis ?</span>' : `<span class="price">${fmtEur(n)}</span>`; }
 
 // Nur selbst erzeugte Produktbilder (Ausschnitte aus Screenshots) anzeigen
 const safeImg = src => (typeof src === 'string' && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(src) ? src : null);
@@ -382,6 +393,7 @@ function viewHome() {
   <button class="card continue" data-a="tab" data-t="builder">
     <div><small class="muted">Weiter planen</small><h3>${esc(b.name)}</h3><p class="muted small">${t.all ? fmtEur(t.all) : 'Noch leer'}</p></div>${statusPill(b)}
   </button>
+  ${typeof catalogInfo !== 'undefined' && catalogInfo ? `<p class="muted small center db-info">${Object.values(DB).reduce((n, l) => n + l.length, 0)} vollständig geprüfte Teile · ${catalogInfo.count.toLocaleString('de-DE')} weitere im Katalog</p>` : ''}
   <h2 class="section">Setup-Stile</h2>
   <div class="presets">${PRESETS.map(p => {
     const pb = { parts: p.parts, prices: {} };
@@ -430,7 +442,7 @@ function slotRows(b, group) {
     const own = customsOf(b, c.key);
     const rows = ps.map((p, idx) => `<button class="slot filled" data-a="detail" data-cat="${c.key}" data-idx="${idx}">
         ${partVisual(c.key, (b.images || {})[c.key + ':' + p.id])}
-        <span class="slot-main"><small>${c.name}${flag}</small><b>${esc(p.name)}</b><span class="chips">${CHIPS[c.key](p).slice(0, 4).map(x => `<i>${esc(x)}</i>`).join('')}</span></span>
+        <span class="slot-main"><small>${c.name}${flag}</small><b>${esc(p.name)}</b><span class="chips">${chipsOf(c.key, p).slice(0, 4).map(x => `<i>${esc(x)}</i>`).join('')}</span></span>
         ${priceTag(priceOf(b, c.key, p))}</button>`)
       .concat(own.map(o => `<button class="slot filled own" data-a="custom" data-id="${esc(o.id)}">
         ${partVisual(c.key, o.img)}
@@ -450,7 +462,7 @@ function issuesCard(b) {
   const real = st.issues.filter(i => i.level !== 'todo');
   const errs = real.filter(i => i.level === 'error');
   const warns = real.filter(i => i.level === 'warn');
-  const infos = real.filter(i => i.level === 'info');
+  const infos = real.filter(i => i.level === 'info' || i.level === 'unknown');
   let head;
   if (errs.length) head = `<div class="banner err">${icon('x')}<b>${errs.length} Problem${errs.length > 1 ? 'e' : ''} im Build</b></div>`;
   else if (st.todo.length) head = `<div class="banner todo">${icon('info')}<b>Noch offen: ${st.todo.map(i => CAT[i.cats[0]].short).join(', ')}</b></div>`;
@@ -496,7 +508,7 @@ function constraintText(b, cat) {
   if (cat === 'mb') {
     if (cpu) out.push(`CPU-Sockel ${cpu.socket}`);
     if (one(b, 'ram')) out.push(`RAM ${one(b, 'ram').type}`);
-    if (cs) out.push(`Gehäuse ${cs.ff.join('/')}`);
+    if (cs && cs.ff) out.push(`Gehäuse ${cs.ff.join('/')}`);
   }
   if (cat === 'ram' && mb) out.push(`${mb.mem}, ${mb.ramSlots} Slots, max. ${mb.maxRam} GB`);
   if (cat === 'gpu') {
@@ -523,10 +535,13 @@ function constraintText(b, cat) {
     const m2 = st.filter(s => s.iface === 'M.2').length;
     out.push(`${mb.m2 - m2} von ${mb.m2} M.2-Slots frei`);
   }
-  return out;
+  return out.filter(x => !BAD_VALUE.test(x));
 }
 
 const pickerState = { q: '', sort: 'price', showAll: false, compare: [] };
+const catalogCount = cat => (typeof CATALOG !== 'undefined' && CATALOG[cat] ? CATALOG[cat].length.toLocaleString('de-DE') : 0);
+const CATALOG_HINT = { cpu: 'Ryzen 5 3600', mb: 'B550M', ram: 'Vengeance 32', gpu: 'RTX 3070', storage: '980 Pro', cooler: 'Kraken', psu: 'RM750',
+  case: 'Meshify 2', monitor: 'Odyssey', keyboard: 'Huntsman', mouse: 'Viper', headset: 'Arctis' };
 
 function pickerItems(b, cat, idx) {
   // Beim Tauschen eines Mehrfach-Teils (z. B. 2. SSD) das alte Teil vorher herausnehmen
@@ -534,21 +549,24 @@ function pickerItems(b, cat, idx) {
   if (CAT[cat].multi && idx != null) base.parts[cat].splice(idx, 1);
   else if (!CAT[cat].multi) delete base.parts[cat];
   const res = targetRes(b);
-  let items = DB[cat].map(p => {
+  const q = pickerState.q.trim().toLowerCase();
+  // Eigene Datenbank immer, der große Katalog nur bei einer Suche (sonst zu viele Teile)
+  const parts = DB[cat].filter(p => !q || p.name.toLowerCase().includes(q))
+    .concat(q.length >= 2 && typeof searchCatalog === 'function' ? searchCatalog(cat, q, 40) : []);
+  let items = parts.map(p => {
     const issues = checkCandidate(base, cat, p.id);
     const errors = issues.filter(i => i.level === 'error');
     const warns = issues.filter(i => i.level === 'warn');
     const fps = (cat === 'cpu' || cat === 'gpu') && one(base, cat === 'cpu' ? 'gpu' : 'cpu') ? fpsAt(withPart(base, cat, p.id), res) : 0;
     return { p, errors, warns, ok: !errors.length, fps, price: priceOf(b, cat, p) };
   });
-  const q = pickerState.q.trim().toLowerCase();
-  if (q) items = items.filter(x => x.p.name.toLowerCase().includes(q));
   const s = pickerState.sort;
+  const pr = x => (x.price == null ? Infinity : x.price);
   items.sort((a, c) => {
-    if (s === 'perf') return (c.fps || c.p.score || 0) - (a.fps || a.p.score || 0) || a.price - c.price;
-    if (s === 'value') return ((c.fps || c.p.score || 0) / c.price) - ((a.fps || a.p.score || 0) / a.price);
-    if (s === 'desc') return c.price - a.price;
-    return a.price - c.price;
+    if (s === 'perf') return (c.fps || c.p.score || 0) - (a.fps || a.p.score || 0) || pr(a) - pr(c);
+    if (s === 'value') return ((c.fps || c.p.score || 0) / pr(c)) - ((a.fps || a.p.score || 0) / pr(a));
+    if (s === 'desc') return (c.price || 0) - (a.price || 0);
+    return pr(a) - pr(c);
   });
   return { items, res, base };
 }
@@ -579,7 +597,7 @@ function openPicker(cat, idx = null) {
             : cons.length ? `<span class="why ok">${icon('check')}Passt zu deinem Build</span>` : '';
         return `<div class="item ${x.ok ? '' : 'bad'} ${sel ? 'sel' : ''}">
           <button class="item-main" data-a="choose" data-cat="${cat}" data-id="${x.p.id}">
-            <b>${esc(x.p.name)}</b><span class="chips">${CHIPS[cat](x.p).map(v => `<i>${esc(v)}</i>`).join('')}</span>
+            <b>${esc(x.p.name)}</b><span class="chips">${chipsOf(cat, x.p).map(v => `<i>${esc(v)}</i>`).join('')}</span>
             ${x.fps ? `<span class="fps">≈ ${x.fps} FPS in ${res}</span>` : ''}${reason}
           </button>
           <div class="item-side">${priceTag(x.price)}${sel ? '<span class="pill ok">Gewählt</span>' : ''}
@@ -588,7 +606,8 @@ function openPicker(cat, idx = null) {
       };
       return `
         ${cons.length ? `<div class="constraints">${icon('info')}<span><b>Gefiltert passend zu:</b> ${cons.map(esc).join(' · ')}</span></div>` : ''}
-        <input class="search" type="search" placeholder="Suchen …" value="${esc(pickerState.q)}" data-input="pick-q">
+        <input class="search" type="search" placeholder="Suchen – auch im Katalog mit ${catalogCount(cat)} Teilen …" value="${esc(pickerState.q)}" data-input="pick-q">
+        ${pickerState.q.trim().length < 2 && catalogCount(cat) ? `<p class="muted small">Unten: ${DB[cat].length} vollständig geprüfte Teile. Für alle weiteren Modelle einfach den Namen suchen (z. B. „${CATALOG_HINT[cat] || 'Modellname'}“).</p>` : ''}
         <div class="seg">${sorts.map(([k, l]) => `<button class="${pickerState.sort === k ? 'on' : ''}" data-a="pick-sort" data-k="${k}">${l}</button>`).join('')}</div>
         <div class="items">${ok.map(row).join('') || '<p class="muted center">Keine passenden Teile gefunden.</p>'}</div>
         ${bad.length ? `<button class="btn ghost wide" data-a="pick-all">${pickerState.showAll ? 'Unpassende ausblenden' : `${bad.length} unpassende Teile anzeigen`}</button>
@@ -644,11 +663,11 @@ function openCompare(cat) {
       const rows = specs.map(s => {
         let best = null;
         if (s.better && s.v) {
-          const vals = cols.map(x => s.v(x.p, x));
+          const vals = cols.map(x => s.v(x.p, x)).filter(v => typeof v === 'number');
           const target = s.better === 'high' ? Math.max(...vals) : Math.min(...vals);
-          if (vals.filter(v => v === target).length < vals.length) best = target;
+          if (vals.length > 1 && vals.filter(v => v === target).length < vals.length) best = target;
         }
-        return `<tr><th>${s.l}</th>${cols.map(x => `<td class="${best !== null && s.v(x.p, x) === best ? 'best' : ''}">${esc(s.g(x.p, x))}</td>`).join('')}</tr>`;
+        return `<tr><th>${s.l}</th>${cols.map(x => `<td class="${best !== null && s.v(x.p, x) === best ? 'best' : ''}">${esc(clean(s.g(x.p, x)))}</td>`).join('')}</tr>`;
       }).join('');
       return `<div class="cmp-wrap"><table class="cmp-table">
         <thead><tr><th></th>${cols.map(x => `<th>${esc(x.p.name)}</th>`).join('')}</tr></thead>
@@ -671,12 +690,13 @@ function openDetail(cat, idx) {
       const price = priceOf(b, cat, p);
       const img = (b.images || {})[cat + ':' + p.id];
       return `<div class="detail-head">${partVisual(cat, img, true)}<h2>${esc(p.name)}</h2></div>
+        ${isCatalog(p) ? `<div class="banner todo">${icon('info')}<b>Aus dem Teile-Katalog (PCPartPicker-Daten, Stand Juli 2025). Preis = umgerechneter US-Preis. Fehlende Angaben werden bei der Prüfung als „nicht prüfbar“ gemeldet.</b></div>` : ''}
         ${safeImg(img) ? `<p class="muted small">Bild aus deinem Screenshot · <button class="link" data-a="remove-img" data-key="${cat}:${p.id}">Bild entfernen</button></p>` : ''}
         <div class="card"><label class="field"><span>Dein Preis (€)</span>
           <input type="number" inputmode="decimal" min="0" value="${price}" data-input="price" data-cat="${cat}" data-id="${p.id}"></label>
           <p class="muted small">${(b.priceInfo || {})[cat + ':' + p.id] ? `Geizhals-Preis vom ${new Date(b.priceInfo[cat + ':' + p.id]).toLocaleDateString('de-DE')} · ` : ''}Richtpreis: ${fmtEur(p.price)}${price !== p.price ? ` · <button class="link" data-a="reset-price" data-cat="${cat}" data-id="${p.id}">zurücksetzen</button>` : ''}</p>
           <button class="btn ghost small" data-a="geizhals" data-cat="${cat}" data-id="${p.id}">${icon('link')}Auf Geizhals ansehen</button></div>
-        <div class="card"><table class="spec">${SPECS[cat].map(s => `<tr><th>${s.l}</th><td>${esc(s.g(p))}</td></tr>`).join('')}</table></div>
+        <div class="card"><table class="spec">${SPECS[cat].map(s => `<tr><th>${s.l}</th><td>${esc(clean(s.g(p)))}</td></tr>`).join('')}</table></div>
         ${issues.length ? `<div class="card issues"><ul>${issues.map(i => `<li class="${i.level === 'error' ? 'err' : i.level}">${icon(i.level === 'error' ? 'x' : i.level === 'warn' ? 'warn' : 'info')}<span>${esc(i.msg)}</span></li>`).join('')}</ul></div>`
           : `<div class="banner ok">${icon('check')}<b>Passt zu deinem Build</b></div>`}`;
     },
@@ -716,7 +736,7 @@ async function refreshPrices(b) {
     if (priceState.cancel) break;
     priceState.current = p.name;
     refreshBudgetProgress();
-    const find = html => itemsFromHtml(html || '').filter(i => i.cat === cat && i.id === p.id && i.price)
+    const find = html => itemsFromHtml(html || '').filter(i => i.cat === cat && i.price && (i.id === p.id || (isCatalog(p) && catalogCovers(i.name, p))))
       .sort((x, y) => (x.quality === 'exact' ? 0 : 1) - (y.quality === 'exact' ? 0 : 1))[0];
     let hit = null;
     try {
@@ -1134,6 +1154,7 @@ function openReview(items, title) {
             <div class="imp-fields">
               <select data-input="imp-cat" data-i="${i}">${CATS.map(c => `<option value="${c.key}" ${c.key === it.cat ? 'selected' : ''}>${c.name}</option>`).join('')}</select>
               <select data-input="imp-part" data-i="${i}"><option value="">Eigenes Teil (nicht geprüft)</option>
+                ${it.id && !DB[it.cat].some(p => p.id === it.id) && findPart(it.cat, it.id) ? `<option value="${esc(it.id)}" selected>${esc(findPart(it.cat, it.id).name)} (Katalog)</option>` : ''}
                 ${DB[it.cat].map(p => `<option value="${p.id}" ${p.id === it.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
               <div class="money"><input type="number" inputmode="numeric" min="0" placeholder="Preis" value="${it.price || ''}" data-input="imp-price" data-i="${i}"><b>€</b></div>
             </div></div>`;
@@ -1437,6 +1458,7 @@ window.SB = {
   },
   // Text/Link, der an die App geteilt wurde: Build-Code, Geizhals-Link oder Teileliste
   receiveImport(text) {
+    if (!catalogReady) { loadCatalog().then(() => SB.receiveImport(text)); return; }
     if (decodeBuild(text)) { openImport(text); return; }
     const url = parseListUrl(text);
     if (url) {
@@ -1451,6 +1473,7 @@ window.SB = {
   },
   // Screenshots, die an die App geteilt wurden
   receiveImages(list) {
+    if (!catalogReady) { loadCatalog().then(() => SB.receiveImages(list)); return; }
     if (!sheets.some(x => x.hub)) openImportHub();
     runScreenshotImport(list || []);
   },
@@ -1470,4 +1493,8 @@ window.SB = {
 };
 
 $('.topbar .icon-btn').innerHTML = icon('share');
-refresh();
+// Gespeicherte Builds können Katalogteile enthalten – daher erst den Katalog laden
+let catalogReady = false;
+$('#view').innerHTML = '<p class="muted center loading">Teile werden geladen …</p>';
+renderNav();
+loadCatalog().then(() => { catalogReady = true; refresh(); });

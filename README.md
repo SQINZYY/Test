@@ -2,7 +2,7 @@
 
 Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die garantiert zusammenpassen, Teile vergleichen, Budget verwalten, den eigenen PC mit Freunden teilen und Upgrade-Tipps bekommen.
 
-**APK:** [`release/SetupBuilder.apk`](release/SetupBuilder.apk) (ab Android 7, ca. 7 MB). Internet wird nur für Geizhals (Wunschlisten und Preise) genutzt.
+**APK:** [`release/SetupBuilder.apk`](release/SetupBuilder.apk) (ab Android 7, ca. 8 MB). Internet wird nur für Geizhals (Wunschlisten und Preise) genutzt.
 
 ## Installieren
 
@@ -13,6 +13,10 @@ Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die ga
 ## Funktionen
 
 - **Entdecken** – Setup-Stile (Teal Night, Budget-Einstieg, Clean White, Mini-ITX, 4K Battlestation, Streamer) als Startpunkt übernehmen.
+- **Teile:** 263 vollständig geprüfte Teile (eigene Datenbank mit allen Maßen) plus ein **Katalog mit rund 51.000 weiteren Teilen**
+  aus dem [PC-Part-Dataset](https://github.com/docyx/pc-part-dataset) (MIT, Daten von PCPartPicker, Stand Juli 2025). Katalogteile findet man
+  über die Suche in der Teileauswahl; sie werden auch beim Import erkannt. Was im Katalog fehlt (z. B. max. GPU-Länge eines Gehäuses,
+  Kühlerhöhe, Stromstecker), meldet die App als „nicht automatisch prüfbar“ statt zu raten. Katalogpreise sind umgerechnete US-Preise.
 - **Builder** – PC-Komponenten plus Setup (Monitore, Tastatur, Maus, Headset, Stuhl, Tisch, Extras).
   Die Teileauswahl zeigt **nur Teile, die zum Rest des Builds passen**. Geprüft wird u. a.:
   - CPU ↔ Mainboard-Sockel (AM4, AM5, LGA1700, LGA1851), BIOS-Hinweise
@@ -53,6 +57,7 @@ Preise sind Richtpreise und FPS-Werte grobe Schätzungen. Alle Daten bleiben auf
 - `app/assets/www/` – die Oberfläche (HTML/CSS/JS): `data.js` (Teile-Datenbank), `engine.js` (Kompatibilität, Leistung, Upgrades, Teilen),
   `import.js` (Erkennung von Teilen in Geizhals-HTML/Text), `ocr.js` (Screenshots → Text → Teile + Produktbilder),
   `sharecard.js` (Build als Bild), `app.js` (UI)
+- `app/assets/www/catalog.json` + `catalog.js` – Teile-Katalog und Suche; erzeugt mit `node tools/build-catalog.js <pfad-zum-pc-part-dataset>`
 - `app/assets/www/vendor/tesseract/` – tesseract.js 7 mit englischen Sprachdaten (Apache-2.0)
 - `app/java/…/MainActivity.java` – WebView-Hülle: Teilen, Zwischenablage, Speicher, eingebauter Browser für Geizhals, Bildauswahl,
   geteilte Links/Screenshots empfangen; `ShareProvider.java` stellt das Bild der Build-Karte zum Teilen bereit
@@ -64,7 +69,7 @@ Preise sind Richtpreise und FPS-Werte grobe Schätzungen. Alle Daten bleiben auf
 ```sh
 pip install cryptography
 ./tools/build.sh                          # -> release/SetupBuilder.apk
-VERSION_CODE=4 VERSION_NAME=1.3 ./tools/build.sh
+VERSION_CODE=5 VERSION_NAME=1.4 ./tools/build.sh
 ```
 
 Signiert wird mit dem Debug-Schlüssel `tools/debug-signing.p12` (Passwort `android`), damit Updates sich über die alte Version installieren lassen. Für eine Veröffentlichung im Play Store einen eigenen, geheimen Schlüssel verwenden.
