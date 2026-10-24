@@ -9,6 +9,7 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -53,6 +54,8 @@ public class MainActivity extends Activity {
                 deliverPending();
             }
         });
+        // Ohne WebChromeClient zeigt die WebView keine confirm()-Dialoge an
+        web.setWebChromeClient(new WebChromeClient());
         setContentView(web);
 
         handleIntent(getIntent());

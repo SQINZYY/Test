@@ -2,6 +2,7 @@
 var assert = require('assert');
 var D = require('./assets/www/data.js');
 var G = require('./assets/www/generator.js');
+var S = require('./assets/www/game.js');
 
 // Gleicher Code → gleicher Charakter
 var opts = G.randomOptions('dark', 'f', 'chaos');
@@ -75,4 +76,26 @@ D.STYLE_IDS.forEach(function (id) {
   assert(st.weaponTiers.indexOf(3) >= 0, id);
 });
 
-console.log('Alle Tests bestanden', counts);
+// Arena: jeder Lauf endet, Werte bleiben gültig, gleicher Seed = gleicher Verlauf; stärkere Charaktere kommen weiter
+function runFloor(c, seed) {
+  var s = S.newRun(c, seed), guard = 0;
+  while (!s.over && guard++ < 5000) {
+    if (s.phase === 'reward') { S.bless(s, s.choices[0].id); continue; }
+    S.act(s, S.autoAction(s));
+    assert(!isNaN(s.player.hp) && !isNaN(s.enemy.hp), 'NaN im Kampf');
+    assert(s.player.hp <= s.player.maxHp && s.enemy.hp <= s.enemy.maxHp);
+  }
+  assert(s.over, 'Lauf endet nie');
+  return s.floor;
+}
+var floors = {};
+for (var k = 0; k < 1500; k++) {
+  var ch = G.generate(G.randomOptions(D.STYLE_IDS[k % 4], 'r', 'balanced'));
+  assert.strictEqual(runFloor(ch, k + 1), runFloor(ch, k + 1));
+  (floors[ch.rarity] = floors[ch.rarity] || []).push(runFloor(ch, k + 1));
+}
+var median = function (a) { a.sort(function (x, y) { return x - y; }); return a[a.length >> 1]; };
+assert(median(floors.common) < median(floors.legendary), 'Legendär muss weiter kommen als Gewöhnlich');
+assert(median(floors.mythic) < 60, 'Turm muss irgendwann zu schwer werden');
+
+console.log('Alle Tests bestanden', counts, 'Arena-Median', Object.keys(floors).map(function (r) { return r + ' ' + median(floors[r]); }).join(', '));

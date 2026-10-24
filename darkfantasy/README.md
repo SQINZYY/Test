@@ -3,7 +3,7 @@
 Android-App, die Fantasy-Charaktere mit zufälligen Namen, Klassen, Fähigkeiten, Seltenheiten und Lore erschafft – komplett offline,
 ohne Berechtigungen.
 
-**APK:** [`release/DarkFantasyGenerator.apk`](../release/DarkFantasyGenerator.apk) (ab Android 7, ca. 90 KB).
+**APK:** [`release/DarkFantasyGenerator.apk`](../release/DarkFantasyGenerator.apk) (ab Android 7, ca. 100 KB).
 Installieren wie SetupBuilder: APK aufs Handy laden, öffnen, „Unbekannte Apps installieren“ erlauben.
 
 ## Funktionen
@@ -16,6 +16,11 @@ Installieren wie SetupBuilder: APK aufs Handy laden, öffnen, „Unbekannte Apps
   Gesinnung, Macht, 6 Attribute, Waffe, Fähigkeiten, Lore (Herkunft, Wendepunkt, Ziel, Geheimnis) und Zitat.
 - **Geschlecht** wählbar (zufällig/männlich/weiblich) – Klassen, Völker und Lore werden passend gebeugt.
 - **Neu würfeln** von Name, Fähigkeiten oder Lore einzeln.
+- **Arena – Turm der Schatten** (Spiel): Mit einem Charakter aus Sammlung oder Verlauf Ebene für Ebene gegen Gegner kämpfen,
+  rundenbasiert. Aktionen: Angriff, Verteidigen und die Fähigkeiten des Charakters – je nach Beschreibung Schaden, Betäuben, Heilung,
+  Schild, Schaden über Zeit, Stärkung oder Lebensraub; stärkere Stufen wirken stärker, laden aber länger. Gegner zeigen ihre Absicht an
+  (z. B. „Schwerer Schlag 152“), alle 5 Ebenen kommt ein Boss, nach jedem Sieg wählt man einen von drei Segen. Passive Fähigkeiten
+  geben Dauerboni, die Mythische Gabe eine Wiederbelebung. Rekorde pro Charakter und Bestenliste.
 - **Sammlung** (♡ Speichern, Filter nach Seltenheit) und **Verlauf** der letzten 60 Beschwörungen.
 - **Selbst erstellen:** eigener Editor für Name, Beiname, Stil, Geschlecht, Volk, Klasse, Gesinnung, Seltenheit, Stufe, Attribute
   (Punkte-Budget je Seltenheit), Fähigkeiten, Ultimative Fähigkeit, Mythische Gabe, Waffe (auch eigene), Lore und Zitat – mit 🎲 für
@@ -27,8 +32,9 @@ Installieren wie SetupBuilder: APK aufs Handy laden, öffnen, „Unbekannte Apps
 
 ## Aufbau
 
-- `assets/www/data.js` – alle Inhalte, `generator.js` – Generator mit Seeds und Codes, `sigil.js` – Porträt-SVG, `app.js` – Oberfläche
+- `assets/www/data.js` – alle Inhalte, `generator.js` – Generator mit Seeds und Codes, `sigil.js` – Porträt-SVG, `app.js` – Oberfläche,
+  `game.js` – Spiellogik der Arena, `arena.js` – Kampfbildschirm
 - `java/…/MainActivity.java` – WebView-Hülle: Speicher, Teilen, Zwischenablage, geteilte Codes empfangen
 - `build.sh` – baut die APK ohne Android SDK (gleiche Werkzeuge und Signatur wie `tools/build.sh`)
-- `test.js` – Tests für den Generator: `node darkfantasy/test.js`
+- `test.js` – Tests für Generator, Editor und Arena: `node darkfantasy/test.js`
 - `make_icons.py` – erzeugt die PNG-Icons

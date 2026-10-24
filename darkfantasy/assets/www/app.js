@@ -556,6 +556,7 @@
     if (view === 'collection') renderCollection();
     if (view === 'history') renderHistory();
     if (view === 'editor') renderEditor();
+    if (view === 'arena' && window.DFArena) DFArena.render();
     window.scrollTo(0, 0);
   }
   document.querySelector('.tabs').addEventListener('click', function (e) {
@@ -563,8 +564,23 @@
     if (b) show(b.dataset.view);
   });
 
+  // Für die Arena (arena.js)
+  window.DFApp = {
+    store: store, toast: toast, esc: esc, sigilSeed: sigilSeed,
+    champions: function () {
+      var seen = {}, out = [];
+      favorites.concat(history).forEach(function (f) {
+        if (seen[f.code]) return;
+        seen[f.code] = true;
+        out.push(f.char);
+      });
+      return out.sort(function (a, b) { return b.power - a.power; });
+    }
+  };
+
   window.DF = {
     back: function () {
+      if (window.DFArena && DFArena.back()) return true;
       if (!$('dialog').hidden) { $('dialog').hidden = true; return true; }
       if (!$('detail').hidden) { $('detail').hidden = true; return true; }
       if (!$('view-create').classList.contains('active')) { show('create'); return true; }

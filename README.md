@@ -3,7 +3,7 @@
 Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die garantiert zusammenpassen, Teile vergleichen, Budget verwalten, den eigenen PC mit Freunden teilen und Upgrade-Tipps bekommen.
 
 > Ebenfalls in diesem Repo: **[Dark Fantasy Generator](darkfantasy/README.md)** – Fantasy-Charaktere mit zufälligen Namen, Klassen,
-> Fähigkeiten, Seltenheiten und Lore ([`release/DarkFantasyGenerator.apk`](release/DarkFantasyGenerator.apk)).
+> Fähigkeiten, Seltenheiten und Lore, mit Editor und Arena-Spiel ([`release/DarkFantasyGenerator.apk`](release/DarkFantasyGenerator.apk)).
 
 **APK:** [`release/SetupBuilder.apk`](release/SetupBuilder.apk) (ab Android 7, ca. 8 MB). Internet wird nur für Geizhals (Wunschlisten, Preise, Online-Suche) und „PC verbinden“ im eigenen WLAN genutzt.
 

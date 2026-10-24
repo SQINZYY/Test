@@ -102,6 +102,19 @@
     <button class="summon" id="ed-save"><span>In Sammlung speichern</span></button>
   </main>
 
+  <main id="view-arena" class="view">
+    <header class="page-head"><h1>Arena</h1></header>
+    <section class="panel arena-intro">
+      <h3 class="ed-h">Turm der Schatten</h3>
+      <p>Kämpfe dich mit deinen Charakteren Ebene für Ebene nach oben. Gegner zeigen an, was sie als Nächstes tun –
+        verteidige dich gegen schwere Schläge, betäube sie oder heile dich rechtzeitig. Nach jedem Sieg wählst du einen Segen,
+        alle 5 Ebenen wartet ein Boss.</p>
+      <div id="arena-top"></div>
+    </section>
+    <h3 class="ed-h arena-h">Wähle deinen Champion</h3>
+    <div id="arena-list" class="list"></div>
+  </main>
+
   <main id="view-collection" class="view">
     <header class="page-head">
       <h1>Sammlung</h1>
@@ -138,13 +151,43 @@
     </div>
   </div>
 
+  <div id="battle" class="battle" hidden>
+    <div class="b-top">
+      <button class="ghost" id="b-quit">✕ Aufgeben</button>
+      <div class="b-floor" id="b-floor"></div>
+      <div class="b-best" id="b-best"></div>
+    </div>
+    <div class="b-enemy" id="b-enemy">
+      <div class="b-intent" id="b-intent"></div>
+      <div class="b-sigil" id="b-esigil"></div>
+      <div class="b-name" id="b-ename"></div>
+      <div class="hp" id="b-ehp"><i></i><span></span></div>
+      <div class="b-status" id="b-estatus"></div>
+    </div>
+    <div class="b-log" id="b-log"></div>
+    <div class="b-player" id="b-player">
+      <div class="b-prow">
+        <div class="b-psigil" id="b-psigil"></div>
+        <div class="b-pinfo">
+          <div class="b-pname" id="b-pname"></div>
+          <div class="hp" id="b-php"><i></i><span></span></div>
+          <div class="b-status" id="b-pstatus"></div>
+        </div>
+      </div>
+      <div class="b-actions" id="b-actions"></div>
+    </div>
+    <div class="b-modal" id="b-modal" hidden></div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <nav class="tabs">
     <button data-view="create" class="active">
-      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 9l-5.2 4.3L17.6 21 12 17.3 6.4 21l1.8-7.7L3 9l6.6-.4z"/></svg>Erschaffen</button>
+      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 9l-5.2 4.3L17.6 21 12 17.3 6.4 21l1.8-7.7L3 9l6.6-.4z"/></svg>Beschwören</button>
     <button data-view="editor">
-      <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Selbst erstellen</button>
+      <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Erstellen</button>
+    <button data-view="arena">
+      <svg viewBox="0 0 24 24"><path d="M6.9 3 3 3v3.9l6.2 6.2-2.1 2.1-1.4-1.4-1.4 1.4 2.5 2.5L4 20.5 5.5 22l2.8-2.8 2.5 2.5 1.4-1.4-1.4-1.4 2.1-2.1zM17.1 3 21 3v3.9l-5.4 5.4-3.9-3.9zM13.6 16.3l2.1 2.1-1.4 1.4 1.4 1.4 2.5-2.5 2.8 2.8 1.5-1.5-2.8-2.8 2.5-2.5-1.4-1.4-1.4 1.4-2.1-2.1z"/></svg>Arena</button>
     <button data-view="collection">
       <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.3C1 8 3.5 4 7.2 4c2 0 3.6 1.1 4.8 2.8C13.2 5.1 14.8 4 16.8 4 20.5 4 23 8 21.5 11.7 19.5 16.4 12 21 12 21z"/></svg>Sammlung</button>
     <button data-view="history">
@@ -154,6 +197,8 @@
   <script src="data.js"></script>
   <script src="generator.js"></script>
   <script src="sigil.js"></script>
+  <script src="game.js"></script>
   <script src="app.js"></script>
+  <script src="arena.js"></script>
 </body>
 </html>
