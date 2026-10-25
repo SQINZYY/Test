@@ -21,28 +21,25 @@
       </svg>
       <span class="wordmark">Standbild</span>
     </div>
-    <p class="claim">Video rein, Poster raus. Die App sucht die stärksten Momente und setzt sie als druckfertige Poster.</p>
+    <p class="claim">Video oder Foto rein, Poster raus. Aus Videos sucht die App die stärksten Momente, Fotos setzt sie direkt als druckfertige Poster.</p>
   </div>
 </header>
 
 <main class="layout">
   <aside class="panel" aria-label="Video und Einstellungen">
     <section class="step">
-      <h2 class="step-title"><span class="step-no">1</span> Video</h2>
-      <label class="drop" id="drop" for="file">
-        <input type="file" id="file" accept="video/*,.mp4,.mov,.webm,.m4v,.mkv">
-        <span class="drop-main"><span class="drop-strong">Video auswählen</span> oder hierher ziehen</span>
-        <span class="drop-sub">MP4, MOV oder WebM. TikTok, YouTube Shorts oder längere Videos vorher herunterladen.</span>
-      </label>
+      <h2 class="step-title"><span class="step-no">1</span> Video oder Foto</h2>
+      <div class="drop" id="drop">
+        <span class="drop-main">Video oder Fotos hierher ziehen</span>
+        <div class="drop-btns">
+          <label class="btn btn-primary" for="file">Video wählen<input type="file" id="file" accept="video/*,.mp4,.mov,.webm,.m4v,.mkv"></label>
+          <label class="btn" for="photos">Fotos wählen<input type="file" id="photos" accept="image/*" multiple></label>
+        </div>
+        <span class="drop-sub">Video: MP4, MOV oder WebM, TikTok und YouTube vorher herunterladen. Fotos: JPG, PNG oder WebP, bis zu 12 auf einmal.</span>
+      </div>
 
       <div class="progress" id="progress" hidden>
-        <ol class="phases" id="phases">
-          <li data-phase="load">Video öffnen</li>
-          <li data-phase="sample">Bilder abtasten <span class="count" data-count="sample"></span></li>
-          <li data-phase="refine">Schärfste Momente suchen <span class="count" data-count="refine"></span></li>
-          <li data-phase="capture">Standbilder in voller Größe holen <span class="count" data-count="capture"></span></li>
-          <li data-phase="colors">Farben und Ausschnitte bestimmen</li>
-        </ol>
+        <ol class="phases" id="phases"></ol>
         <div class="bar"><span id="bar-fill"></span></div>
         <canvas id="live" class="live" height="40" aria-hidden="true"></canvas>
       </div>
@@ -95,7 +92,7 @@
   <section class="gallery" aria-labelledby="gallery-title">
     <div class="gallery-head">
       <h2 id="gallery-title">Posterideen</h2>
-      <p class="gallery-sub" id="gallery-sub">Lade ein Video hoch, dann entstehen hier zwölf Poster in verschiedenen Stilen.</p>
+      <p class="gallery-sub" id="gallery-sub">Lade ein Video oder Foto hoch, dann entstehen hier zwölf Poster in verschiedenen Stilen.</p>
     </div>
     <div class="grid" id="grid"></div>
   </section>
@@ -119,7 +116,7 @@
         <div class="chips" id="ed-tpls"></div>
       </div>
       <div class="ed-group">
-        <h3>Standbild</h3>
+        <h3 id="ed-frames-title">Standbild</h3>
         <div class="thumbs" id="ed-frames"></div>
       </div>
       <div class="ed-group">

@@ -124,6 +124,9 @@
     s = s.split(/\s+/).filter(w => w && !/^\d{1,3}$/.test(w) && !/^\d{5,}$/.test(w)
       && !(w.length >= 6 && /\d/.test(w) && /[a-z]/i.test(w)) && !/^\d{3,4}p$/i.test(w) && !/^(io|com|net|app|www|download|video|img|vid|mov|dsc|pxl|mvimg)$/i.test(w)).join(' ');
     s = s.trim();
+    // nur klein geschrieben (typisch für Dateinamen) → Wortanfänge groß
+    const small = /^(am|im|an|in|auf|und|der|die|das|den|dem|des|von|vom|mit|zu|zum|zur|bei|the|of|and|a|at|on|to)$/;
+    if (s === s.toLowerCase()) s = s.split(' ').map((w, i) => i && small.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     return (s.match(/[a-zäöüß]/gi) || []).length >= 3 ? s : '';
   };
 
@@ -334,9 +337,13 @@
   // Bildnachweis-Block wie auf Filmplakaten: kleine Wörter, große Zahlen, schmal gesetzt
   function billing(ctx, d, y, color, maxW) {
     const { u, a, frame } = d;
-    const lines = [
+    const colors = [d.pal.slice(0, 3).map(p => hex(p.rgb)).join(' '), 1];
+    const lines = d.photo ? [
+      [['Foto', 0], [pad(d.num), 1], ['von', 0], [pad(d.total), 1], ['Format', 0], [d.px(frame).replace(' × ', '×'), 1], ['Pixel', 0]],
+      [['Farben', 0], colors, ['gestaltet mit', 0], ['Standbild', 1]],
+    ] : [
       [[String(a.checked), 1], ['Bilder geprüft', 0], [String(a.scenes.length), 1], [a.scenes.length === 1 ? 'Szene' : 'Szenen', 0], ['Standbild bei', 0], [tc(frame.t, true), 1]],
-      [['Laufzeit', 0], [tc(a.duration), 1], [`${a.width}×${a.height}`, 1], ['Pixel', 0], ['Farben', 0], [d.pal.slice(0, 3).map(p => hex(p.rgb)).join(' '), 1]],
+      [['Laufzeit', 0], [tc(a.duration), 1], [`${a.width}×${a.height}`, 1], ['Pixel', 0], ['Farben', 0], colors],
     ];
     ctx.fillStyle = color;
     lines.forEach((parts, li) => {
@@ -406,8 +413,8 @@
       ctx.fillStyle = css(paper); ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = css(ink);
       setFont(ctx, 1.8 * u, F.mono, { weight: 600, spacing: 0.08 });
-      put(ctx, 'STANDBILD', m, m + 1.6 * u);
-      put(ctx, tc(d.frame.t, true), W / 2, m + 1.6 * u, 'center');
+      put(ctx, d.photo ? 'FOTO' : 'STANDBILD', m, m + 1.6 * u);
+      put(ctx, d.photo ? d.px(d.frame) : tc(d.frame.t, true), W / 2, m + 1.6 * u, 'center');
       put(ctx, `BILD ${pad(d.num)} / ${pad(d.total)}`, W - m, m + 1.6 * u, 'right');
       rule(ctx, m, m + 3.6 * u, W - m, 0.25 * u, css(ink));
 
@@ -430,7 +437,7 @@
       const colW = (W - 2 * m) / 3;
       const cols = [
         ['Untertitel', d.subtitle || '–'],
-        ['Laufzeit · Szenen', `${tc(d.a.duration)} · ${d.a.scenes.length}`],
+        d.photo ? ['Format', `${d.px(d.frame)} px`] : ['Laufzeit · Szenen', `${tc(d.a.duration)} · ${d.a.scenes.length}`],
         ['Farbe', `${hex(d.accent)} ${colorName(d.accent)}`],
       ];
       cols.forEach(([k, v], i) => {
@@ -472,7 +479,7 @@
       setFont(ctx, 1.7 * u, F.mono, { spacing: 0.05 });
       ctx.fillStyle = css(paper, 0.8);
       put(ctx, `${hex(dark)} / ${hex(light)}`, x, 15 * u, 'right');
-      put(ctx, tc(d.frame.t, true), x, 17.6 * u, 'right');
+      put(ctx, d.label(d.frame), x, 17.6 * u, 'right');
       if (d.line) {
         ctx.fillStyle = css(paper);
         setFont(ctx, 4 * u, F.serif, { italic: true });
@@ -491,7 +498,7 @@
       ctx.fillStyle = css(ink, 0.6);
       setFont(ctx, 1.6 * u, F.mono, { spacing: 0.08 });
       put(ctx, `NR. ${pad(d.num)}`, m, m - 2 * u);
-      put(ctx, 'VIDEOSTILL', W - m, m - 2 * u, 'right');
+      put(ctx, d.photo ? 'FOTOGRAFIE' : 'VIDEOSTILL', W - m, m - 2 * u, 'right');
 
       const f = d.frame, ar = f.content.w / f.content.h;
       let bw = W - 2 * m, bh = bw / ar;
@@ -515,7 +522,10 @@
       ctx.fillStyle = css(ink, 0.8);
       setFont(ctx, 1.75 * u, F.mono);
       const sceneNo = f.scene >= 0 ? `Szene ${f.scene + 1} von ${d.a.scenes.length}` : `${d.a.scenes.length} Szenen`;
-      [`Standbild bei ${tc(f.t, true)}`, `${d.a.width} × ${d.a.height} Pixel`, sceneNo].forEach((l, i) => put(ctx, l, m, y + i * 2.7 * u));
+      const facts = d.photo
+        ? [`Foto ${d.num} von ${d.total}`, `${d.px(f)} Pixel`, wrap(ctx, f.name || '', W * 0.5, 1)[0] || '']
+        : [`Standbild bei ${tc(f.t, true)}`, `${d.a.width} × ${d.a.height} Pixel`, sceneNo];
+      facts.forEach((l, i) => put(ctx, l, m, y + i * 2.7 * u));
       const sw = 4.6 * u, gap = 1 * u, pal = d.pal.slice(0, 6);
       pal.forEach((p, i) => {
         ctx.fillStyle = css(p.rgb);
@@ -560,7 +570,7 @@
       t.lines.forEach((l, i) => put(ctx, l, m, ty + t.px * 0.8 + i * t.px * 0.95));
       ctx.fillStyle = css(fg, 0.65);
       setFont(ctx, 1.7 * u, F.mono, { spacing: 0.04 });
-      put(ctx, [d.subtitle, tc(d.frame.t, true)].filter(Boolean).join('  ·  '), m, H - m + 1.5 * u);
+      put(ctx, [d.subtitle, d.label(d.frame)].filter(Boolean).join('  ·  '), m, H - m + 1.5 * u);
     },
   };
 
@@ -593,7 +603,7 @@
         setFont(ctx, 1.35 * u, F.mono, { weight: 600, spacing: 0.1 });
         ctx.translate(x0 + 6.4 * u, fy + fh / 2);
         ctx.rotate(-Math.PI / 2);
-        put(ctx, `${i * 6 + 12}A  >  ${tc(f.t, true)}`, 0, 0, 'center');
+        put(ctx, `${i * 6 + 12}A  >  ${d.label(f)}`, 0, 0, 'center');
         ctx.restore();
         ctx.save();
         ctx.fillStyle = '#e8a03a';
@@ -609,7 +619,7 @@
       put(ctx, t.lines[0], W / 2, y1 + 6 * u + t.px * 0.78, 'center');
       ctx.fillStyle = css(ink, 0.7);
       setFont(ctx, 1.8 * u, F.mono, { spacing: 0.04 });
-      put(ctx, [d.subtitle, frames.map(f => tc(f.t)).join(' / ')].filter(Boolean).join('  ·  '), W / 2, H - 6 * u, 'center');
+      put(ctx, [d.subtitle, frames.map(d.short).join(' / ')].filter(Boolean).join('  ·  '), W / 2, H - 6 * u, 'center');
     },
   };
 
@@ -624,8 +634,8 @@
       const t = titleLayout(ctx, d.title, F.heavy, {}, W * 0.6, 7 * u, 1, 1, 6.4 * u);
       put(ctx, t.lines[0], m, m + t.px * 0.78);
       setFont(ctx, 1.7 * u, F.mono, { spacing: 0.06 });
-      put(ctx, `ROLLE 01 · ${d.frames.length} BILDER`, W - m, m + 2 * u, 'right');
-      put(ctx, `LAUFZEIT ${tc(d.a.duration)}`, W - m, m + 4.6 * u, 'right');
+      put(ctx, d.photo ? `MAPPE 01 · ${d.frames.length} FOTOS` : `ROLLE 01 · ${d.frames.length} BILDER`, W - m, m + 2 * u, 'right');
+      put(ctx, d.photo ? `${d.a.palette.length} FARBEN` : `LAUFZEIT ${tc(d.a.duration)}`, W - m, m + 4.6 * u, 'right');
       rule(ctx, m, m + 8.5 * u, W - m, 0.25 * u, css(ink));
 
       const gx = 2.4 * u, lab = 3.4 * u;
@@ -651,7 +661,7 @@
         setFont(ctx, 1.45 * u, F.mono, { weight: 600 });
         put(ctx, `${pad(i + 1)}A`, x, y + ch + 2.6 * u);
         setFont(ctx, 1.45 * u, F.mono);
-        put(ctx, tc(f.t, true), x + cw, y + ch + 2.6 * u, 'right');
+        put(ctx, d.photo ? d.px(f) : tc(f.t, true), x + cw, y + ch + 2.6 * u, 'right');
         if (f.key && f.rank === 0) mark = { x, y, w: cw, h: ch };
       });
       if (mark) {
@@ -677,7 +687,7 @@
       put(ctx, wrap(ctx, d.subtitle || d.line || '', W * 0.5, 1)[0] || '', m, H - m);
       setFont(ctx, 1.6 * u, F.mono);
       ctx.fillStyle = css(ink, 0.7);
-      put(ctx, `${d.a.scenes.length} SZENEN · ${d.a.checked} BILDER GEPRÜFT`, W - m, H - m, 'right');
+      put(ctx, d.photo ? `${d.frames.length} FOTOS · ${d.a.palette.length} FARBEN` : `${d.a.scenes.length} SZENEN · ${d.a.checked} BILDER GEPRÜFT`, W - m, H - m, 'right');
     },
   };
 
@@ -712,7 +722,12 @@
       ctx.shadowColor = 'transparent';
 
       ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 1.4 * u;
-      const items = [
+      const [fw, fh] = d.frame.size || [d.a.width, d.a.height];
+      const items = d.photo ? [
+        [String(d.pal.length), 'Farben', 'im Bild'],
+        [num(fw * fh / 1e6, fw * fh < 1e7 ? 1 : 0), 'Megapixel', 'Auflösung'],
+        [String(d.total), d.total === 1 ? 'Foto' : 'Fotos', 'in dieser Ausgabe'],
+      ] : [
         [String(d.a.scenes.length), 'Szenen', 'im Schnitt'],
         [String(d.a.keyframes.length), 'Standbilder', 'ausgewählt'],
         [String(d.pal.length), 'Farben', 'die bleiben'],
@@ -801,7 +816,7 @@
       }
       ctx.fillStyle = css(ink, 0.75);
       setFont(ctx, 1.7 * u, F.mono, { spacing: 0.08 });
-      put(ctx, (d.line ? wrap(ctx, d.line.toUpperCase(), x1 - x0, 1)[0] : tc(d.frame.t, true)), W / 2, H - 5 * u, 'center');
+      put(ctx, (d.line ? wrap(ctx, d.line.toUpperCase(), x1 - x0, 1)[0] : d.label(d.frame)), W / 2, H - 5 * u, 'center');
       grain(ctx, W, H, 0.28);
     },
   };
@@ -876,10 +891,10 @@
       }
       ctx.fillStyle = css(fg, 0.85);
       setFont(ctx, 9 * u, F.serif);
-      put(ctx, tc(d.frame.t), W / 2, H - 9 * u, 'center');
+      put(ctx, d.photo ? pad(d.num) : tc(d.frame.t), W / 2, H - 9 * u, 'center');
       ctx.fillStyle = css(fg, 0.55);
       setFont(ctx, 1.5 * u, F.mono, { spacing: 0.2 });
-      put(ctx, 'STANDBILD', W / 2, H - 9 * u - 9.5 * u, 'center');
+      put(ctx, d.photo ? 'FOTO' : 'STANDBILD', W / 2, H - 9 * u - 9.5 * u, 'center');
     },
   };
 
@@ -910,17 +925,22 @@
 
       ctx.fillStyle = css(fg, 0.6);
       setFont(ctx, 1.6 * u, F.mono, { spacing: 0.08 });
-      put(ctx, 'FILMBARCODE', m, ay - 3 * u);
-      put(ctx, `1 STREIFEN = ${num(a.duration / n, 2)} S`, W - m, ay - 3 * u, 'right');
+      put(ctx, d.photo ? 'FARBSTREIFEN' : 'FILMBARCODE', m, ay - 3 * u);
+      put(ctx, d.photo ? `${a.stripes} STREIFEN PRO FOTO` : `1 STREIFEN = ${num(a.duration / n, 2)} S`, W - m, ay - 3 * u, 'right');
       // Szenenschnitte und Zeitachse
       ctx.fillStyle = css(fg, 0.75);
       for (const sc of a.scenes) {
+        if (d.photo && sc.start === 0) continue;
         const x = ax + sc.start / a.duration * aw;
         ctx.fillRect(x - 0.1 * u, ay + ah + 0.8 * u, 0.2 * u, 1.6 * u);
       }
       setFont(ctx, 1.5 * u, F.mono);
       ctx.fillStyle = css(fg, 0.6);
-      for (let k = 0; k <= 4; k++) put(ctx, tc(a.duration * k / 4), ax + aw * k / 4, ay + ah + 5 * u, k === 0 ? 'left' : k === 4 ? 'right' : 'center');
+      if (d.photo) {
+        if (a.scenes.length > 1 && a.scenes.length <= 8) a.scenes.forEach((sc, k) => put(ctx, `FOTO ${k + 1}`, ax + (sc.start + 0.5) / a.duration * aw, ay + ah + 5 * u, 'center'));
+      } else {
+        for (let k = 0; k <= 4; k++) put(ctx, tc(a.duration * k / 4), ax + aw * k / 4, ay + ah + 5 * u, k === 0 ? 'left' : k === 4 ? 'right' : 'center');
+      }
 
       const ty = ay + ah + 15 * u;
       ctx.fillStyle = css(fg);
@@ -935,7 +955,9 @@
       }
       ctx.fillStyle = css(fg, 0.55);
       setFont(ctx, 1.6 * u, F.mono, { spacing: 0.04 });
-      put(ctx, `${n} BILDER · ${a.scenes.length} SZENEN · ${a.blackCount} SCHWARZBILDER · ${tc(a.duration)}`, m, H - m + 2 * u);
+      put(ctx, d.photo
+        ? `${n} STREIFEN · ${a.scenes.length} ${a.scenes.length === 1 ? 'FOTO' : 'FOTOS'} · ${a.palette.length} FARBEN`
+        : `${n} BILDER · ${a.scenes.length} SZENEN · ${a.blackCount} SCHWARZBILDER · ${tc(a.duration)}`, m, H - m + 2 * u);
     },
   };
 
@@ -949,6 +971,12 @@
     din: { name: 'DIN A', ratio: 1 / Math.SQRT2, export: [2480, 3508] },
     insta: { name: 'Insta 4:5', ratio: 4 / 5, export: [2160, 2700] },
     story: { name: 'Story 9:16', ratio: 9 / 16, export: [2160, 3840] },
+  };
+
+  // Filmstreifen und Kontaktabzug brauchen mehrere Bilder – bei einem einzelnen Foto fallen sie weg
+  S.available = function (a, tpl) {
+    const f = T[tpl].frames;
+    return !((f === 3 || f === 'all') && a.timeline.length < 2);
   };
 
   // Welche Bilder eine Vorlage nutzt
@@ -985,6 +1013,11 @@
       line: poster.line ?? text.line ?? '',
       accent: poster.accent || vivid(pal),
       num: (frame.rank ?? 0) + 1, total: a.keyframes.length, ratio: fmt.ratio,
+      // Fotos haben keine Zeit: dort stehen Nummer und Bildgröße, wo bei Videos Zeitcodes stehen
+      photo: a.kind === 'photo',
+      label: f => a.kind === 'photo' ? `FOTO ${pad((f.index ?? 0) + 1)}` : tc(f.t, true),
+      short: f => a.kind === 'photo' ? `Foto ${(f.index ?? 0) + 1}` : tc(f.t),
+      px: f => (f.size || [a.width, a.height]).join(' × '),
     };
     ctx.save();
     ctx.clearRect(0, 0, W, H);
@@ -1003,7 +1036,7 @@
       const order = K.map((f, i) => i).sort((x, y) => fn(K[y]) - fn(K[x]));
       return order.find(i => (used.get(i) || 0) < (avoid || 1)) ?? order[0];
     };
-    const take = (tpl, i) => { used.set(i, (used.get(i) || 0) + 1); return { tpl, frame: i }; };
+    const take = (tpl, i, extra) => { used.set(i, (used.get(i) || 0) + 1); return Object.assign({ tpl, frame: i }, extra); };
     const list = [];
     list.push(take('kino', 0));
     list.push(take('magazin', n > 1 ? 1 : 0));
@@ -1017,6 +1050,8 @@
     list.push(take('halbton', by(f => f.score + f.stats.std / 80, 2)));
     list.push(take('minimal', by(f => -Math.abs(f.stats.mean - 120), 2)));
     list.push(take('barcode', 0));
-    return list;
+    // Ein einzelnes Foto: statt Filmstreifen und Kontaktabzug zwei Varianten mit engerem Ausschnitt
+    if (a.timeline.length < 2) list.push(take('kino', 0, { zoom: 1.5 }), take('raster', 0, { zoom: 1.5 }));
+    return list.filter(p => S.available(a, p.tpl));
   };
 })();

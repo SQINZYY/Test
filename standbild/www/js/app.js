@@ -88,15 +88,30 @@
 
   // ---------- Video laden ----------
 
-  const PHASES = ['load', 'sample', 'refine', 'capture', 'colors'];
-  const WEIGHT = { load: 0.03, sample: 0.72, refine: 0.1, capture: 0.12, colors: 0.03 };
+  const STEPS = {
+    video: [['load', 'Video öffnen', 0.03], ['sample', 'Bilder abtasten', 0.72], ['refine', 'Schärfste Momente suchen', 0.1],
+      ['capture', 'Standbilder in voller Größe holen', 0.12], ['colors', 'Farben und Ausschnitte bestimmen', 0.03]],
+    photo: [['load', 'Fotos laden', 0.9], ['colors', 'Farben und Ausschnitte bestimmen', 0.1]],
+  };
+  let PHASES = [], WEIGHT = {};
   let live = null;
 
-  function showProgress() {
+  function showProgress(kind) {
+    PHASES = STEPS[kind].map(x => x[0]);
+    WEIGHT = Object.fromEntries(STEPS[kind].map(x => [x[0], x[2]]));
+    const list = $('phases');
+    list.innerHTML = '';
+    for (const [id, label] of STEPS[kind]) {
+      const li = el('li', null, label + ' ');
+      li.dataset.phase = id;
+      const c = el('span', 'count');
+      c.dataset.count = id;
+      li.append(c);
+      list.append(li);
+    }
     $('progress').hidden = false;
-    document.querySelectorAll('#phases li').forEach(li => li.classList.remove('is-now', 'is-done'));
-    document.querySelectorAll('#phases .count').forEach(c => { c.textContent = ''; });
     $('bar-fill').style.width = '0%';
+    $('live').hidden = kind !== 'video';
     const cv = $('live');
     cv.width = Math.max(200, Math.round(cv.clientWidth * Math.min(2, window.devicePixelRatio || 1)));
     cv.height = 80;
@@ -112,6 +127,7 @@
     });
     const count = document.querySelector(`[data-count="${p.phase}"]`);
     if (count && p.total > 1) count.textContent = `${Math.min(p.done + (p.phase === 'sample' ? 0 : 1), p.total)}/${p.total}`;
+    if (!(p.phase in WEIGHT)) return;
     let pct = 0;
     for (let i = 0; i < idx; i++) pct += WEIGHT[PHASES[i]];
     pct += WEIGHT[p.phase] * (p.total ? p.done / p.total : 0);
@@ -132,25 +148,40 @@
     if (m === 'codec') return 'Dieses Video kann der Browser nicht öffnen. Speichere es als MP4 (H.264) und versuch es noch einmal.';
     if (m === 'duration') return 'Die Länge des Videos ließ sich nicht lesen. Versuch es mit einer MP4-Datei.';
     if (m === 'empty') return 'Im Video gab es keine brauchbaren Bilder (nur schwarz oder einfarbig?).';
+    if (m === 'image') return 'Ein Foto ließ sich nicht öffnen. HEIC-Bilder vom iPhone kann nicht jeder Browser lesen, speichere sie als JPG.';
     return 'Die Analyse ist fehlgeschlagen. Versuch es mit einer anderen Videodatei.';
   }
 
-  async function start(file) {
-    if (state.busy || !file) return;
-    if (file.type && !file.type.startsWith('video/') && !/\.(mp4|mov|m4v|webm|mkv|3gp)$/i.test(file.name || '')) {
-      toast('Das ist keine Videodatei. Wähle ein MP4-, MOV- oder WebM-Video.');
-      return;
+  const isVideo = f => (f.type || '').startsWith('video/') || /\.(mp4|mov|m4v|webm|mkv|3gp)$/i.test(f.name || '');
+  const isImage = f => (f.type || '').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|avif|heic)$/i.test(f.name || '');
+
+  // Nimmt, was gewählt oder hineingezogen wurde: das erste Video, sonst bis zu 12 Fotos
+  function startFiles(list) {
+    const files = Array.from(list || []);
+    const video = files.find(isVideo);
+    if (video) return start('video', video);
+    const photos = files.filter(isImage);
+    if (photos.length) {
+      if (photos.length > 12) toast('Es werden die ersten 12 Fotos verwendet.');
+      return start('photo', photos.slice(0, 12));
     }
+    if (files.length) toast('Wähle ein Video (MP4, MOV, WebM) oder Fotos (JPG, PNG, WebP).');
+  }
+
+  async function start(kind, payload) {
+    if (state.busy || !payload) return;
     state.busy = true;
     document.querySelector('.panel').classList.add('is-busy');
     setButtons();
     $('report').hidden = true;
-    showProgress();
+    showProgress(kind);
     try {
-      const a = await S.analyzeVideo(file, onProgress);
+      const a = kind === 'video' ? await S.analyzeVideo(payload, onProgress) : await S.analyzePhotos(payload, onProgress);
       await fontsReady;
       useAnalysis(a, false, null);
-      toast(`${a.keyframes.length} Standbilder gefunden, ${state.posters.length} Poster gestaltet.`);
+      toast(kind === 'video'
+        ? `${a.keyframes.length} Standbilder gefunden, ${state.posters.length} Poster gestaltet.`
+        : `${a.keyframes.length === 1 ? 'Foto' : a.keyframes.length + ' Fotos'} geladen, ${state.posters.length} Poster gestaltet.`);
     } catch (e) {
       console.error(e);
       toast(errorText(e), 7000);
@@ -164,10 +195,13 @@
   }
 
   function defaultText(a) {
-    const clean = S.cleanName(a.name), mood = a.mood || { title: 'Standbild', line: '' };
+    const photo = a.kind === 'photo';
+    const clean = S.cleanName(photo && a.frames.length > 1 ? a.frames[0].name : a.name), mood = a.mood || { title: 'Standbild', line: '' };
+    const n = a.keyframes.length;
     return {
       title: clean || mood.title,
-      subtitle: a.scenes.length > 1 ? `Ein Film in ${a.scenes.length} Szenen` : 'Ein Moment, angehalten',
+      subtitle: photo ? (n > 1 ? `Eine Serie in ${n} Fotos` : 'Eine Fotografie')
+        : a.scenes.length > 1 ? `Ein Film in ${a.scenes.length} Szenen` : 'Ein Moment, angehalten',
       line: mood.line || '',
     };
   }
@@ -192,7 +226,9 @@
     setButtons();
     if (state.ai) {
       $('ai').hidden = false;
-      $('ai-note').textContent = 'Claude schaut sich vier Standbilder an und schlägt Titel, Untertitel und Zeile vor.';
+      $('ai-note').textContent = a.kind === 'photo'
+        ? 'Claude schaut sich die Fotos an und schlägt Titel, Untertitel und Zeile vor.'
+        : 'Claude schaut sich vier Standbilder an und schlägt Titel, Untertitel und Zeile vor.';
     }
   }
 
@@ -201,6 +237,7 @@
     $('save-all').disabled = !ready || !state.posters.length;
     $('more').disabled = !ready;
     $('save-frames').disabled = !ready;
+    $('save-frames').hidden = !!state.a && state.a.kind === 'photo';
   }
 
   // ---------- Analysebericht ----------
@@ -220,7 +257,14 @@
     $('src-name').textContent = a.name;
     $('src-name').title = a.name;
     $('src-badge').hidden = !state.demo;
-    const facts = [
+    const photo = a.kind === 'photo';
+    const sizes = new Set(a.timeline.map(f => (f.size || []).join('×')));
+    const facts = photo ? [
+      ['Fotos', String(a.keyframes.length)],
+      ['Auflösung', sizes.size === 1 ? [...sizes][0] : 'gemischt'],
+      ['Farben', String(a.palette.length)],
+      ['Stimmung', a.mood ? a.mood.title : '–'],
+    ] : [
       ['Länge', S.tc(a.duration)],
       ['Auflösung', `${a.width}×${a.height}`],
       ['Szenen', String(a.scenes.length)],
@@ -253,23 +297,23 @@
     ctx.fillStyle = ink;
     for (const sc of a.scenes) ctx.fillRect(Math.round(sc.start / a.duration * cv.width), 0, 2, 7);
     ctx.fillStyle = accent;
-    for (const f of a.keyframes) {
+    for (const f of photo ? [] : a.keyframes) {
       const x = f.t / a.duration * cv.width;
       ctx.beginPath(); ctx.moveTo(x - 6, 2); ctx.lineTo(x + 6, 2); ctx.lineTo(x, 12); ctx.closePath(); ctx.fill();
       ctx.fillRect(x - 1, top, 2, h);
     }
     const axis = $('strip-axis');
     axis.innerHTML = '';
-    for (let k = 0; k <= 4; k++) axis.append(el('span', null, S.tc(a.duration * k / 4)));
+    if (!photo) for (let k = 0; k <= 4; k++) axis.append(el('span', null, S.tc(a.duration * k / 4)));
 
     const keys = $('keys');
     keys.innerHTML = '';
     a.keyframes.forEach((f, i) => {
       const box = el('div', 'key');
       const label = el('span');
-      label.append(el('b', null, `#${i + 1}`), document.createTextNode(` ${S.tc(f.t)}`));
+      label.append(el('b', null, `#${i + 1}`), document.createTextNode(photo ? '' : ` ${S.tc(f.t)}`));
       box.append(frameThumb(f, 192), label);
-      box.title = `Standbild ${i + 1} bei ${S.tc(f.t, true)}`;
+      box.title = photo ? (f.name || `Foto ${i + 1}`) : `Standbild ${i + 1} bei ${S.tc(f.t, true)}`;
       keys.append(box);
     });
     $('save-frames').textContent = android ? 'Standbilder ohne Gestaltung in der Galerie speichern' : 'Standbilder ohne Gestaltung speichern (ZIP)';
@@ -280,10 +324,14 @@
   const ICON_DL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   function cardLabel(p) {
-    const a = state.a, t = T[p.tpl];
-    if (t.frames === 'all') return `${a.timeline.length} Bilder`;
-    if (t.frames === 0) return `${a.samples.length} Streifen, ganzes Video`;
+    const a = state.a, t = T[p.tpl], photo = a.kind === 'photo';
+    if (t.frames === 'all') return `${a.timeline.length} ${photo ? 'Fotos' : 'Bilder'}`;
+    if (t.frames === 0) return photo ? `${a.samples.length} Farbstreifen` : `${a.samples.length} Streifen, ganzes Video`;
     const f = a.keyframes[p.frame] || a.keyframes[0];
+    if (photo) {
+      if (t.frames === 3) return `${Math.min(3, a.timeline.length)} Fotos ab Foto ${f.index + 1}`;
+      return a.keyframes.length > 1 ? `Foto ${f.index + 1}` : (f.name || 'Foto');
+    }
     return t.frames === 3 ? `3 Bilder ab ${S.tc(f.t)}` : `Standbild ${S.tc(f.t)}`;
   }
 
@@ -327,8 +375,8 @@
   function updateGalleryHead() {
     $('gallery-title').textContent = `${state.posters.length} Posterideen`;
     $('gallery-sub').textContent = state.demo
-      ? 'Beispiel aus deinem TikTok-Testvideo. Lade oben ein eigenes Video hoch, dann entstehen deine Poster.'
-      : 'Tippe ein Poster an, um Stil, Standbild, Ausschnitt, Farbe und Texte zu ändern.';
+      ? 'Beispiel aus deinem TikTok-Testvideo. Lade oben ein eigenes Video oder Foto hoch, dann entstehen deine Poster.'
+      : `Tippe ein Poster an, um Stil, ${state.a && state.a.kind === 'photo' ? 'Foto' : 'Standbild'}, Ausschnitt, Farbe und Texte zu ändern.`;
   }
 
   let renderGen = 0;
@@ -367,17 +415,26 @@
   function moreIdeas() {
     const a = state.a;
     if (!a) return;
-    const have = new Set(state.posters.map(p => p.tpl + ':' + p.frame));
-    const tpls = S.templateOrder.filter(k => T[k].frames !== 0 && T[k].frames !== 'all');
+    const key = p => [p.tpl, p.frame, p.zoom || 1, p.accent ? p.accent.join() : ''].join(':');
+    const have = new Set(state.posters.map(key));
+    const tpls = S.templateOrder.filter(k => T[k].frames !== 0 && T[k].frames !== 'all' && S.available(a, k));
     const rand = S.rng(state.posters.length * 31 + 7);
     const fresh = [];
-    for (let guard = 0; fresh.length < 6 && guard < 400; guard++) {
-      const tpl = tpls[Math.floor(rand() * tpls.length)], frame = Math.floor(rand() * a.keyframes.length);
-      if (have.has(tpl + ':' + frame)) continue;
-      have.add(tpl + ':' + frame);
-      fresh.push({ id: nextId++, tpl, frame, zoom: rand() < 0.35 ? 1.35 : 1 });
+    for (let guard = 0; fresh.length < 6 && guard < 600; guard++) {
+      const frame = Math.floor(rand() * a.keyframes.length);
+      // Erst neue Kombinationen aus Stil und Bild, danach Varianten mit engerem Ausschnitt oder anderer Akzentfarbe
+      const variant = guard > 120 || a.keyframes.length === 1;
+      const pal = a.keyframes[frame].palette;
+      const p = {
+        tpl: tpls[Math.floor(rand() * tpls.length)], frame,
+        zoom: variant ? [1, 1.35, 1.7][Math.floor(rand() * 3)] : (rand() < 0.35 ? 1.35 : 1),
+        accent: variant && pal.length && rand() < 0.6 ? pal[Math.floor(rand() * pal.length)].rgb.slice() : null,
+      };
+      if (have.has(key(p))) continue;
+      have.add(key(p));
+      fresh.push(Object.assign({ id: nextId++ }, p));
     }
-    if (!fresh.length) { toast('Alle Kombinationen aus Stil und Standbild sind schon da.'); return; }
+    if (!fresh.length) { toast('Mehr Kombinationen gibt es nicht. Ändere einzelne Poster im Editor.'); return; }
     state.posters.push(...fresh);
     const grid = $('grid');
     const figs = fresh.map(makeCard);
@@ -545,19 +602,22 @@
     const tpls = $('ed-tpls');
     tpls.innerHTML = '';
     for (const k of S.templateOrder) {
+      if (!S.available(a, k)) continue;
       tpls.append(chip(T[k].name, k === p.tpl, () => { p.tpl = k; p.focus = null; edChanged(true); }));
     }
+    const photo = a.kind === 'photo';
+    $('ed-frames-title').textContent = photo ? 'Foto' : 'Standbild';
     const frames = $('ed-frames');
     frames.innerHTML = '';
     if (t.frames === 0) {
-      frames.append(el('p', 'hint', 'Dieser Stil nutzt das ganze Video, nicht ein einzelnes Standbild.'));
+      frames.append(el('p', 'hint', photo ? 'Dieser Stil macht aus allen Fotos Farbstreifen.' : 'Dieser Stil nutzt das ganze Video, nicht ein einzelnes Standbild.'));
     } else {
       a.keyframes.forEach((f, i) => {
         const b = el('button', 'thumb');
         b.type = 'button';
         b.setAttribute('aria-pressed', i === p.frame ? 'true' : 'false');
-        b.setAttribute('aria-label', `Standbild ${i + 1} bei ${S.tc(f.t)}`);
-        b.append(frameThumb(f, 160), el('span', null, S.tc(f.t)));
+        b.setAttribute('aria-label', photo ? `Foto ${i + 1}` : `Standbild ${i + 1} bei ${S.tc(f.t)}`);
+        b.append(frameThumb(f, 160), el('span', null, photo ? `Foto ${i + 1}` : S.tc(f.t)));
         b.addEventListener('click', () => { p.frame = i; p.focus = null; p.accent = null; edChanged(true); });
         frames.append(b);
       });
@@ -735,12 +795,14 @@
     if (!state.ai || !state.a) return;
     const btn = $('ai-go'), note = $('ai-note'), a = state.a;
     btn.disabled = true;
-    note.textContent = 'Claude schaut sich die Standbilder an …';
+    note.textContent = a.kind === 'photo' ? 'Claude schaut sich die Fotos an …' : 'Claude schaut sich die Standbilder an …';
     try {
       const frames = a.keyframes.slice(0, state.ai.max);
       const images = await Promise.all(frames.map(f => frameJpeg(f, 768)));
       const prompt = [
-        `Du bekommst ${frames.length} Standbilder aus einem Video (Datei: "${a.name}", Länge ${S.tc(a.duration)}, ${a.scenes.length} Szenen).`,
+        a.kind === 'photo'
+          ? `Du bekommst ${frames.length === 1 ? 'ein Foto' : frames.length + ' Fotos'} (Datei: "${a.name}").`
+          : `Du bekommst ${frames.length} Standbilder aus einem Video (Datei: "${a.name}", Länge ${S.tc(a.duration)}, ${a.scenes.length} Szenen).`,
         'Daraus werden Poster gestaltet: Filmplakat, Magazin-Cover, Kunstdruck und ähnliche Stile.',
         'Schlage 4 unterschiedliche Text-Sets für diese Poster vor. Jedes Set hat:',
         '- "titel": 1 bis 3 Wörter, prägnant wie ein Filmtitel. Steht im Bild gut lesbarer Text (Name, Ort, Marke, Modell), darfst du ihn nutzen.',
@@ -810,17 +872,20 @@
   // ---------- Android: geteilte Videos ----------
 
   S.openShared = async function () {
-    if (!android || typeof window.Android.sharedVideo !== 'function') return;
-    const info = window.Android.sharedVideo();
+    if (!android || typeof window.Android.shared !== 'function') return;
+    const info = window.Android.shared();
     if (!info) return;
     try {
-      const { url, name, type } = JSON.parse(info);
-      toast('Geteiltes Video wird geladen …', 15000);
-      const blob = await fetch(url).then(r => { if (!r.ok) throw new Error('fetch'); return r.blob(); });
-      start(new File([blob], name || 'Video.mp4', { type: type || blob.type || 'video/mp4' }));
+      const items = JSON.parse(info).items || [];
+      toast('Geteilte Dateien werden geladen …', 15000);
+      const files = await Promise.all(items.map(async (it, i) => {
+        const blob = await fetch(it.url).then(r => { if (!r.ok) throw new Error('fetch'); return r.blob(); });
+        return new File([blob], it.name || `Datei-${i + 1}`, { type: it.type || blob.type });
+      }));
+      startFiles(files);
     } catch (e) {
       console.error(e);
-      toast('Das geteilte Video ließ sich nicht öffnen.', 5000);
+      toast('Die geteilte Datei ließ sich nicht öffnen.', 5000);
     }
   };
 
@@ -836,19 +901,20 @@
     buildFormats();
     setupEditor();
     $('save-all').textContent = android ? 'Alle in der Galerie speichern' : 'Alle als ZIP herunterladen';
-    $('file').addEventListener('change', e => {
-      const f = e.target.files && e.target.files[0];
-      e.target.value = '';
-      if (f) start(f);
-    });
+    for (const id of ['file', 'photos']) {
+      $(id).addEventListener('change', e => {
+        const files = Array.from(e.target.files || []);
+        e.target.value = '';
+        startFiles(files);
+      });
+    }
     const drop = $('drop');
     ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, () => drop.classList.add('is-over')));
     ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, () => drop.classList.remove('is-over')));
     window.addEventListener('dragover', e => e.preventDefault());
     window.addEventListener('drop', e => {
       e.preventDefault();
-      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) start(f);
+      if (e.dataTransfer && e.dataTransfer.files) startFiles(e.dataTransfer.files);
     });
     for (const [id, key] of [['t-title', 'title'], ['t-sub', 'subtitle'], ['t-line', 'line']]) {
       $(id).addEventListener('input', e => {

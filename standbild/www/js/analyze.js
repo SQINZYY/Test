@@ -68,7 +68,7 @@
   // ---------- Bildmerkmale ----------
 
   // Misst ein Analysebild: Balken (Letterbox), Helligkeit, Kontrast, Schärfe, Farbigkeit, Histogramm, Zeilenfarben
-  function measure(px, w, h) {
+  function measure(px, w, h, noBars) {
     const n = w * h;
     const lum = new Float32Array(n);
     for (let i = 0, p = 0; i < n; i++, p += 4) lum[i] = 0.299 * px[p] + 0.587 * px[p + 1] + 0.114 * px[p + 2];
@@ -78,19 +78,22 @@
       for (let x = 0, o = y * w; x < w; x++) { const v = lum[o + x]; sum += v; if (v > mx) mx = v; }
       return mx < 42 && sum / w < 22;
     };
+    // Fotos haben keine Balken – dort würde ein dunkler Himmel sonst abgeschnitten
     let top = 0, bottom = 0, left = 0, right = 0;
-    while (top < h * 0.45 && barRow(top)) top++;
-    while (bottom < h * 0.45 && barRow(h - 1 - bottom)) bottom++;
-    const barCol = x => {
-      let mx = 0, sum = 0;
-      for (let y = top; y < h - bottom; y++) { const v = lum[y * w + x]; sum += v; if (v > mx) mx = v; }
-      return mx < 42 && sum / Math.max(1, h - top - bottom) < 22;
-    };
-    while (left < w * 0.45 && barCol(left)) left++;
-    while (right < w * 0.45 && barCol(w - 1 - right)) right++;
-    // Bleibt kaum etwas übrig, ist das kein Balken, sondern ein schwarzes Bild
-    // (Querformat im Hochformat-Video hat dagegen bis zu ~70 % Balken)
-    if (h - top - bottom < h * 0.12 || w - left - right < w * 0.12) top = bottom = left = right = 0;
+    if (!noBars) {
+      while (top < h * 0.45 && barRow(top)) top++;
+      while (bottom < h * 0.45 && barRow(h - 1 - bottom)) bottom++;
+      const barCol = x => {
+        let mx = 0, sum = 0;
+        for (let y = top; y < h - bottom; y++) { const v = lum[y * w + x]; sum += v; if (v > mx) mx = v; }
+        return mx < 42 && sum / Math.max(1, h - top - bottom) < 22;
+      };
+      while (left < w * 0.45 && barCol(left)) left++;
+      while (right < w * 0.45 && barCol(w - 1 - right)) right++;
+      // Bleibt kaum etwas übrig, ist das kein Balken, sondern ein schwarzes Bild
+      // (Querformat im Hochformat-Video hat dagegen bis zu ~70 % Balken)
+      if (h - top - bottom < h * 0.12 || w - left - right < w * 0.12) top = bottom = left = right = 0;
+    }
     const cx = left, cy = top, cw = w - left - right, ch = h - top - bottom;
 
     let sum = 0, sum2 = 0, sr = 0, sg = 0, sb = 0, rgS = 0, rgS2 = 0, ybS = 0, ybS2 = 0, cnt = 0;
@@ -304,13 +307,13 @@
 
   // ---------- Standbild vorbereiten: Inhalt, Bildschwerpunkt, Palette ----------
 
-  function prepareFrame(cv, info) {
+  function prepareFrame(cv, info, opts) {
     const [aw, ah] = analysisSize(cv.width, cv.height);
     const t = canvas(aw, ah);
     const ctx = t.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(cv, 0, 0, aw, ah);
     const px = ctx.getImageData(0, 0, aw, ah).data;
-    const m = measure(px, aw, ah);
+    const m = measure(px, aw, ah, opts && opts.bars === false);
 
     // Energiekarte: Kanten auf einem weichgezeichneten Bild (Laub, Kies und Rauschen fallen weg, Umrisse bleiben),
     // dazu Sättigung und helle Lichter → wo das Motiv ist
@@ -492,6 +495,7 @@
 
       report('colors', 0, 1);
       return finish({
+        kind: 'video',
         name: file.name || 'Video',
         duration: D, width: vw, height: vh,
         samples: samples.map(s => ({ t: s.t, black: s.black, scene: s.scene, rows: s.rows, avg: s.avg, mean: s.mean, score: s.score })),
@@ -505,6 +509,87 @@
       if (video) { video.removeAttribute('src'); video.load(); video.remove(); }
       URL.revokeObjectURL(url);
     }
+  };
+
+  // ---------- Fotos ----------
+
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const im = new Image();
+      im.onload = () => { URL.revokeObjectURL(url); resolve(im); };
+      im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image')); };
+      im.src = url;
+    });
+  }
+
+  // Farbstreifen eines Fotos: k senkrechte Streifen, die Farben jedes Streifens nach Helligkeit sortiert
+  // (hell oben, dunkel unten) – ein Farbverlauf statt eines verpixelten Fotos
+  function photoStripes(cv, c, k, index) {
+    const R = 160; // feiner als bei Videos, damit der sortierte Verlauf weich wird
+    const mid = canvas(k * 8, R * 2), mx = mid.getContext('2d');
+    mx.imageSmoothingQuality = 'high';
+    mx.drawImage(cv, c.x, c.y, c.w, c.h, 0, 0, mid.width, mid.height);
+    const small = canvas(k, R), sx = small.getContext('2d', { willReadFrequently: true });
+    sx.imageSmoothingQuality = 'high';
+    sx.drawImage(mid, 0, 0, k, R);
+    const px = sx.getImageData(0, 0, k, R).data;
+    const out = [];
+    for (let i = 0; i < k; i++) {
+      const col = [];
+      let r = 0, g = 0, b = 0;
+      for (let y = 0; y < R; y++) {
+        const p = (y * k + i) * 4;
+        col.push([px[p], px[p + 1], px[p + 2]]);
+        r += px[p]; g += px[p + 1]; b += px[p + 2];
+      }
+      col.sort((x, y) => (0.299 * y[0] + 0.587 * y[1] + 0.114 * y[2]) - (0.299 * x[0] + 0.587 * x[1] + 0.114 * x[2]));
+      // leicht weichzeichnen, damit aus einzelnen Pixeln ein ruhiger Verlauf wird
+      const rows = new Uint8Array(R * 3);
+      for (let y = 0; y < R; y++) {
+        const acc = [0, 0, 0];
+        let cnt = 0;
+        for (let d = -4; d <= 4; d++) {
+          const q = col[clamp(y + d, 0, R - 1)];
+          acc[0] += q[0]; acc[1] += q[1]; acc[2] += q[2]; cnt++;
+        }
+        rows[y * 3] = acc[0] / cnt; rows[y * 3 + 1] = acc[1] / cnt; rows[y * 3 + 2] = acc[2] / cnt;
+      }
+      const avg = [r / R, g / R, b / R];
+      out.push({ t: index + (i + 0.5) / k, black: false, scene: index, rows, avg, mean: 0.299 * avg[0] + 0.587 * avg[1] + 0.114 * avg[2], score: 1 });
+    }
+    return out;
+  }
+
+  S.analyzePhotos = async function (files, onProgress) {
+    const report = (phase, done, total) => onProgress && onProgress({ phase, done, total });
+    const n = files.length, cap = n <= 2 ? 4096 : 2560;
+    const k = Math.max(8, Math.round(48 / n));
+    const frames = [], samples = [];
+    for (let i = 0; i < n; i++) {
+      report('load', i, n);
+      const im = await loadImage(files[i]);
+      const w0 = im.naturalWidth, h0 = im.naturalHeight;
+      if (!w0 || !h0) throw new Error('image');
+      const sc = Math.min(1, cap / Math.max(w0, h0));
+      const cv = canvas(w0 * sc, h0 * sc);
+      const cx = cv.getContext('2d');
+      cx.imageSmoothingQuality = 'high';
+      cx.drawImage(im, 0, 0, cv.width, cv.height);
+      // Reihenfolge wie hochgeladen: Punktzahl fällt mit der Position
+      const f = prepareFrame(cv, { t: i, index: i, key: true, score: 1 - i * 0.01, sample: i * k, scene: i, name: files[i].name || `Foto ${i + 1}`, size: [w0, h0] }, { bars: false });
+      frames.push(f);
+      samples.push(...photoStripes(cv, f.content, k, i));
+      await new Promise(r => setTimeout(r, 0));
+    }
+    report('colors', 0, 1);
+    return finish({
+      kind: 'photo',
+      name: n === 1 ? (files[0].name || 'Foto') : `${n} Fotos`,
+      duration: n, width: frames[0].size[0], height: frames[0].size[1],
+      samples, scenes: frames.map((f, i) => ({ start: i, end: i + 1 })), frames,
+      stripes: k, checked: n, blackCount: 0, letterbox: false,
+    });
   };
 
   // Gemeinsamer Abschluss für Video und Beispiel: Reihenfolge, globale Palette, Stimmung
