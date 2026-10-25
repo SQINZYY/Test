@@ -26,8 +26,16 @@ werden direkt zu Postern. Alles läuft auf dem Gerät, nichts wird hochgeladen.
 3. **Poster** – zwölf Ideen, jede Vorlage mit dem dazu passendsten Standbild:
    Kino, Magazin, Duotone, Raster, Galerie, Farbpalette, Filmstreifen, Kontaktabzug, Siebdruck, Halbton, Minimal, Filmbarcode.
    „Mehr Ideen“ kombiniert weitere Stile und Bilder.
-4. **Bearbeiten** – Poster antippen: Stil, Standbild, Ausschnitt (im Bild ziehen, Zoom), Akzentfarbe und eigene Texte ändern,
-   duplizieren oder entfernen. Titel, Untertitel und Zeile oben gelten für alle Poster.
+4. **Bearbeiten** – Poster antippen und alles anpassen:
+   - Stil, Standbild/Foto, Ausschnitt (im Bild ziehen, Zoom)
+   - Titel, Untertitel und Zeile: eigener Text oder ausblenden
+   - **Zusatzinfos** einzeln ein- und ausblenden oder umschreiben, z. B. die Schlagzeilen auf dem Magazin („15 Szenen im Schnitt“),
+     den Abspann auf dem Kino-Plakat, Zeitcodes, Farbcodes, Strichcode, Kopf- und Fußzeilen. Auf dem Magazin wird eine Zahl am
+     Anfang der Schlagzeile groß gedruckt.
+   - **Schrift und Farbe:** Schrift, Schreibweise, Größe und Farbe des Titels; Schrift und Farbe der übrigen Texte;
+     Akzentfarbe für Zahlen, Punkte und Hervorhebungen (Farben aus dem Bild oder frei wählbar)
+   - „Diese Gestaltung auf alle Poster übertragen“, kopieren, entfernen
+   Titel, Untertitel und Zeile links gelten für alle Poster; dort lassen sich auch alle Zusatzinfos auf einmal abschalten.
 5. **Speichern** – einzeln oder alle auf einmal (Browser: ZIP, Android: Galerie unter *Bilder › Standbild*).
    Formate: Poster 2:3 (2400 × 3600), DIN A (2480 × 3508 = A4 bei 300 dpi), Insta 4:5, Story 9:16; als JPG oder PNG.
    Die Standbilder lassen sich auch ohne Gestaltung speichern.

@@ -66,6 +66,7 @@
         <label class="field"><span>Untertitel</span><input id="t-sub" type="text" autocomplete="off" maxlength="80"></label>
         <label class="field"><span>Zeile</span><input id="t-line" type="text" autocomplete="off" maxlength="120"></label>
       </div>
+      <label class="check"><input type="checkbox" id="t-infos" checked><span>Zusatzinfos auf den Postern zeigen<small>Szenen, Zeitcodes, Farbcodes, Abspann … einzeln änderbar im Editor</small></span></label>
       <div class="ai" id="ai" hidden>
         <button type="button" class="btn btn-quiet" id="ai-go">Texte von Claude vorschlagen</button>
         <p class="ai-note" id="ai-note">Claude schaut sich vier Standbilder an und schlägt Titel, Untertitel und Zeile vor.</p>
@@ -125,20 +126,57 @@
         <button type="button" class="link" id="ed-reset">Automatisch ausrichten</button>
       </div>
       <div class="ed-group">
-        <h3>Akzentfarbe</h3>
-        <div class="swatches" id="ed-colors"></div>
+        <h3>Texte</h3>
+        <div class="fields">
+          <div class="field-row">
+            <label class="field"><span>Titel</span><input id="ed-t-title" type="text" autocomplete="off" maxlength="60"></label>
+            <label class="check check-inline"><input type="checkbox" id="ed-v-title"><span>zeigen</span></label>
+          </div>
+          <div class="field-row">
+            <label class="field"><span>Untertitel</span><input id="ed-t-sub" type="text" autocomplete="off" maxlength="80"></label>
+            <label class="check check-inline"><input type="checkbox" id="ed-v-subtitle"><span>zeigen</span></label>
+          </div>
+          <div class="field-row">
+            <label class="field"><span>Zeile</span><input id="ed-t-line" type="text" autocomplete="off" maxlength="120"></label>
+            <label class="check check-inline"><input type="checkbox" id="ed-v-line"><span>zeigen</span></label>
+          </div>
+        </div>
+        <p class="hint">Leer lassen = Text aus dem linken Bereich (gilt für alle Poster).</p>
+      </div>
+      <div class="ed-group" id="ed-infos-group">
+        <h3>Zusatzinfos auf diesem Poster</h3>
+        <div class="infos" id="ed-infos"></div>
+        <p class="hint">Haken weg = ausblenden. Eigener Text ersetzt den automatischen, leer = automatisch.</p>
       </div>
       <div class="ed-group">
-        <h3>Texte nur für dieses Poster</h3>
-        <div class="fields">
-          <label class="field"><span>Titel</span><input id="ed-t-title" type="text" autocomplete="off" maxlength="60"></label>
-          <label class="field"><span>Untertitel</span><input id="ed-t-sub" type="text" autocomplete="off" maxlength="80"></label>
-          <label class="field"><span>Zeile</span><input id="ed-t-line" type="text" autocomplete="off" maxlength="120"></label>
+        <h3>Schrift und Farbe</h3>
+        <div class="style-block">
+          <span class="style-label">Titel</span>
+          <div class="selects">
+            <select id="ed-tfont" aria-label="Schrift des Titels"></select>
+            <select id="ed-tcase" aria-label="Schreibweise des Titels">
+              <option value="">Schreibweise wie Vorlage</option>
+              <option value="upper">GROSSBUCHSTABEN</option>
+              <option value="normal">Wie eingegeben</option>
+            </select>
+          </div>
+          <label class="range"><span>Größe</span><input type="range" id="ed-tsize" min="0.5" max="1.6" step="0.05" value="1"><output id="ed-tsize-out">100 %</output></label>
+          <div class="swatches" id="ed-tcolor" aria-label="Farbe des Titels"></div>
         </div>
+        <div class="style-block">
+          <span class="style-label">Untertitel, Zeile und Infos</span>
+          <div class="selects"><select id="ed-xfont" aria-label="Schrift der Texte"></select></div>
+          <div class="swatches" id="ed-xcolor" aria-label="Farbe der Texte"></div>
+        </div>
+        <div class="style-block">
+          <span class="style-label">Akzent: Zahlen, Punkte, Hervorhebungen</span>
+          <div class="swatches" id="ed-colors" aria-label="Akzentfarbe"></div>
+        </div>
+        <button type="button" class="btn btn-quiet" id="ed-apply-all">Diese Gestaltung auf alle Poster übertragen</button>
       </div>
       <div class="ed-actions">
         <button type="button" class="btn btn-primary" id="ed-save">Herunterladen</button>
-        <button type="button" class="btn" id="ed-dup">Duplizieren</button>
+        <button type="button" class="btn" id="ed-dup">Kopieren</button>
         <button type="button" class="btn btn-danger" id="ed-del">Entfernen</button>
       </div>
     </div>

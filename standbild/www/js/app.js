@@ -14,7 +14,7 @@
   const sampleP = use('sample');
 
   const state = {
-    a: null, posters: [], text: { title: '', subtitle: '', line: '' }, touched: false,
+    a: null, posters: [], text: { title: '', subtitle: '', line: '', infos: true }, touched: false,
     format: 'poster', filetype: 'jpg', demo: false, busy: false, ai: null,
   };
   let nextId = 1;
@@ -206,7 +206,7 @@
     };
   }
   function setText(t) {
-    state.text = { title: t.title || '', subtitle: t.subtitle || '', line: t.line || '' };
+    state.text = Object.assign({}, state.text, { title: t.title || '', subtitle: t.subtitle || '', line: t.line || '' });
     $('t-title').value = state.text.title;
     $('t-sub').value = state.text.subtitle;
     $('t-line').value = state.text.line;
@@ -624,26 +624,118 @@
     }
     $('ed-zoom').value = p.zoom || 1;
     $('ed-zoom').disabled = t.frames === 0;
-    const colors = $('ed-colors');
-    colors.innerHTML = '';
-    colors.append(chip('Auto', !p.accent, () => { p.accent = null; edChanged(true); }, 'swatch swatch-auto'));
+    document.querySelector('.ed-drag').hidden = t.frames === 0;
+    p.style = p.style || {};
+    p.vis = p.vis || {};
+    p.info = p.info || {};
     const f = a.keyframes[p.frame] || a.keyframes[0];
-    const seen = [];
-    for (const c of f.palette.concat(a.palette)) {
-      if (seen.some(s => Math.hypot(s[0] - c.rgb[0], s[1] - c.rgb[1], s[2] - c.rgb[2]) < 30) || seen.length >= 10) continue;
-      seen.push(c.rgb);
-      const b = chip('', p.accent && p.accent.join() === c.rgb.join(), () => { p.accent = c.rgb.slice(); edChanged(true); }, 'swatch');
-      b.style.background = S.color.css(c.rgb);
-      b.setAttribute('aria-label', `${S.colorName(c.rgb)} ${S.color.hex(c.rgb)}`);
-      b.title = `${S.colorName(c.rgb)} ${S.color.hex(c.rgb)}`;
-      colors.append(b);
-    }
-    for (const [id, key, glob] of [['ed-t-title', 'title', 'title'], ['ed-t-sub', 'subtitle', 'subtitle'], ['ed-t-line', 'line', 'line']]) {
+    colorRow($('ed-colors'), p.accent, rgb => { p.accent = rgb; }, f);
+    colorRow($('ed-tcolor'), p.style.titleColor, rgb => { p.style.titleColor = rgb; }, f);
+    colorRow($('ed-xcolor'), p.style.textColor, rgb => { p.style.textColor = rgb; }, f);
+    for (const [id, key] of [['ed-t-title', 'title'], ['ed-t-sub', 'subtitle'], ['ed-t-line', 'line']]) {
       const inp = $(id);
       inp.value = p[key] ?? '';
-      inp.placeholder = state.text[glob] || '';
+      inp.placeholder = state.text[key] || '';
+      $('ed-v-' + key).checked = p.vis[key] !== false;
     }
+    fillFonts($('ed-tfont'), 'Titelschrift wie Vorlage', p.style.titleFont);
+    fillFonts($('ed-xfont'), 'Textschrift wie Vorlage', p.style.textFont);
+    $('ed-tcase').value = p.style.titleCase || '';
+    $('ed-tsize').value = p.style.titleScale || 1;
+    $('ed-tsize-out').textContent = Math.round((p.style.titleScale || 1) * 100) + ' %';
+    buildInfos(p);
     $('ed-save').textContent = android ? 'In der Galerie speichern' : 'Herunterladen';
+  }
+
+  // Farbauswahl: Automatisch, Farben aus dem Bild, Weiß, Schwarz und ein freier Farbwähler
+  function colorRow(box, current, set, frame) {
+    box.innerHTML = '';
+    const same = (x, y) => !!x && !!y && x.join() === y.join();
+    const pick = rgb => { set(rgb); edChanged(true); };
+    box.append(chip('Auto', !current, () => pick(null), 'swatch swatch-auto'));
+    const seen = [];
+    const options = frame.palette.concat(state.a.palette).map(c => c.rgb).concat([[255, 255, 255], [17, 17, 17]]);
+    for (const rgb of options) {
+      if (seen.some(s => Math.hypot(s[0] - rgb[0], s[1] - rgb[1], s[2] - rgb[2]) < 30) || seen.length >= 11) continue;
+      seen.push(rgb);
+      const b = chip('', same(current, rgb), () => pick(rgb.slice()), 'swatch');
+      b.style.background = S.color.css(rgb);
+      b.setAttribute('aria-label', `${S.colorName(rgb)} ${S.color.hex(rgb)}`);
+      b.title = `${S.colorName(rgb)} ${S.color.hex(rgb)}`;
+      box.append(b);
+    }
+    const own = el('label', 'swatch swatch-pick');
+    own.title = 'Eigene Farbe wählen';
+    const inp = el('input');
+    inp.type = 'color';
+    inp.value = current ? S.color.hex(current).toLowerCase() : '#ffffff';
+    inp.setAttribute('aria-label', 'Eigene Farbe wählen');
+    const custom = current && !seen.some(s => same(s, current));
+    own.setAttribute('aria-pressed', custom ? 'true' : 'false');
+    if (custom) own.style.background = S.color.css(current);
+    inp.addEventListener('input', () => {
+      const h = inp.value;
+      set([parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+      own.style.background = h;
+      queueEditorRender();
+    });
+    inp.addEventListener('change', () => edChanged(true));
+    own.append(inp);
+    box.append(own);
+  }
+
+  function fillFonts(sel, first, current) {
+    sel.innerHTML = '';
+    const o0 = el('option', null, first);
+    o0.value = '';
+    sel.append(o0);
+    for (const [k, f] of Object.entries(S.fontChoices)) {
+      const o = el('option', null, f.name);
+      o.value = k;
+      sel.append(o);
+    }
+    sel.value = current || '';
+  }
+
+  // Zusatzinfos des aktuellen Stils: Haken = sichtbar, Feld = eigener Text (leer = automatisch)
+  function buildInfos(p) {
+    const box = $('ed-infos');
+    box.innerHTML = '';
+    const used = S.render(S.canvas(80, 120), state.a, p, state.text, state.format).used;
+    const items = T[p.tpl].items || {};
+    $('ed-infos-group').hidden = !used.length;
+    for (const it of used) {
+      const row = el('div', 'info-row');
+      const on = p.vis[it.key] ?? (state.text.infos !== false);
+      row.classList.toggle('is-off', !on);
+      const lab = el('label', 'check');
+      const cb = el('input');
+      cb.type = 'checkbox';
+      cb.checked = on;
+      cb.addEventListener('change', () => {
+        p.vis[it.key] = cb.checked;
+        row.classList.toggle('is-off', !cb.checked);
+        queueEditorRender();
+      });
+      lab.append(cb, el('span', null, items[it.key] || it.key));
+      row.append(lab);
+      if (it.def !== null) {
+        const inp = el('input');
+        inp.type = 'text';
+        inp.autocomplete = 'off';
+        inp.maxLength = 120;
+        inp.value = p.info[it.key] || '';
+        inp.placeholder = it.def || '(leer)';
+        inp.setAttribute('aria-label', `${items[it.key] || it.key}: eigener Text`);
+        inp.addEventListener('input', () => {
+          if (inp.value.trim()) p.info[it.key] = inp.value; else delete p.info[it.key];
+          if (inp.value.trim() && !cb.checked) { cb.checked = true; p.vis[it.key] = true; row.classList.remove('is-off'); }
+          queueEditorRender();
+        });
+        row.append(inp);
+      }
+      box.append(row);
+    }
   }
 
   function edChanged(rebuild) {
@@ -704,11 +796,50 @@
         queueEditorRender();
       });
     }
+    for (const key of ['title', 'subtitle', 'line']) {
+      $('ed-v-' + key).addEventListener('change', e => {
+        const p = byId(edId);
+        if (!p) return;
+        p.vis = p.vis || {};
+        p.vis[key] = e.target.checked;
+        queueEditorRender();
+      });
+    }
+    const styleInput = (id, key, parse) => $(id).addEventListener('input', e => {
+      const p = byId(edId);
+      if (!p) return;
+      p.style = p.style || {};
+      p.style[key] = parse(e.target.value);
+      if (key === 'titleScale') $('ed-tsize-out').textContent = Math.round(p.style.titleScale * 100) + ' %';
+      queueEditorRender();
+    });
+    styleInput('ed-tfont', 'titleFont', v => v || null);
+    styleInput('ed-xfont', 'textFont', v => v || null);
+    styleInput('ed-tcase', 'titleCase', v => v || null);
+    styleInput('ed-tsize', 'titleScale', v => parseFloat(v) || 1);
+    $('ed-apply-all').addEventListener('click', () => {
+      const p = byId(edId);
+      if (!p) return;
+      let n = 0;
+      for (const q of state.posters) {
+        if (q === p) continue;
+        q.style = Object.assign({}, p.style);
+        q.accent = p.accent ? p.accent.slice() : null;
+        q.vis = Object.assign({}, q.tpl === p.tpl ? p.vis : q.vis, { title: p.vis.title, subtitle: p.vis.subtitle, line: p.vis.line });
+        if (q.tpl === p.tpl) q.info = Object.assign({}, p.info);
+        n++;
+      }
+      refreshAll();
+      toast(`Gestaltung auf ${n} weitere Poster übertragen. Zusatzinfos gelten für alle ${T[p.tpl].name}-Poster.`, 4500);
+    });
     $('ed-save').addEventListener('click', () => { if (edId != null) downloadOne(edId); });
     $('ed-dup').addEventListener('click', () => {
       const p = byId(edId);
       if (!p) return;
-      const copy = Object.assign({}, p, { id: nextId++, focus: p.focus && Object.assign({}, p.focus) });
+      const copy = Object.assign({}, p, {
+        id: nextId++, focus: p.focus && Object.assign({}, p.focus),
+        style: Object.assign({}, p.style), vis: Object.assign({}, p.vis), info: Object.assign({}, p.info),
+      });
       state.posters.splice(state.posters.indexOf(p) + 1, 0, copy);
       const fig = makeCard(copy);
       document.querySelector(`.card[data-id="${p.id}"]`).after(fig);
@@ -924,6 +1055,10 @@
         scheduleRefresh();
       });
     }
+    $('t-infos').addEventListener('change', e => {
+      state.text.infos = e.target.checked;
+      refreshAll();
+    });
     $('save-all').addEventListener('click', saveAll);
     $('more').addEventListener('click', moreIdeas);
     $('save-frames').addEventListener('click', saveFrames);
