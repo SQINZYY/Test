@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- page -->
+<title>Standbild</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="style.css">
+<!-- /head -->
+</head>
+<body>
+<!-- body -->
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <svg class="reg" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M16 2v28M2 16h28" stroke="currentColor" stroke-width="2"/>
+        <path d="M16 9a7 7 0 0 1 0 14z" fill="currentColor"/>
+      </svg>
+      <span class="wordmark">Standbild</span>
+    </div>
+    <p class="claim">Video rein, Poster raus. Die App sucht die stärksten Momente und setzt sie als druckfertige Poster.</p>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="panel" aria-label="Video und Einstellungen">
+    <section class="step">
+      <h2 class="step-title"><span class="step-no">1</span> Video</h2>
+      <label class="drop" id="drop" for="file">
+        <input type="file" id="file" accept="video/*,.mp4,.mov,.webm,.m4v,.mkv">
+        <span class="drop-main"><span class="drop-strong">Video auswählen</span> oder hierher ziehen</span>
+        <span class="drop-sub">MP4, MOV oder WebM. TikTok, YouTube Shorts oder längere Videos vorher herunterladen.</span>
+      </label>
+
+      <div class="progress" id="progress" hidden>
+        <ol class="phases" id="phases">
+          <li data-phase="load">Video öffnen</li>
+          <li data-phase="sample">Bilder abtasten <span class="count" data-count="sample"></span></li>
+          <li data-phase="refine">Schärfste Momente suchen <span class="count" data-count="refine"></span></li>
+          <li data-phase="capture">Standbilder in voller Größe holen <span class="count" data-count="capture"></span></li>
+          <li data-phase="colors">Farben und Ausschnitte bestimmen</li>
+        </ol>
+        <div class="bar"><span id="bar-fill"></span></div>
+        <canvas id="live" class="live" height="40" aria-hidden="true"></canvas>
+      </div>
+
+      <div class="report" id="report" hidden>
+        <div class="source">
+          <span class="source-name" id="src-name"></span>
+          <span class="badge" id="src-badge" hidden>Beispiel</span>
+        </div>
+        <dl class="facts" id="facts"></dl>
+        <div class="strip-wrap">
+          <canvas id="strip" class="strip" aria-label="Zeitleiste des Videos mit den gewählten Standbildern"></canvas>
+          <div class="strip-axis" id="strip-axis"></div>
+        </div>
+        <div class="keys" id="keys"></div>
+        <button type="button" class="link" id="save-frames">Standbilder ohne Gestaltung speichern</button>
+      </div>
+    </section>
+
+    <section class="step" id="step-text">
+      <h2 class="step-title"><span class="step-no">2</span> Texte</h2>
+      <div class="fields">
+        <label class="field"><span>Titel</span><input id="t-title" type="text" autocomplete="off" maxlength="60" placeholder="z. B. Tokyo Tuned"></label>
+        <label class="field"><span>Untertitel</span><input id="t-sub" type="text" autocomplete="off" maxlength="80"></label>
+        <label class="field"><span>Zeile</span><input id="t-line" type="text" autocomplete="off" maxlength="120"></label>
+      </div>
+      <div class="ai" id="ai" hidden>
+        <button type="button" class="btn btn-quiet" id="ai-go">Texte von Claude vorschlagen</button>
+        <p class="ai-note" id="ai-note">Claude schaut sich vier Standbilder an und schlägt Titel, Untertitel und Zeile vor.</p>
+        <div class="ai-ideas" id="ai-ideas"></div>
+      </div>
+    </section>
+
+    <section class="step">
+      <h2 class="step-title"><span class="step-no">3</span> Format</h2>
+      <div class="seg" role="radiogroup" aria-label="Posterformat" id="formats"></div>
+      <div class="seg seg-small" role="radiogroup" aria-label="Dateiformat" id="filetypes">
+        <label><input type="radio" name="ft" id="ft-jpg" value="jpg" checked><span>JPG</span></label>
+        <label><input type="radio" name="ft" id="ft-png" value="png"><span>PNG</span></label>
+      </div>
+      <p class="hint" id="format-hint"></p>
+    </section>
+
+    <div class="actions">
+      <button type="button" class="btn btn-primary" id="save-all" disabled>Alle Poster herunterladen</button>
+      <button type="button" class="btn" id="more" disabled>Mehr Ideen</button>
+    </div>
+  </aside>
+
+  <section class="gallery" aria-labelledby="gallery-title">
+    <div class="gallery-head">
+      <h2 id="gallery-title">Posterideen</h2>
+      <p class="gallery-sub" id="gallery-sub">Lade ein Video hoch, dann entstehen hier zwölf Poster in verschiedenen Stilen.</p>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+</main>
+
+<dialog class="editor" id="editor" aria-labelledby="ed-title">
+  <div class="ed">
+    <div class="ed-stage" id="ed-stage">
+      <canvas id="ed-canvas"></canvas>
+      <p class="ed-drag">Im Bild ziehen, um den Ausschnitt zu verschieben</p>
+    </div>
+    <div class="ed-side">
+      <div class="ed-head">
+        <h2 id="ed-title">Poster bearbeiten</h2>
+        <button type="button" class="icon-btn" id="ed-close" aria-label="Schließen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="ed-group">
+        <h3>Stil</h3>
+        <div class="chips" id="ed-tpls"></div>
+      </div>
+      <div class="ed-group">
+        <h3>Standbild</h3>
+        <div class="thumbs" id="ed-frames"></div>
+      </div>
+      <div class="ed-group">
+        <h3>Ausschnitt</h3>
+        <label class="range"><span>Zoom</span><input type="range" id="ed-zoom" min="1" max="3" step="0.05" value="1"></label>
+        <button type="button" class="link" id="ed-reset">Automatisch ausrichten</button>
+      </div>
+      <div class="ed-group">
+        <h3>Akzentfarbe</h3>
+        <div class="swatches" id="ed-colors"></div>
+      </div>
+      <div class="ed-group">
+        <h3>Texte nur für dieses Poster</h3>
+        <div class="fields">
+          <label class="field"><span>Titel</span><input id="ed-t-title" type="text" autocomplete="off" maxlength="60"></label>
+          <label class="field"><span>Untertitel</span><input id="ed-t-sub" type="text" autocomplete="off" maxlength="80"></label>
+          <label class="field"><span>Zeile</span><input id="ed-t-line" type="text" autocomplete="off" maxlength="120"></label>
+        </div>
+      </div>
+      <div class="ed-actions">
+        <button type="button" class="btn btn-primary" id="ed-save">Herunterladen</button>
+        <button type="button" class="btn" id="ed-dup">Duplizieren</button>
+        <button type="button" class="btn btn-danger" id="ed-del">Entfernen</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<!-- /body -->
+<script src="js/analyze.js"></script>
+<script src="js/posters.js"></script>
+<script src="js/zip.js"></script>
+<script src="js/app.js"></script>
+<!-- /page -->
+</body>
+</html>

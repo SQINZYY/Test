@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_night">#FF111317</color>
+    <color name="accent_night">#FFFF4F9E</color>
+
+    <!-- Dunkles Systemdesign: die Oberfläche (prefers-color-scheme) folgt dem App-Theme -->
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg_night</item>
+        <item name="android:statusBarColor">@color/bg_night</item>
+        <item name="android:navigationBarColor">@color/bg_night</item>
+        <item name="android:colorAccent">@color/accent_night</item>
+    </style>
+</resources>
