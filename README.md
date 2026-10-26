@@ -89,3 +89,8 @@ VERSION_CODE=8 VERSION_NAME=1.7 ./tools/build.sh
 Signiert wird mit dem Debug-Schlüssel `tools/debug-signing.p12` (Passwort `android`), damit Updates sich über die alte Version installieren lassen. Für eine Veröffentlichung im Play Store einen eigenen, geheimen Schlüssel verwenden.
 
 Neue Teile kommen in `app/assets/www/data.js` (mit Suchbegriffen `k` für den Import); danach `node tools/test-engine.js` laufen lassen.
+
+## Weitere App in diesem Repo: Klangraum
+
+[`klangraum/`](klangraum/README.md) – Musik-App im Stil von Spotify für Windows (EXE) und Android (APK): Spotify-Konto verbinden, alle
+Playlists (eigene und gespeicherte von anderen) und Lieblingssongs werden automatisch geladen, Wiedergabe über Spotify Connect.
