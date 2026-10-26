@@ -1,5 +1,8 @@
 # SetupBuilder
 
+> Ebenfalls in diesem Repository: **[ClipSaver](clipsaver/README.md)** – Android-App zum Speichern von TikTok- und YouTube-Videos
+> (1080p/1440p/4K), Bildern und Werbung. APK: [`clipsaver/release/ClipSaver.apk`](clipsaver/release/ClipSaver.apk)
+
 Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die garantiert zusammenpassen, Teile vergleichen, Budget verwalten, den eigenen PC mit Freunden teilen und Upgrade-Tipps bekommen.
 
 **APK:** [`release/SetupBuilder.apk`](release/SetupBuilder.apk) (ab Android 7, ca. 8 MB). Internet wird nur für Geizhals (Wunschlisten, Preise, Online-Suche) und „PC verbinden“ im eigenen WLAN genutzt.

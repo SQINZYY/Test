@@ -1,0 +1,4 @@
+tools/robotest/.gradle/
+tools/robotest/.kotlin/
+tools/robotest/.android-test
+tools/ui-preview/shots/

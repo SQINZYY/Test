@@ -1,0 +1,28 @@
+// androidx.test:monitor aus dem Quelltext (Google Maven ist hier nicht erreichbar); Robolectric braucht es zur Laufzeit.
+// Wie im Bazel-Build: gegen die "versteckte" ExposedInstrumentationApi übersetzen, die leere Laufzeit-Fassung ausliefern.
+plugins { id 'org.jetbrains.kotlin.jvm' version '2.1.20' }
+
+def src = file("${rootDir}/.android-test/runner/monitor/java")
+def android = files("${rootDir}/../../.build-tools/android-all-34.jar")
+def skip = ['**/internal/runner/hidden/**', '**/internal/runner/runtime/ExposedInstrumentationApi.java',
+            '**/ActivityInvoker$$CC.java', '**/ActivityInvokerDesugar.java']
+repositories { maven { url 'https://maven-central.storage-download.googleapis.com/maven2' }; mavenCentral() }
+
+sourceSets {
+    hidden { java { srcDirs = [src, 'stubs']; include '**/internal/runner/hidden/ExposedInstrumentationApi.java', 'androidx/annotation/**' } }
+    runtimeApi { java { srcDirs = [src, 'stubs']; include '**/internal/runner/runtime/ExposedInstrumentationApi.java', 'androidx/annotation/**' } }
+    main {
+        java { srcDirs = [src, 'stubs']; exclude skip }
+        kotlin { srcDirs = [src, 'stubs']; exclude skip }
+    }
+}
+dependencies {
+    hiddenCompileOnly android
+    runtimeApiCompileOnly android
+    compileOnly android
+    compileOnly sourceSets.hidden.output
+    compileOnly 'com.google.errorprone:error_prone_annotations:2.36.0'
+}
+jar { from(sourceSets.runtimeApi.output) { include 'androidx/test/**' } }
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
+kotlin { jvmToolchain(21) }
