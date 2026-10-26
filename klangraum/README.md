@@ -80,7 +80,7 @@ npm start                    # App direkt starten (Entwicklung)
 
 # Android-APK (JDK 17+, Python 3 mit "cryptography")
 ./klangraum/tools/build-android.sh            # -> klangraum/release/Klangraum.apk
-VERSION_CODE=2 VERSION_NAME=1.1.0 ./klangraum/tools/build-android.sh
+VERSION_CODE=3 VERSION_NAME=1.1.0 ./klangraum/tools/build-android.sh
 
 # Icons neu erzeugen (Python mit Pillow)
 python3 klangraum/tools/make_icons.py

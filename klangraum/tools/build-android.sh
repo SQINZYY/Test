@@ -8,8 +8,8 @@ KR="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(cd "$KR/.." && pwd)"
 TOOLS="$REPO/.build-tools"
 OUT="$REPO/build/klangraum-android"
-VERSION_CODE="${VERSION_CODE:-1}"
-VERSION_NAME="${VERSION_NAME:-1.0.0}"
+VERSION_CODE="${VERSION_CODE:-2}"
+VERSION_NAME="${VERSION_NAME:-1.0.1}"
 MAVEN="https://repo1.maven.org/maven2"
 
 fetch() { # url ziel

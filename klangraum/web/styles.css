@@ -25,6 +25,8 @@
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
+/* Feste Höhe, damit die Einrichtungsseite (und alles darin) selbst scrollt – body scrollt nie */
+#app { height: 100%; }
 body {
   margin: 0;
   background: var(--bg-base);
@@ -103,7 +105,7 @@ h1, h2, h3 { margin: 0; }
 .toast.in { opacity: 1; transform: none; }
 
 .modal-wrap { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .65); animation: fade .15s; }
-.modal { width: min(460px, 100%); background: var(--elev-3); border-radius: 12px; padding: 24px; box-shadow: 0 16px 48px rgba(0, 0, 0, .6); }
+.modal { width: min(460px, 100%); max-height: 100%; overflow-y: auto; background: var(--elev-3); border-radius: 12px; padding: 24px; box-shadow: 0 16px 48px rgba(0, 0, 0, .6); }
 .modal h2 { font-size: 20px; margin-bottom: 10px; }
 .modal-body { color: var(--text-2); }
 .modal-body p { margin: 0 0 12px; }
@@ -128,7 +130,7 @@ h1, h2, h3 { margin: 0; }
 
 /* ---------- Einrichtung ---------- */
 
-.setup { height: 100%; overflow: auto; padding: 32px 16px; background: linear-gradient(180deg, #1f3d2a 0, #121212 360px) #121212; display: flex; flex-direction: column; align-items: center; }
+.setup { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 32px 16px; background: linear-gradient(180deg, #1f3d2a 0, #121212 360px) #121212; display: flex; flex-direction: column; align-items: center; }
 .setup-card { width: min(560px, 100%); background: rgba(0, 0, 0, .45); border-radius: 12px; padding: 32px; margin: auto 0 16px; }
 .setup-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; margin-bottom: 24px; }
 .setup-brand .logo { width: 36px; height: 36px; }
@@ -524,7 +526,10 @@ h1, h2, h3 { margin: 0; }
   .setup { padding: calc(24px + var(--safe-t)) 12px calc(24px + var(--safe-b)); }
   .setup-card { padding: 22px 18px; }
   .setup h1 { font-size: 24px; }
-  .copyrow code { font-size: 11px; padding: 6px 8px; }
+  .steps { padding: 4px 12px; }
+  .steps ol { padding-left: 18px; }
+  .copyrow { gap: 4px; }
+  .copyrow code { font-size: 11px; letter-spacing: -.02em; padding: 6px 7px; }
   .copyrow .btn { padding: 0 10px; }
   .copyrow .btn span { display: none; }
   .modal-actions .btn { flex: 1 1 auto; }

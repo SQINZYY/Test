@@ -71,7 +71,7 @@ function get(url) {
     assert.strictEqual(await win.evaluate(() => Platform.redirectUri), 'http://127.0.0.1:43821/callback');
     assert.strictEqual(await win.evaluate(() => typeof require), 'undefined', 'kein Node im Fenster');
     assert.strictEqual(await win.title(), 'Klangraum');
-    assert.strictEqual(await win.evaluate(() => Platform.version), '1.0.0');
+    assert.strictEqual(await win.evaluate(() => Platform.version), require(path.join(DESKTOP, 'package.json')).version);
   });
 
   await check('Anmeldung: Browser öffnen, Rückruf auf 127.0.0.1:43821, Token im Hauptprozess', async () => {

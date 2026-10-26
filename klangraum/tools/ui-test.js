@@ -56,6 +56,16 @@ async function newPage(browser, opts, auth) {
   return { context, page, errors };
 }
 
+/** Wie ein Mensch scrollen (Mausrad/Wischen statt scrollIntoView) und prüfen, ob der Verbinden-Knopf sichtbar wird. */
+async function scrollToConnect(page) {
+  const vp = page.viewportSize();
+  await page.mouse.move(vp.width / 2, vp.height / 2);
+  for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, 400); await page.waitForTimeout(60); }
+  await page.waitForTimeout(300);
+  const box = await page.locator('#connect').boundingBox();
+  assert.ok(box && box.y >= 0 && box.y + box.height <= vp.height, 'Knopf nicht erreichbar, liegt bei y=' + (box && Math.round(box.y)) + ' (Fensterhöhe ' + vp.height + ')');
+}
+
 async function shot(page, name) {
   await page.waitForTimeout(350);
   await page.screenshot({ path: path.join(OUT, name + '.png') });
@@ -241,6 +251,12 @@ async function shot(page, name) {
   await s.page.goto(BASE + '/index.html');
   await s.page.waitForSelector('#connect');
   await shot(s.page, 'pc-0-einrichtung');
+  await check('Einrichtung (PC, kleines Fenster): Seite lässt sich bis zum Verbinden-Knopf scrollen', async () => {
+    await s.page.setViewportSize({ width: 1000, height: 600 });
+    await scrollToConnect(s.page);
+    await s.page.evaluate(() => { document.querySelector('.setup').scrollTop = 0; });
+    await s.page.setViewportSize({ width: 1200, height: 860 });
+  });
   await check('Einrichtung: ungültige Client-ID wird erklärt', async () => {
     await s.page.fill('#cid', 'abc');
     await s.page.click('#connect');
@@ -312,6 +328,23 @@ async function shot(page, name) {
   await ms.page.goto(BASE + '/index.html');
   await ms.page.waitForSelector('#connect');
   await shot(ms.page, 'handy-0-einrichtung');
+  await check('Einrichtung (Handy): Seite lässt sich bis zum Verbinden-Knopf scrollen', async () => {
+    await scrollToConnect(ms.page);
+  });
+  await shot(ms.page, 'handy-0b-einrichtung-unten');
+  await check('Einrichtung (Handy): Redirect-URIs passen in eine Zeile', async () => {
+    const lines = await ms.page.$$eval('.copyrow code', els => els.map(e => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight || '16'))));
+    const h = await ms.page.$$eval('.copyrow code', els => els.map(e => e.getBoundingClientRect().height));
+    assert.ok(Math.abs(h[0] - h[1]) < 2, 'http-Adresse bricht um: Höhen ' + h.join(' / '));
+  });
+  const small = await newPage(browser, { viewport: { width: 360, height: 640 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true }, false);
+  await small.page.goto(BASE + '/index.html');
+  await small.page.waitForSelector('#connect');
+  await check('Einrichtung (kleines Handy 360×640): scrollen bis zum Knopf', async () => {
+    await scrollToConnect(small.page);
+    const h = await small.page.$$eval('.copyrow code', els => els.map(e => e.getBoundingClientRect().height));
+    assert.ok(Math.abs(h[0] - h[1]) < 2, 'http-Adresse bricht um: Höhen ' + h.join(' / '));
+  });
 
   // ---------- Android-Brücke (wie MainActivity.Bridge) ----------
   const a = await newPage(browser, { viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true }, false);

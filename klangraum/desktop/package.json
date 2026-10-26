@@ -1,7 +1,7 @@
 {
   "name": "klangraum",
   "productName": "Klangraum",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Klangraum – deine Spotify-Bibliothek auf dem PC",
   "main": "main.js",
   "private": true,
