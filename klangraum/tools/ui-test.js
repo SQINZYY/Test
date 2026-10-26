@@ -353,6 +353,13 @@ async function shot(page, name) {
     assert.strictEqual(await M.textContent('.full-ctx b'), 'Autofahrt');
   });
   await shot(M, 'handy-5-player');
+  await check('Handy: Pause im Vollbild-Player schickt genau einen Befehl', async () => {
+    log.length = 0;
+    await M.tap('#full .pp');
+    await M.waitForTimeout(300);
+    const cmds = log.filter(l => /^PUT \/me\/player\/(pause|play)/.test(l));
+    assert.deepStrictEqual(cmds.map(c => c.split('?')[0]), ['PUT /me/player/pause'], log.join(' | '));
+  });
   await check('Handy: Zurück schließt den Vollbild-Player', async () => {
     assert.strictEqual(await M.evaluate(() => KR.back()), true);
     await M.waitForFunction(() => document.querySelector('#full').hidden);

@@ -24,6 +24,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 /* Feste Höhe, damit die Einrichtungsseite (und alles darin) selbst scrollt – body scrollt nie */
 #app { height: 100%; }
@@ -204,8 +205,8 @@ h1, h2, h3 { margin: 0; }
 .topbar { position: sticky; top: 0; z-index: 10; height: 64px; margin-bottom: -64px; display: flex; align-items: center; gap: 12px; padding: 0 20px; transition: background .25s; }
 .topbar.solid { background: color-mix(in srgb, var(--tb, #222) 55%, #121212); }
 .nav-btns { display: flex; gap: 8px; }
-.round { width: 32px; height: 32px; border-radius: 50%; background: rgba(0, 0, 0, .7); display: inline-flex; align-items: center; justify-content: center; }
-.round .ic { width: 18px; height: 18px; }
+.nav-round { width: 32px; height: 32px; flex: none; border-radius: 50%; background: rgba(0, 0, 0, .7); display: inline-flex; align-items: center; justify-content: center; }
+.nav-round .ic { width: 18px; height: 18px; }
 .tb-title { flex: 1; min-width: 0; font-size: 20px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity .2s; }
 .topbar.solid .tb-title { opacity: 1; }
 .sync { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 12px; background: rgba(0, 0, 0, .55); border-radius: 999px; padding: 0 12px; height: 28px; white-space: nowrap; }

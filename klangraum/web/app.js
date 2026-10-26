@@ -396,8 +396,8 @@
       '<div class="side-list lib-list" data-liblist></div>' +
       '</section></aside>' +
       '<main class="main" id="main">' +
-      '<div class="topbar" id="topbar"><div class="nav-btns"><button class="round" data-act="back" aria-label="Zurück">' + ic('back') + '</button>' +
-      '<button class="round hide-m" data-act="fwd" aria-label="Vor">' + ic('fwd') + '</button></div>' +
+      '<div class="topbar" id="topbar"><div class="nav-btns"><button class="nav-round" data-act="back" aria-label="Zurück">' + ic('back') + '</button>' +
+      '<button class="nav-round hide-m" data-act="fwd" aria-label="Vor">' + ic('fwd') + '</button></div>' +
       '<div class="tb-title" id="tb-title"></div><div class="sync" id="sync"></div>' +
       '<button class="avatar" data-act="account" id="avatar" aria-label="Konto"></button></div>' +
       '<div class="view" id="view"></div></main>' +
@@ -1593,9 +1593,10 @@
       '<button class="pp big" data-act="toggle"></button><button class="icon-btn big" data-act="next">' + ic('next') + '</button><button class="icon-btn" data-act="repeat"></button></div>' +
       '<div class="dev-line full-dev"></div></div>';
 
+    // Eigener Handler; nicht zusätzlich an die App weiterreichen (sonst zählt jeder Tipp doppelt)
     $('#full').addEventListener('click', e => {
       const a = e.target.closest('[data-act]');
-      if (a) Player.action(a.dataset.act, a, e);
+      if (a) { e.stopPropagation(); Player.action(a.dataset.act, a, e); }
     });
 
     $$('.seek').forEach(r => {
