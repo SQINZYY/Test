@@ -1,5 +1,6 @@
 .build-tools/
 build/
 node_modules/
-# Windows-ZIP ist zu groß fürs Repo (wird mit klangraum/desktop: npm run build:win erzeugt)
+# Windows-ZIPs sind zu groß fürs Repo (werden mit desktop: npm run build:win erzeugt)
 klangraum/release/*.zip
+klangwelt/release/*.zip

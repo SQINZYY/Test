@@ -94,3 +94,10 @@ Neue Teile kommen in `app/assets/www/data.js` (mit Suchbegriffen `k` für den Im
 
 [`klangraum/`](klangraum/README.md) – Musik-App im Stil von Spotify für Windows (EXE) und Android (APK): Spotify-Konto verbinden, alle
 Playlists (eigene und gespeicherte von anderen) und Lieblingssongs werden automatisch geladen, Wiedergabe über Spotify Connect.
+
+## Weitere App in diesem Repo: Klangwelt
+
+[`klangwelt/`](klangwelt/README.md) – Musik-App im Stil von Spotify für Windows (EXE) und Android (APK) auf Basis des
+„Spotify Tracks Dataset“ (81.206 Songs, 114 Genres): Suche, Daily Mixe, Mix der Woche, Stimmungen, Charts, Radio, eigene
+Playlists und Lieblingssongs, Warteschlange, Endlos-Wiedergabe, Sleep-Timer. Gespielt werden die 30-Sekunden-Vorschauen über
+den offiziellen Spotify-Player; ganze Songs öffnen sich in Spotify.
