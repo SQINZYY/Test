@@ -71,6 +71,7 @@ const oembedCalls = [];
 
 // ---------- Nachgebaute Spotify Web API (Suche im ganzen Katalog) ----------
 const spLog = [];
+const SCOPE = 'playlist-read-private playlist-read-collaborative user-library-modify user-library-read user-follow-read user-read-private';
 const extId = n => ('ext' + String(n).padStart(4, '0')).padEnd(22, 'x');
 const img = name => [{ url: BASE + '/mock/cover/' + name + '.svg', width: 300, height: 300 }];
 const spTrack = (n, extra) => Object.assign({
@@ -78,9 +79,32 @@ const spTrack = (n, extra) => Object.assign({
   artists: [{ id: 'sa1', name: 'Neue Band', uri: 'spotify:artist:sa1' }],
   album: { id: 'salb1', name: 'Neues Album', uri: 'spotify:album:salb1', images: img('salb1') },
 }, extra);
-function spotifyApi(u) {
+// Verknüpftes Konto: 55 Lieblingssongs (zwei Seiten), eine eigene und eine gespeicherte fremde Playlist, Album, Künstler
+const ME = { id: 'kwtester', display_name: 'Testperson Klang', images: img('me') };
+const CATALOG_ID = '3nqQXoyQOWXiESFLlDF1hG';
+const likedAll = Array.from({ length: 55 }, (_, k) => ({ added_at: new Date(Date.UTC(2026, 9, 20) - k * 3600e3).toISOString(),
+  track: k === 0 ? spTrack(0, { id: CATALOG_ID, uri: 'spotify:track:' + CATALOG_ID, name: 'Unholy (feat. Kim Petras)' }) : spTrack(100 + k, { name: 'Lieblingssong ' + k }) }));
+const spPlaylists = [
+  { id: 'splown', name: 'Roadtrip 2026', description: 'Für die &amp; Autobahn', owner: { id: 'kwtester', display_name: 'Testperson Klang' }, images: img('splown'), snapshot_id: 'snap1', collaborative: false, items: { total: 3 } },
+  { id: 'splother', name: 'Fremde Hits', description: '', owner: { id: 'spotify', display_name: 'Spotify' }, images: img('splother'), snapshot_id: 'snap9', collaborative: false, items: { total: 50 } },
+];
+function spotifyApi(u, method) {
   const p = u.pathname.replace(/^\/v1/, '');
-  spLog.push(p + u.search);
+  spLog.push((method && method !== 'GET' ? method + ' ' : '') + p + u.search);
+  if (method === 'PUT' || method === 'DELETE') return p === '/me/library' ? [200, {}] : [405, { error: { status: 405, message: 'Method not allowed' } }];
+  const off = Number(u.searchParams.get('offset') || 0), lim = Number(u.searchParams.get('limit') || 20);
+  if (p === '/me') return ME;
+  if (p === '/me/playlists') return { items: spPlaylists.slice(off, off + lim), total: spPlaylists.length };
+  if (p === '/me/tracks') return { items: likedAll.slice(off, off + lim), total: likedAll.length };
+  if (p === '/me/albums') return { items: [{ added_at: '2026-10-01T10:00:00Z', album: { id: 'salb2', name: 'Gespeichertes Album', album_type: 'album', release_date: '2024-01-01', artists: [{ id: 'sa2', name: 'Gefolgte Band' }], images: img('salb2'), total_tracks: 9 } }].slice(off), total: 1 };
+  if (p === '/me/following') return { artists: { items: [{ id: 'sa2', name: 'Gefolgte Band', images: img('sa2'), genres: [] }], cursors: { after: null }, total: 1 } };
+  if (p === '/playlists/splown' || p === '/playlists/splother') return spPlaylists.find(x => '/playlists/' + x.id === p);
+  if (p === '/playlists/splown/items') {
+    const items = [{ added_at: '2026-10-02T10:00:00Z', item: spTrack(200, { name: 'Roadtrip-Song A' }) }, { added_at: '2026-10-03T10:00:00Z', item: spTrack(0, { id: CATALOG_ID, uri: 'spotify:track:' + CATALOG_ID }) },
+      { added_at: '2026-10-04T10:00:00Z', track: spTrack(201, { name: 'Roadtrip-Song B' }) }, { added_at: '2026-10-05T10:00:00Z', track: { uri: 'spotify:local:a:b:c:1', is_local: true, name: 'Lokal', artists: [] } }];
+    return { items: items.slice(off, off + lim), total: items.length };
+  }
+  if (p === '/playlists/splother/items') return [403, { error: { status: 403, message: 'Forbidden' } }];
   if (p === '/search') {
     const offset = Number(u.searchParams.get('offset') || 0);
     const types = u.searchParams.get('type').split(',');
@@ -105,7 +129,7 @@ function spotifyApi(u) {
 async function newPage(browser, opts, init) {
   const context = await browser.newContext(opts);
   await context.route('https://api.spotify.com/**', async route => {
-    const r = spotifyApi(new URL(route.request().url()));
+    const r = spotifyApi(new URL(route.request().url()), route.request().method());
     const [status, body] = Array.isArray(r) ? r : [200, r];
     await route.fulfill({ status, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   });
@@ -118,8 +142,9 @@ async function newPage(browser, opts, init) {
   });
   await context.route('https://accounts.spotify.com/api/token', route => route.fulfill({
     status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ access_token: 'KWTOKEN', refresh_token: 'KWREFRESH', expires_in: 3600 }),
+    body: JSON.stringify({ access_token: 'KWTOKEN', refresh_token: 'KWREFRESH', expires_in: 3600, scope: SCOPE }),
   }));
+  await context.route('https://open.spotify.com/embed/playlist/**', r => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><body style="background:#333;color:#fff">Spotify-Playlist (Test)</body>' }));
   await context.route('https://open.spotify.com/embed/iframe-api/v1', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_IFRAME_API }));
   await context.route('https://open.spotify.com/oembed**', r => {
     const id = new URL(new URL(r.request().url()).searchParams.get('url')).pathname.split('/').pop();
@@ -138,10 +163,10 @@ async function newPage(browser, opts, init) {
         appVersion: () => '1.0.0',
         get: (id, url) => setTimeout(() => Platform._http(id, 200, JSON.stringify({ thumbnail_url: location.origin + '/mock/cover/a.svg' })), 20),
         openAuth: url => { window.__android.auth = url; },
-        post: (id, url, body) => { window.__android.token = body; setTimeout(() => Platform._http(id, 200, JSON.stringify({ access_token: 'A', refresh_token: 'R', expires_in: 3600 })), 20); },
+        post: (id, url, body) => { window.__android.token = body; setTimeout(() => Platform._http(id, 200, JSON.stringify({ access_token: 'A', refresh_token: 'R', expires_in: 3600, scope: o.scope })), 20); },
       };
     }
-  }, init || {});
+  }, Object.assign({ scope: SCOPE }, init));
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e.stack || e)));
@@ -332,10 +357,59 @@ async function shot(page, name) {
     await P.click('.modal .btn-primary');
     // Spotify leitet zurück, Klangwelt löst den Code ein und startet neu
     await P.waitForFunction(() => window.KW && document.querySelector('#home-secs, #results'), null, { timeout: 20000 });
-    await P.waitForFunction(() => /Mit Spotify verbunden/.test(document.querySelector('#toasts').textContent), null, { timeout: 10000 });
+    await P.waitForFunction(() => /Spotify-Konto verknüpft/.test(document.querySelector('#toasts').textContent), null, { timeout: 10000 });
     assert.ok(!P.url().includes('code='));
   });
-  await shot(P, 'pc-9-spotify-verbunden');
+
+  await check('Spotify-Konto: Playlists (eigene + gespeicherte), Lieblingssongs, Alben, Künstler werden geladen', async () => {
+    await P.waitForFunction(() => /Fremde Hits/.test(document.querySelector('.side-list').textContent), null, { timeout: 10000 });
+    await P.waitForFunction(() => !document.querySelector('[data-spsync] .spinner'));
+    // Lieblingssongs = Klangwelt-Herzen + Spotify-Lieblingssongs (ohne doppelte)
+    const n = await P.evaluate(ids => new Set(KW.lib.liked().map(x => x.id).concat(ids)).size, likedAll.map(x => x.track.id));
+    const side = await P.textContent('.side-list');
+    for (const x of ['Roadtrip 2026', 'Fremde Hits', 'von Spotify', 'Gespeichert', 'Gespeichertes Album', 'Gefolgte Band', n + ' Songs']) assert.ok(side.includes(x), x + ' fehlt: ' + side);
+    // Lieblingssongs über zwei Seiten (offset statt "next")
+    assert.ok(spLog.includes('/me/tracks?limit=50&offset=50'), spLog.filter(x => x.startsWith('/me/tracks')).join());
+    await P.goto(BASE + '/index.html#/liked');
+    await P.waitForSelector('#list .trow');
+    const hero = await P.textContent('.hero');
+    assert.ok(hero.includes('Testperson Klang') && hero.includes(n + ' Songs') && hero.includes('mit Spotify abgeglichen'), hero);
+    // Neueste zuerst: Spotify-Song 1 vor Song 2
+    const names = await P.$$eval('#list .trow .tname', r => r.map(x => x.textContent));
+    assert.ok(names.indexOf('Lieblingssong 1') >= 0 && names.indexOf('Lieblingssong 1') < names.indexOf('Lieblingssong 2'), names.join());
+    await P.goto(BASE + '/index.html#/home');
+    await P.waitForSelector('#home-secs .sec');
+    assert.ok((await P.$$eval('.sec-head h2', h => h.map(x => x.textContent))).includes('Deine Spotify-Playlists'));
+    assert.strictEqual(await P.textContent('.greet').then(t => t.split(', ').pop()), 'Testperson');
+  });
+  await shot(P, 'pc-9-spotify-verknuepft');
+
+  await check('Eigene Spotify-Playlist: Songs von Spotify, in Klangwelt kopieren', async () => {
+    await P.click('.side-list a[href="#/splaylist/splown"]');
+    await P.waitForSelector('#list .trow');
+    assert.strictEqual(await P.$$eval('#list .trow', r => r.length), 3, 'lokale Datei wird ausgelassen');
+    assert.strictEqual(await P.textContent('.hero-title'), 'Roadtrip 2026');
+    assert.ok((await P.textContent('.hero')).includes('Für die & Autobahn'));
+    await P.dblclick('#list .trow:nth-child(1) .c-dur');
+    await P.waitForFunction(() => window.__embed.loads.includes('spotify:track:' + ('ext0200').padEnd(22, 'x')));
+    await P.click('[data-act="copy-pl"]');
+    assert.ok(await P.evaluate(() => KW.lib.playlists().some(p => p.name === 'Roadtrip 2026' && p.tracks.length === 3)));
+    // Zweiter Aufruf kommt aus dem Zwischenspeicher (gleicher snapshot_id)
+    const before = spLog.filter(x => x.startsWith('/playlists/splown/items')).length;
+    await P.goto(BASE + '/index.html#/home');
+    await P.goto(BASE + '/index.html#/splaylist/splown');
+    await P.waitForSelector('#list .trow');
+    assert.strictEqual(spLog.filter(x => x.startsWith('/playlists/splown/items')).length, before);
+  });
+  await shot(P, 'pc-9b-spotify-playlist');
+
+  await check('Gespeicherte Playlist von anderen: offizieller Spotify-Player statt Songliste', async () => {
+    await P.goto(BASE + '/index.html#/splaylist/splother');
+    await P.waitForSelector('#list iframe.embed');
+    assert.ok((await P.getAttribute('#list iframe.embed', 'src')).startsWith('https://open.spotify.com/embed/playlist/splother'));
+    assert.ok((await P.textContent('.hero')).includes('In deiner Bibliothek gespeichert'));
+  });
+  await shot(P, 'pc-9c-spotify-fremde-playlist');
 
   await check('Spotify-Suche: Songs, Künstler, Alben von Spotify, „Mehr laden“', async () => {
     await P.goto(BASE + '/index.html#/search');
@@ -356,11 +430,21 @@ async function shot(page, name) {
     await P.waitForFunction(() => window.__embed && window.__embed.loads.includes('spotify:track:ext0001xxxxxxxxxxxxxxx'));
     assert.ok((await P.textContent('.npp-info')).includes('keine Audio-Merkmale'));
     await P.click('#sp-songs .trow:nth-child(2) [data-act="like"]', { force: true });
+    // Verknüpft: das Herz landet auch bei Spotify
+    for (let k = 0; k < 20 && !spLog.some(x => x.startsWith('PUT /me/library')); k++) await P.waitForTimeout(100);
+    assert.ok(spLog.includes('PUT /me/library?uris=spotify%3Atrack%3Aext0001xxxxxxxxxxxxxxx'), spLog.filter(x => /library/.test(x)).join());
     await P.reload();
     await P.waitForSelector('.shell', { timeout: 20000 });
     await P.goto(BASE + '/index.html#/liked');
     await P.waitForSelector('#list .trow');
     assert.ok((await P.textContent('#list')).includes('Neuer Song 1'));
+    const n = await P.evaluate(ids => new Set(KW.lib.liked().map(x => x.id).concat(ids)).size, likedAll.map(x => x.track.id));
+    assert.ok((await P.textContent('.hero')).includes(n + ' Songs'));
+    await P.waitForSelector('#list .trow[data-id="' + ('ext0102').padEnd(22, 'x') + '"]');
+    // Ein nur bei Spotify gespeicherter Song: Herz weg -> bei Spotify entfernt
+    await P.click('#list .trow[data-id="' + ('ext0102').padEnd(22, 'x') + '"] [data-act="like"]', { force: true });
+    for (let k = 0; k < 20 && !spLog.some(x => x.startsWith('DELETE /me/library')); k++) await P.waitForTimeout(100);
+    assert.ok(spLog.includes('DELETE /me/library?uris=spotify%3Atrack%3A' + ('ext0102').padEnd(22, 'x')), spLog.filter(x => /library/.test(x)).join());
   });
 
   await check('Spotify-Album: Songs, Speichern in der Bibliothek', async () => {
@@ -463,10 +547,27 @@ async function shot(page, name) {
     const auth = new URL(await M.evaluate(() => window.__android.auth));
     assert.strictEqual(auth.searchParams.get('redirect_uri'), 'klangwelt://callback');
     await M.evaluate(u => KW.onAuthCallback(u), 'klangwelt://callback?code=AC&state=' + auth.searchParams.get('state'));
-    await M.waitForFunction(() => /Verbunden/.test(document.querySelector('.view').textContent));
+    await M.waitForSelector('.set-card [data-set="sp-sync"]');
+    await M.waitForFunction(() => /Testperson Klang/.test(document.querySelector('.view').textContent), null, { timeout: 10000 });
     const body = Object.fromEntries(new URLSearchParams(await M.evaluate(() => window.__android.token)));
     assert.strictEqual(body.code, 'AC');
     assert.strictEqual(body.redirect_uri, 'klangwelt://callback');
+  });
+  await shot(M, 'handy-7-spotify-konto');
+  await check('Handy: Bibliothek zeigt die Spotify-Playlists', async () => {
+    await M.tap('.tabbar a[href="#/library"]');
+    await M.waitForSelector('.lib-page a[href="#/splaylist/splown"]');
+    const t = await M.textContent('.lib-page');
+    assert.ok(t.includes('Roadtrip 2026') && t.includes('Fremde Hits'), t);
+  });
+  await shot(M, 'handy-8-bibliothek-spotify');
+  await check('Handy: Konto trennen entfernt die Spotify-Bibliothek', async () => {
+    await M.goto(BASE + '/index.html#/settings');
+    await M.tap('.set-card [data-set="sp-off"]');
+    await M.waitForSelector('.set-card [data-act="sp-connect"]');
+    await M.tap('.tabbar a[href="#/library"]');
+    await M.waitForSelector('.lib-page .lib-row');
+    assert.ok(!(await M.textContent('.lib-page')).includes('Fremde Hits'));
   });
   await M.goto(BASE + '/index.html#/search');
   await M.waitForSelector('.tile');

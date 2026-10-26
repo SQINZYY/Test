@@ -3,8 +3,9 @@
 Musik-App im Stil von Spotify für **Windows (EXE)** und **Android (APK)**, gebaut auf dem
 [Spotify Tracks Dataset](https://huggingface.co/datasets/maharshipandya/spotify-tracks-dataset): **81.206 Songs** von rund
 30.000 Künstlern aus 114 Genres, mit Audio-Merkmalen (Tempo, Tonart, Energie, Tanzbarkeit, Stimmung …).
-Keine Anmeldung, kein Spotify-Konto nötig. Wer will, verbindet zusätzlich Spotify und findet dann **jeden Song auf Spotify**
-(siehe „Spotify-Suche“).
+Keine Anmeldung, kein Spotify-Konto nötig. Wer will, **verknüpft sein Spotify-Konto**: Dann erscheinen die eigenen
+Spotify-Playlists, gespeicherte Playlists von anderen, Lieblingssongs, Alben und Künstler in Klangwelt, und die Suche findet
+**jeden Song auf Spotify** (siehe „Spotify-Konto verknüpfen“).
 
 ## Download
 
@@ -31,10 +32,22 @@ Windows SmartScreen bzw. Android/Play Protect warnen eventuell, weil die Apps ni
   (Leertaste, Strg+←/→, Strg+K). Handy: Mini-Player und Vollbild-Player.
 - **Übertragen:** Einstellungen → „Code kopieren“ / „Code einfügen“ nimmt die Bibliothek vom PC aufs Handy (und umgekehrt).
 
-### Spotify-Suche (alle Songs, optional)
+### Spotify-Konto verknüpfen (optional)
 
-Der Datensatz hat „nur“ 81.206 Songs. Über **Einstellungen → Spotify verbinden** (oder den Hinweis in der Suche) durchsucht
-Klangwelt zusätzlich den ganzen Spotify-Katalog über die offizielle Spotify Web API:
+Über **Einstellungen → Spotify-Konto verknüpfen** (oder den Hinweis in der Suche) meldet sich Klangwelt über die offizielle
+Spotify Web API bei deinem Konto an (PKCE, ohne Passwort in der App):
+
+- **Bibliothek:** deine Spotify-Playlists – eigene, gemeinsame und **gespeicherte Playlists von anderen** – stehen in
+  „Deine Bibliothek“ und auf der Startseite, dazu deine **Lieblingssongs** (zusammen mit den Herzen aus Klangwelt),
+  gespeicherte Alben und gefolgte Künstler. Abgleich beim Start (höchstens alle 10 Minuten) oder mit „Jetzt abgleichen“;
+  der Zwischenspeicher liegt in IndexedDB, große Bibliotheken werden seitenweise geladen.
+- **Herzen** in Klangwelt werden auch bei Spotify gespeichert bzw. entfernt.
+- **Eigene Playlists** zeigen ihre Songs (abspielen, Warteschlange, „In Klangwelt kopieren“). Bei **Playlists anderer Leute**
+  gibt Spotify die Songliste seit Februar 2026 nicht mehr an Entwickler-Apps heraus – Klangwelt zeigt sie dann im
+  offiziellen Spotify-Player (Einbettung).
+- „Konto trennen“ entfernt die Spotify-Daten wieder; die Klangwelt-Bibliothek bleibt.
+
+Zusätzlich durchsucht Klangwelt dann den ganzen Spotify-Katalog:
 
 - Unter den Katalog-Treffern erscheinen „Songs/Künstler/Alben auf Spotify“ (10 Treffer pro Abruf, „Mehr laden“ bis 200).
 - Spotify-Songs lassen sich abspielen (Vorschau), liken, in Playlists und die Warteschlange packen; sie bleiben gespeichert und
@@ -46,8 +59,10 @@ Einmalig nötig ist eine eigene Spotify-Entwickler-App (die von Klangraum geht a
 [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) **Create app**, bei **Redirect URIs**
 `http://127.0.0.1:43822/callback` (Windows) und `klangwelt://callback` (Android) eintragen, **Web API** ankreuzen und die
 **Client ID** in Klangwelt einfügen. Premium braucht nur der Besitzer der Entwickler-App (Regel seit Februar 2026); das eigene
-Konto darf kostenlos sein und wird dann im Dashboard unter „User Management“ eingetragen. Das automatische Auslesen von
-open.spotify.com ist nach den Spotify-Nutzungsbedingungen nicht erlaubt und wird deshalb nicht verwendet.
+Konto darf kostenlos sein und wird dann im Dashboard unter „User Management“ eingetragen (bis zu 5 Konten). Wer in Klangwelt
+1.1 nur für die Suche verbunden hat, tippt einmal auf „Konto verknüpfen“, damit Klangwelt die Bibliothek lesen darf.
+Das automatische Auslesen von open.spotify.com ist nach den Spotify-Nutzungsbedingungen nicht erlaubt und wird deshalb nicht
+verwendet.
 
 ### Was abgespielt wird
 
@@ -63,7 +78,8 @@ Cover: zuerst ein erzeugtes Farbcover (geht offline), dann – wenn online – d
 
 - `web/` – Oberfläche (HTML/CSS/JS, ohne Abhängigkeiten): `catalog.js` (Katalog laden, Suche, Künstler/Alben/Genres,
   ähnliche Songs über die Audio-Merkmale, Mixe, Spotify-Songs außerhalb des Datensatzes), `library.js` (Bibliothek in
-  `localStorage`, Export-Code), `spotify.js` (Spotify-Anmeldung mit PKCE und Suche, gleiche Datei wie in Klangraum), `preview.js`
+  `localStorage`, Export-Code), `spotify.js` (Spotify-Anmeldung mit PKCE, Bibliothek und Suche, wie in Klangraum), `store.js`
+  (IndexedDB-Zwischenspeicher für die Spotify-Bibliothek), `preview.js`
   (Spotify-Player steuern, Ende erkennen), `covers.js`, `platform.js`, `app.js`, `data/catalog.json` (Katalog, 8 MB)
 - `desktop/` – Electron-Hülle (`app://klangwelt/`, Cover-Abruf und Spotify-Anmeldung über `127.0.0.1:43822` im Hauptprozess)
   und `build.mjs` (Windows-ZIP ohne Wine)

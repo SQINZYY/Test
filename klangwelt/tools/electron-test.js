@@ -42,11 +42,23 @@ const FAKE_IFRAME_API = `(() => {
     net.fetch = async (url, opts) => {
       if (String(url) === 'https://accounts.spotify.com/api/token') {
         global.__tokenBody = String(opts.body);
-        return new Response(JSON.stringify({ access_token: 'EA', refresh_token: 'ER', expires_in: 3600 }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ access_token: 'EA', refresh_token: 'ER', expires_in: 3600, scope: 'playlist-read-private user-library-read user-library-modify user-follow-read' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       if (String(url).startsWith('https://open.spotify.com/oembed?')) return new Response(JSON.stringify({ thumbnail_url: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22%3E%3Crect width=%2210%22 height=%2210%22 fill=%22%23e91e63%22/%3E%3C/svg%3E' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       return real(url, opts);
     };
+  });
+  // Nachgebaute Spotify-Bibliothek für das verknüpfte Konto
+  const SP = {
+    '/v1/me': { id: 'desk', display_name: 'Desktop Test', images: [] },
+    '/v1/me/playlists': { items: [{ id: 'dpl1', name: 'Desktop-Playlist', owner: { id: 'desk', display_name: 'Desktop Test' }, images: [], items: { total: 0 } }], total: 1 },
+    '/v1/me/tracks': { items: [{ added_at: '2026-10-01T00:00:00Z', track: { id: '3nqQXoyQOWXiESFLlDF1hG', uri: 'spotify:track:3nqQXoyQOWXiESFLlDF1hG', name: 'Unholy', artists: [{ id: 'x', name: 'Sam Smith' }], album: { id: 'y', name: 'Unholy', images: [] }, duration_ms: 156000 } }], total: 1 },
+    '/v1/me/albums': { items: [], total: 0 },
+    '/v1/me/following': { artists: { items: [], cursors: { after: null }, total: 0 } },
+  };
+  await app.context().route('https://api.spotify.com/**', r => {
+    const body = SP[new URL(r.request().url()).pathname];
+    return r.fulfill({ status: body ? 200 : 404, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }, body: JSON.stringify(body || { error: { status: 404, message: 'x' } }) });
   });
   await app.context().route('https://open.spotify.com/embed/iframe-api/v1', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_IFRAME_API }));
 
@@ -88,7 +100,7 @@ const FAKE_IFRAME_API = `(() => {
     assert.ok(opened.length === 1 && opened[0].startsWith('spotify:track:'), JSON.stringify(opened));
   });
 
-  await check('Spotify verbinden: Browser, Rückkehr über 127.0.0.1:43822, Token im Hauptprozess', async () => {
+  await check('Spotify-Konto verknüpfen: Browser, Rückkehr über 127.0.0.1:43822, Token im Hauptprozess, Bibliothek', async () => {
     await win.evaluate(() => { location.hash = '#/settings'; });
     await win.click('.set-card [data-act="sp-connect"]');
     await win.fill('#sp-cid', 'abcdefabcdefabcdefabcdefabcdef12');
@@ -101,7 +113,9 @@ const FAKE_IFRAME_API = `(() => {
     const res = await new Promise((resolve, reject) => http.get('http://127.0.0.1:43822/callback?code=EC&state=' + auth.searchParams.get('state'), r => { let b = ''; r.on('data', d => { b += d; }); r.on('end', () => resolve({ status: r.statusCode, body: b })); }).on('error', reject));
     assert.strictEqual(res.status, 200);
     assert.ok(res.body.includes('Verbunden!'));
-    await win.waitForFunction(() => /Verbunden\./.test(document.querySelector('.view').textContent));
+    await win.waitForFunction(() => /Desktop-Playlist/.test(document.querySelector('.side-list').textContent), null, { timeout: 10000 });
+    await win.waitForSelector('.set-card [data-set="sp-sync"]');
+    assert.ok((await win.textContent('.view')).includes('Desktop Test'));
     const body = Object.fromEntries(new URLSearchParams(await app.evaluate(() => global.__tokenBody)));
     assert.strictEqual(body.code, 'EC');
     assert.strictEqual(body.redirect_uri, 'http://127.0.0.1:43822/callback');

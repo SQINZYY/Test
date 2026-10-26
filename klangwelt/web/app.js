@@ -5,8 +5,9 @@
   const app = document.getElementById('app');
   const coarse = matchMedia('(pointer: coarse)').matches;
   const Lib = Library.create();
-  // Optional: Suche im ganzen Spotify-Katalog (eigene Spotify-Entwickler-App nötig, wie bei Klangraum)
-  const sp = Spotify.create({ platform: Platform, prefix: 'kw', scopes: [] });
+  // Optional: Spotify-Konto verknüpfen – Bibliothek von Spotify und Suche im ganzen Katalog (eigene Entwickler-App nötig)
+  const SP_SCOPES = ['user-read-private', 'playlist-read-private', 'playlist-read-collaborative', 'user-library-read', 'user-library-modify', 'user-follow-read'];
+  const sp = Spotify.create({ platform: Platform, prefix: 'kw', scopes: SP_SCOPES });
   const ROW_CHUNK = 120;
 
   const S = {
@@ -302,11 +303,12 @@
     }
     S.ready = true;
     Lib.extras().forEach(m => Catalog.addExternal(m));
+    await SA.load();
     // Browser-Variante: Spotify leitet nach der Anmeldung auf diese Seite zurück
     if (Platform.kind === 'web' && /[?&](code|error)=/.test(location.search)) {
       const url = location.href;
       history.replaceState(null, '', location.pathname + location.hash);
-      await sp.finishLogin(url).then(() => toast('Mit Spotify verbunden'), e => toast(spExplain(e), 6000));
+      await sp.finishLogin(url).then(() => toast('Spotify-Konto verknüpft'), e => toast(spExplain(e), 6000));
     }
     renderShell();
     Lib.onChange(what => {
@@ -321,6 +323,8 @@
     route();
     Player.restore();
     bindKeys();
+    // Spotify-Bibliothek im Hintergrund abgleichen (höchstens alle 10 Minuten automatisch)
+    if (SA.linked() && Date.now() - SA.synced > 10 * 60 * 1000) SA.sync(false);
   }
 
   // ---------- Gerüst ----------
@@ -337,6 +341,7 @@
       '<section class="panel side-lib">' +
       '<header class="side-lib-head"><a href="#/library" data-nav="library">' + ic('library') + '<span>Deine Bibliothek</span></a>' +
       '<button class="icon-btn" data-act="new-playlist" title="Neue Playlist">' + ic('plus') + '</button></header>' +
+      '<div class="sp-sync" data-spsync></div>' +
       '<div class="chips" data-chips></div>' +
       '<div class="side-list lib-list" data-liblist></div>' +
       '</section></aside>' +
@@ -398,12 +403,26 @@
     const f = local('kw.libFilter') || 'all';
     const items = [];
     if (f === 'all' || f === 'playlists') {
-      items.push('<a class="lib-row" href="#/liked">' + likedCover('lib-img') + '<div class="lib-meta"><div class="lib-t">Lieblingssongs</div><div class="lib-s">' + ic('heartFill', 'pin') + 'Playlist • ' + plural(Lib.liked().length, 'Song', 'Songs') + '</div></div></a>');
+      items.push('<a class="lib-row" href="#/liked">' + likedCover('lib-img') + '<div class="lib-meta"><div class="lib-t">Lieblingssongs</div><div class="lib-s">' + ic('heartFill', 'pin') + 'Playlist • ' + plural(likedEntries().length, 'Song', 'Songs') + '</div></div></a>');
       for (const p of Lib.playlists()) {
         items.push('<a class="lib-row" href="#/playlist/' + esc(p.id) + '">' + playlistCover(p, 'lib-img') + '<div class="lib-meta"><div class="lib-t">' + esc(p.name) + '</div><div class="lib-s">Playlist • ' + plural(p.tracks.length, 'Song', 'Songs') + '</div></div></a>');
       }
+      // Verknüpftes Spotify-Konto: eigene und gespeicherte Playlists von Spotify
+      if (SA.linked()) {
+        for (const p of SA.playlists) {
+          const own = SA.me && p.owner.id === SA.me.id;
+          items.push('<a class="lib-row" href="#/splaylist/' + esc(p.id) + '">' + extCover(p.imgS || p.img, p.name, 'lib-img') + '<div class="lib-meta"><div class="lib-t">' + esc(p.name) + '</div><div class="lib-s">' +
+            (p.collaborative ? 'Gemeinsame Playlist' : 'Playlist') + ' • ' + (own ? 'Spotify' : 'von ' + esc(p.owner.name)) + (own ? '' : '<span class="tag">Gespeichert</span>') + '</div></div></a>');
+        }
+      }
     }
     if (f === 'all' || f === 'albums') {
+      if (SA.linked()) {
+        for (const a of SA.albums) {
+          if (Lib.albums().some(x => x.sid === a.id)) continue;
+          items.push('<a class="lib-row" href="#/salbum/' + esc(a.id) + '">' + extCover(a.imgS || a.img, a.name, 'lib-img') + '<div class="lib-meta"><div class="lib-t">' + esc(a.name) + '</div><div class="lib-s">Album • ' + esc(a.artists.map(x => x.name).join(', ')) + '</div></div></a>');
+        }
+      }
       for (const a of Lib.albums()) {
         if (a.sid) {
           items.push('<a class="lib-row" href="#/salbum/' + esc(a.sid) + '">' + extCover(a.img, a.name, 'lib-img') + '<div class="lib-meta"><div class="lib-t">' + esc(a.name) + '</div><div class="lib-s">Album • ' + esc(a.artist) + '</div></div></a>');
@@ -415,6 +434,12 @@
       }
     }
     if (f === 'all' || f === 'artists') {
+      if (SA.linked()) {
+        for (const a of SA.artists) {
+          if (Lib.artists().some(x => x.sid === a.id || x.name === a.name)) continue;
+          items.push('<a class="lib-row" href="#/sartist/' + esc(a.id) + '">' + extCover(a.imgS || a.img, a.name, 'lib-img', true) + '<div class="lib-meta"><div class="lib-t">' + esc(a.name) + '</div><div class="lib-s">Künstler</div></div></a>');
+        }
+      }
       for (const a of Lib.artists()) {
         if (a.sid) {
           items.push('<a class="lib-row" href="#/sartist/' + esc(a.sid) + '">' + extCover(a.img, a.name, 'lib-img', true) + '<div class="lib-meta"><div class="lib-t">' + esc(a.name) + '</div><div class="lib-s">Künstler</div></div></a>');
@@ -443,7 +468,7 @@
   // ---------- Router ----------
 
   let navSeq = 0;
-  const views = { home: homeView, search: searchView, library: libraryView, liked: likedView, playlist: playlistView, mix: mixView, album: albumView, artist: artistView, genre: genreView, queue: queueView, settings: settingsView, salbum: spotifyAlbumView, sartist: spotifyArtistView };
+  const views = { home: homeView, search: searchView, library: libraryView, liked: likedView, playlist: playlistView, mix: mixView, album: albumView, artist: artistView, genre: genreView, queue: queueView, settings: settingsView, salbum: spotifyAlbumView, sartist: spotifyArtistView, splaylist: spotifyPlaylistView };
 
   function route() {
     if (!viewEl) return;
@@ -489,7 +514,8 @@
   const artistCard = a => cardHtml({ href: '#/artist/' + a, cover: artistCover(a, 'cimg'), title: Catalog.artistName(a), sub: 'Künstler', play: 'artist:' + a, round: true });
   const mixCard = m => cardHtml({ href: '#/mix/' + m.id, cover: mixCover(m.title || m.name, m.color, 'cimg', m.coverSub), title: m.name, sub: m.desc, play: 'mix:' + m.id });
   const playlistCard = p => cardHtml({ href: '#/playlist/' + p.id, cover: playlistCover(p, 'cimg'), title: p.name, sub: plural(p.tracks.length, 'Song', 'Songs'), play: 'playlist:' + p.id });
-  const likedCard = () => cardHtml({ href: '#/liked', cover: likedCover('cimg'), title: 'Lieblingssongs', sub: plural(Lib.liked().length, 'Song', 'Songs'), play: 'liked' });
+  const likedCard = () => cardHtml({ href: '#/liked', cover: likedCover('cimg'), title: 'Lieblingssongs', sub: plural(likedEntries().length, 'Song', 'Songs'), play: 'liked' });
+  const spPlaylistCard = p => cardHtml({ href: '#/splaylist/' + p.id, cover: extCover(p.img, p.name, 'cimg'), title: p.name, sub: SA.me && p.owner.id === SA.me.id ? (p.total != null ? plural(p.total, 'Song', 'Songs') : 'Playlist') : 'von ' + p.owner.name });
   const genreCard = g => cardHtml({ href: '#/genre/' + Catalog.genreId(g), cover: mixCover(Catalog.genreName(g), hashColor('genre' + g, 38), 'cimg', 'Top 100'), title: Catalog.genreName(g), sub: 'Genre', play: 'genre:' + g });
 
   function section(title, inner, more) {
@@ -619,7 +645,7 @@
 
   function rowHtml(x, pos, o) {
     const t = x.t;
-    const liked = Lib.isLiked(t.id);
+    const liked = isLiked(t.id);
     return '<div class="trow" data-pos="' + pos + '" data-id="' + t.id + '">' +
       '<div class="c-num"><span class="n">' + (pos + 1) + '</span><button class="rowplay" data-act="play" aria-label="Abspielen">' + ic('play') + '</button>' + EQ + '</div>' +
       '<div class="c-title">' + (o.cover === false ? '' : trackCover(t, 'tcover')) +
@@ -644,7 +670,7 @@
   }
 
   function trackMenu(anchor, t, o, k) {
-    const liked = Lib.isLiked(t.id);
+    const liked = isLiked(t.id);
     const html = '<div class="pop-title">' + esc(t.name) + '<small>' + esc(artistNames(t)) + '</small></div>' +
       item('next', 'queue', 'Als Nächstes spielen') +
       item('queue', 'queue', 'Zur Warteschlange hinzufügen') +
@@ -690,9 +716,23 @@
     });
   }
 
+  /** Lieblingssong, wenn in Klangwelt oder (verknüpft) bei Spotify gespeichert. */
+  const isLiked = id => Lib.isLiked(id) || SA.likedSet.has(id);
+
+  /** Alle Lieblingssongs (Klangwelt + Spotify), neueste zuerst. */
+  function likedEntries() {
+    const map = new Map();
+    for (const x of SA.liked) map.set(x.id, x.t);
+    for (const x of Lib.liked()) map.set(x.id, Math.max(map.get(x.id) || 0, x.t));
+    return [...map.entries()].map(([id, t]) => ({ id, t })).sort((a, b) => b.t - a.t);
+  }
+
   function toggleLike(t) {
     keep(t.i);
-    const on = Lib.setLiked(t.id, !Lib.isLiked(t.id));
+    const on = !isLiked(t.id);
+    // Verknüpft: auch bei Spotify speichern bzw. entfernen
+    if (SA.linked()) SA.saveLike(t, on);
+    Lib.setLiked(t.id, on);
     $$('.trow[data-id="' + t.id + '"] .like').forEach(b => { b.classList.toggle('on', on); b.innerHTML = ic(on ? 'heartFill' : 'heart'); });
     renderPlayer();
     toast(on ? 'Zu Lieblingssongs hinzugefügt' : 'Aus Lieblingssongs entfernt');
@@ -731,7 +771,7 @@
   const CHART_GENRES = ['pop', 'hip-hop', 'dance', 'rock', 'german', 'latin', 'k-pop', 'edm', 'indie', 'r-n-b', 'country', 'metal'];
 
   function likedIdx() {
-    return Lib.likedIds().map(id => Catalog.indexOf(id)).filter(i => i >= 0);
+    return likedEntries().map(x => Catalog.indexOf(x.id)).filter(i => i >= 0);
   }
 
   function dailyMixes() {
@@ -793,8 +833,9 @@
     viewEl.innerHTML = '<div class="page"><div class="home-head"><h1 class="greet">' + greet + '</h1></div><div class="shortcuts" id="shortcuts"></div><div id="home-secs"></div></div>';
 
     function render() {
-      const liked = Lib.liked();
+      const liked = likedEntries();
       const mixes = dailyMixes();
+      if (SA.linked() && SA.me) $('.greet').textContent = greet + ', ' + SA.me.name.split(' ')[0];
       const sc = ['<a class="shortcut" href="#/liked">' + likedCover('sc-img') + '<span>Lieblingssongs</span><button class="sc-play" data-play="liked" aria-label="Abspielen">' + ic('play') + '</button></a>'];
       const recent = Lib.recent().filter(r => r.href && r.href !== '#/liked').slice(0, 7);
       for (const r of recent) sc.push(shortcutFor(r));
@@ -810,6 +851,7 @@
       const weekly = getMix('weekly');
       if (weekly.tracks.length) out.push(section('Für dich entdeckt', row([mixCard(Object.assign({}, weekly, { desc: 'Jeden Montag neu' }))].concat(Lib.playlists().slice(0, 8).map(playlistCard)))));
       if (recent.length) out.push(section('Zuletzt gehört', row(recent.map(cardFor).filter(Boolean))));
+      if (SA.linked() && SA.playlists.length) out.push(section('Deine Spotify-Playlists', row(SA.playlists.slice(0, 20).map(spPlaylistCard)), '#/library'));
       out.push(section('Stimmungen', row(Catalog.MOODS.map(m => mixCard({ id: 'mood-' + m.id, name: m.name, title: m.name, color: m.color, desc: m.desc })))));
       out.push(section('Charts', row([mixCard({ id: 'top', name: 'Top 50', title: 'Top 50', coverSub: 'Alle Genres', color: '#c2185b', desc: 'Die beliebtesten Songs' })]
         .concat(CHART_GENRES.map(g => { const k = Catalog.genreIndex(g); return mixCard({ id: 'top-' + g, name: 'Top 50 ' + Catalog.genreName(k), title: 'Top 50', coverSub: Catalog.genreName(k), color: hashColor('genre' + k, 38), desc: Catalog.genreName(k) }); })))));
@@ -845,7 +887,7 @@
     if (r.kind === 'artist') return artistCover(Number(r.id), cls);
     if (r.kind === 'playlist') { const p = Lib.playlist(r.id); return p ? playlistCover(p, cls) : '<div class="cv ph ' + cls + '">' + ic('note') + '</div>'; }
     if (r.kind === 'genre') return mixCover(r.name, hashColor('genre' + Catalog.genreIndex(r.id), 38), cls);
-    if (r.kind === 'salbum' || r.kind === 'sartist') return extCover(r.img, r.name, cls, r.kind === 'sartist');
+    if (r.kind === 'salbum' || r.kind === 'sartist' || r.kind === 'splaylist') return extCover(r.img, r.name, cls, r.kind === 'sartist');
     if (r.kind === 'mix') { const m = r.id === 'radio' ? null : getMix(r.id); return mixCover(m ? m.title || m.name : r.name, m ? m.color : hashColor(r.name, 34), cls); }
     return '<div class="cv ph ' + cls + '">' + ic('note') + '</div>';
   }
@@ -854,13 +896,13 @@
     if (r.kind === 'playlist' && !Lib.playlist(r.id)) return '';
     return '<a class="card" href="' + esc(r.href) + '"><div class="card-img' + (r.kind === 'artist' || r.kind === 'sartist' ? ' round' : '') + '">' + recentCover(r, 'cimg') +
       (r.play ? '<button class="card-play" data-play="' + esc(r.play) + '" aria-label="Abspielen">' + ic('play') + '</button>' : '') + '</div>' +
-      '<div class="card-t">' + esc(r.name) + '</div><div class="card-s">' + esc({ album: 'Album', artist: 'Künstler', playlist: 'Playlist', genre: 'Genre', mix: 'Mix', salbum: 'Album', sartist: 'Künstler' }[r.kind] || '') + '</div></a>';
+      '<div class="card-t">' + esc(r.name) + '</div><div class="card-s">' + esc({ album: 'Album', artist: 'Künstler', playlist: 'Playlist', genre: 'Genre', mix: 'Mix', salbum: 'Album', sartist: 'Künstler', splaylist: 'Playlist' }[r.kind] || '') + '</div></a>';
   }
 
   function libraryView() {
     setHero('#222', 'Deine Bibliothek');
     viewEl.innerHTML = '<div class="page lib-page"><div class="lib-page-head"><h1 class="page-title">Deine Bibliothek</h1><button class="icon-btn big" data-act="new-playlist" title="Neue Playlist">' + ic('plus') + '</button></div>' +
-      '<div class="chips" data-chips></div><div class="lib-list big" data-liblist></div></div>';
+      '<div class="sp-sync" data-spsync></div><div class="chips" data-chips></div><div class="lib-list big" data-liblist></div></div>';
     renderLibLists();
   }
 
@@ -884,18 +926,18 @@
     setHero('#4a3aa8', 'Lieblingssongs');
     let list = null;
     function render() {
-      const liked = Lib.liked();
+      const liked = likedEntries();
       const idxs = [], added = [];
       for (const x of liked) { const i = Catalog.indexOf(x.id); if (i >= 0) { idxs.push(i); added.push(x.t); } }
       const sec = idxs.reduce((s, i) => s + T(i).sec, 0);
-      viewEl.innerHTML = '<div class="page-bg"></div>' + heroHtml({ kind: 'Playlist', title: 'Lieblingssongs', cover: likedCover('himg'), by: '<b>Du</b> • ' + plural(idxs.length, 'Song', 'Songs') + (sec ? ', ' + longDur(sec) : '') }) +
+      viewEl.innerHTML = '<div class="page-bg"></div>' + heroHtml({ kind: 'Playlist', title: 'Lieblingssongs', cover: likedCover('himg'), by: '<b>' + esc(SA.linked() && SA.me ? SA.me.name : 'Du') + '</b> • ' + plural(idxs.length, 'Song', 'Songs') + (sec ? ', ' + longDur(sec) : '') + (SA.linked() ? ' • mit Spotify abgeglichen' : '') }) +
         '<div class="page">' + actionsHtml({ filter: 'Lieblingssongs' }) + '<div id="list"></div></div>';
       list = mountTracks($('#list'), idxs, { added, ctx: { kind: 'liked', name: 'Lieblingssongs', href: '#/liked' }, empty: 'Tippe bei Songs aufs Herz, dann landen sie hier.' });
       bindActions(() => list, { href: '#/liked', menu: a => listMenu(a, () => list.order(), 'Lieblingssongs') });
       Covers.watch(viewEl);
     }
     render();
-    viewRefresh = what => { if (what === 'import') render(); };
+    viewRefresh = what => { if (what === 'import' || what === 'spotify') render(); };
   }
 
   function listMenu(anchor, getOrder, name, extra) {
@@ -1137,6 +1179,179 @@
     if (!coarse) input.focus();
   }
 
+  // ---------- Verknüpftes Spotify-Konto ----------
+
+  /** Bibliothek des verknüpften Spotify-Kontos (in IndexedDB zwischengespeichert, beim Start abgeglichen). */
+  const SA = {
+    me: null, playlists: [], liked: [], likedSet: new Set(), albums: [], artists: [], synced: 0, syncing: false,
+
+    /** Verknüpft = angemeldet und mit Zugriff auf die Bibliothek (reine Such-Verbindungen aus 1.1.0 zählen nicht). */
+    linked: () => sp.isLoggedIn() && sp.hasScope('user-library-read'),
+
+    async load() {
+      const keys = ['sp.me', 'sp.playlists', 'sp.liked', 'sp.albums', 'sp.artists', 'sp.synced'];
+      const [me, playlists, liked, albums, artists, synced] = await Promise.all(keys.map(k => Store.get(k)));
+      this.me = me || null;
+      this.playlists = playlists || [];
+      this.albums = albums || [];
+      this.artists = artists || [];
+      this.synced = synced || 0;
+      this.setLiked(liked || []);
+    },
+
+    /** liked: [{id, t, m?}] – m sind die Angaben für Songs außerhalb des Datensatzes. */
+    setLiked(list) {
+      for (const x of list) if (x.m) Catalog.addExternal(x.m);
+      this.liked = list;
+      this.likedSet = new Set(list.map(x => x.id));
+    },
+
+    status(text) {
+      $$('[data-spsync]').forEach(el => { el.innerHTML = text ? '<span class="spinner small"></span><span>' + esc(text) + '</span>' : ''; });
+    },
+
+    async sync(manual) {
+      if (!this.linked() || this.syncing) return;
+      this.syncing = true;
+      this.status('Spotify-Bibliothek wird abgeglichen …');
+      try {
+        const me = await sp.me();
+        this.me = { id: me.id, name: me.display_name || me.id, img: Spotify.norm.image(me.images, 64) };
+        this.status('Playlists von Spotify …');
+        this.playlists = await sp.myPlaylists();
+        const liked = await sp.likedTracks((n, total) => this.status('Lieblingssongs von Spotify: ' + num(n) + ' von ' + num(total)));
+        this.setLiked(liked.tracks.filter(t => t.id && !t.local).map(t => {
+          const i = fromSpotify(t);
+          const m = Catalog.externalMeta(i);
+          return m ? { id: t.id, t: Date.parse(t.added) || Date.now(), m } : { id: t.id, t: Date.parse(t.added) || Date.now() };
+        }));
+        this.status('Alben und Künstler von Spotify …');
+        const [albums, artists] = await Promise.all([sp.savedAlbums().catch(() => null), sp.followedArtists().catch(() => null)]);
+        if (albums) this.albums = albums;
+        if (artists) this.artists = artists;
+        this.synced = Date.now();
+        await Promise.all([Store.set('sp.me', this.me), Store.set('sp.playlists', this.playlists), Store.set('sp.liked', this.liked),
+          Store.set('sp.albums', this.albums), Store.set('sp.artists', this.artists), Store.set('sp.synced', this.synced)]);
+        S.mixesKey = '';
+        renderLibLists();
+        if (viewRefresh) viewRefresh('spotify');
+        if (manual) toast('Spotify abgeglichen: ' + plural(this.playlists.length, 'Playlist', 'Playlists') + ', ' + plural(this.liked.length, 'Lieblingssong', 'Lieblingssongs'));
+      } catch (e) {
+        if (manual || !e.auth) toast(spExplain(e), 6000);
+      } finally {
+        this.syncing = false;
+        this.status('');
+      }
+    },
+
+    /** Herz in Klangwelt auch bei Spotify setzen bzw. entfernen. */
+    saveLike(t, on) {
+      if (on && !this.likedSet.has(t.id)) {
+        const m = Catalog.externalMeta(t.i);
+        this.liked.unshift(m ? { id: t.id, t: Date.now(), m } : { id: t.id, t: Date.now() });
+      }
+      if (!on) this.liked = this.liked.filter(x => x.id !== t.id);
+      this.likedSet = new Set(this.liked.map(x => x.id));
+      Store.set('sp.liked', this.liked);
+      sp.setSaved([{ id: t.id, uri: t.uri }], on).catch(e => toast('Bei Spotify nicht gespeichert: ' + spExplain(e), 5000));
+    },
+
+    clear() {
+      this.me = null; this.playlists = []; this.albums = []; this.artists = []; this.synced = 0;
+      this.setLiked([]);
+      for (const k of ['sp.me', 'sp.playlists', 'sp.liked', 'sp.albums', 'sp.artists', 'sp.synced']) Store.del(k);
+      S.mixesKey = '';
+      renderLibLists();
+    },
+  };
+
+  function spotifyCard() {
+    if (SA.linked()) {
+      return '<section class="set-card"><h2>Spotify-Konto</h2><div class="acct">' + extCover(SA.me && SA.me.img, SA.me ? SA.me.name : 'Spotify', 'acct-img', true) +
+        '<div><b>' + esc(SA.me ? SA.me.name : 'Verknüpft') + '</b><small>Verknüpft' + (SA.synced ? ' • abgeglichen ' + ago(SA.synced).toLowerCase() + ' um ' + new Date(SA.synced).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '') + '</small></div></div>' +
+        '<div class="stats"><div><b>' + num(SA.playlists.length) + '</b><span>Spotify-Playlists</span></div><div><b>' + num(SA.liked.length) + '</b><span>Lieblingssongs bei Spotify</span></div>' +
+        '<div><b>' + num(SA.albums.length) + '</b><span>Alben</span></div><div><b>' + num(SA.artists.length) + '</b><span>Künstler</span></div></div>' +
+        '<p class="muted">Deine Spotify-Playlists, Lieblingssongs, Alben und Künstler erscheinen in deiner Bibliothek. Herzen in Klangwelt werden auch bei Spotify gespeichert. In der Suche findest du zusätzlich jeden Song auf Spotify.</p>' +
+        '<div class="set-btns"><button class="btn btn-ghost" data-set="sp-sync">' + ic('radio') + 'Jetzt abgleichen</button><button class="btn btn-ghost" data-set="sp-off">Konto trennen</button></div></section>';
+    }
+    if (sp.isLoggedIn()) {
+      return '<section class="set-card"><h2>Spotify-Konto</h2><p class="muted">Spotify ist nur für die Suche verbunden. Verknüpfe das Konto neu, damit Klangwelt auch deine Playlists, Lieblingssongs, Alben und Künstler lädt.</p>' +
+        '<div class="set-btns"><button class="btn btn-ghost" data-act="sp-connect">Konto verknüpfen</button><button class="btn btn-ghost" data-set="sp-off">Trennen</button></div></section>';
+    }
+    return '<section class="set-card"><h2>Spotify-Konto</h2><p class="muted">Verknüpfe dein Spotify-Konto: Dann zeigt Klangwelt deine Playlists (eigene und gespeicherte von anderen), Lieblingssongs, Alben und Künstler, ' +
+      'speichert Herzen auch bei Spotify und findet in der Suche jeden Song auf Spotify (über 100 Millionen).</p><div class="set-btns"><button class="btn btn-ghost" data-act="sp-connect">Spotify-Konto verknüpfen</button></div></section>';
+  }
+
+  async function spotifyPlaylistView(id, seq) {
+    if (!SA.linked()) { needSpotify('Diese Playlist'); return; }
+    let meta = SA.playlists.find(p => p.id === id) || null;
+    let list = null;
+    const own = () => !!(meta && SA.me && (meta.owner.id === SA.me.id || meta.collaborative));
+    function header(sec) {
+      if (!meta) return;
+      setHero(hashColor('sp' + id, 32), meta.name);
+      $('#spl-hero').innerHTML = heroHtml({ kind: (meta.collaborative ? 'Gemeinsame Playlist' : 'Playlist') + ' • Spotify', title: meta.name, desc: meta.desc, cover: extCover(meta.img, meta.name, 'himg'),
+        by: '<b>' + esc(meta.owner.name) + '</b>' + (meta.total != null ? ' • ' + plural(meta.total, 'Song', 'Songs') : '') + (sec ? ', ' + longDur(sec) : '') + (own() ? '' : ' <span class="tag">In deiner Bibliothek gespeichert</span>') });
+    }
+    setHero(hashColor('sp' + id, 32), meta ? meta.name : '');
+    viewEl.innerHTML = '<div class="page-bg"></div><div id="spl-hero"></div><div class="page">' +
+      actionsHtml({ filter: 'Playlist', extra: '<button class="btn btn-ghost btn-small" data-act="copy-pl">' + ic('plus') + 'In Klangwelt kopieren</button>' }) + '<div id="list">' + loading('Songs werden von Spotify geladen …') + '</div></div>';
+    header();
+    const ctx = () => ({ kind: 'splaylist', id, name: meta ? meta.name : 'Playlist', href: '#/splaylist/' + id, img: meta ? meta.img : '' });
+    bindActions(() => list, {
+      href: '#/splaylist/' + id,
+      menu: a => listMenu(a, () => (list ? list.order() : []), meta ? meta.name : 'Playlist', {
+        html: '<div class="pop-sep"></div>' + item('spotify', 'external', 'In Spotify öffnen'),
+        pick: k => { if (k === 'spotify') Platform.openSpotify('spotify:playlist:' + id, 'https://open.spotify.com/playlist/' + id); },
+      }),
+      on: k => {
+        if (k !== 'copy-pl') return;
+        if (!list) { toast('Die Songs dieser Playlist gibt Spotify nicht heraus – kopieren geht nur bei eigenen Playlists'); return; }
+        const ids = list.order();
+        ids.forEach(keep);
+        const p = Lib.createPlaylist(meta.name, ids.map(i => T(i).id));
+        toast('Als Klangwelt-Playlist „' + p.name + '“ gespeichert');
+      },
+    });
+    try {
+      const r = await sp.getPlaylist(id);
+      if (!alive(seq)) return;
+      meta = r.meta;
+      header();
+      let entries;
+      const cached = await Store.get('sp.pl:' + id);
+      if (cached && cached.snapshot && cached.snapshot === meta.snapshot) {
+        entries = cached.entries;
+        for (const x of entries) if (x.m) Catalog.addExternal(x.m);
+      } else {
+        const tracks = await sp.playlistTracks(id, (n, total) => { if (alive(seq) && $('#list') && !list) $('#list').innerHTML = loading('Songs werden von Spotify geladen … ' + num(n) + ' von ' + num(total)); });
+        entries = tracks.filter(t => t.id && !t.local && !t.episode).map(t => {
+          const i = fromSpotify(t);
+          const m = Catalog.externalMeta(i);
+          return m ? { id: t.id, t: Date.parse(t.added) || 0, m } : { id: t.id, t: Date.parse(t.added) || 0 };
+        });
+        Store.set('sp.pl:' + id, { snapshot: meta.snapshot, entries });
+      }
+      if (!alive(seq)) return;
+      const idxs = entries.map(x => Catalog.indexOf(x.id));
+      header(idxs.reduce((x, i) => x + T(i).sec, 0));
+      list = mountTracks($('#list'), idxs, { added: entries.map(x => x.t), ctx: ctx(), empty: 'Diese Playlist ist leer.' });
+      const q = $('[data-trackq]');
+      if (q && q.value) list.filter(q.value);
+    } catch (e) {
+      if (!alive(seq)) return;
+      if (e.status === 403 || e.status === 404) {
+        // Playlists anderer Leute: Songliste gibt Spotify seit Februar 2026 nicht heraus – offizieller Spotify-Player
+        const q = $('[data-trackq]');
+        if (q) q.closest('.mini-search').remove();
+        $('#list').innerHTML = '<div class="notice">' + ic('info') + '<div><b>Songliste direkt von Spotify</b><br>Die Songs von Playlists anderer Leute gibt Spotify seit Februar 2026 nicht mehr an solche Apps heraus. Unten siehst und hörst du die Playlist im offiziellen Spotify-Player.</div></div>' +
+          '<iframe class="embed" src="https://open.spotify.com/embed/playlist/' + encodeURIComponent(id) + '?utm_source=generator&amp;theme=0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" title="Spotify-Playlist"></iframe>';
+      } else {
+        $('#list').innerHTML = '<div class="empty">' + esc(spExplain(e)) + '</div>';
+      }
+    }
+  }
+
   // ---------- Spotify-Suche (ganzer Spotify-Katalog, optional) ----------
 
   let spToken = 0;
@@ -1146,8 +1361,8 @@
     const box = $('#sp-results');
     if (!box) return;
     if (!sp.isLoggedIn()) {
-      box.innerHTML = '<div class="sp-promo">' + ic('search') + '<div><b>Nicht dabei, was du suchst?</b><span>Verbinde Spotify, dann durchsucht Klangwelt den ganzen Spotify-Katalog – über 100 Millionen Songs.</span></div>' +
-        '<button class="btn btn-white btn-small" data-act="sp-connect">Spotify verbinden</button></div>';
+      box.innerHTML = '<div class="sp-promo">' + ic('search') + '<div><b>Nicht dabei, was du suchst?</b><span>Verknüpfe dein Spotify-Konto, dann durchsucht Klangwelt den ganzen Spotify-Katalog – über 100 Millionen Songs – und zeigt deine Spotify-Playlists und Lieblingssongs.</span></div>' +
+        '<button class="btn btn-white btn-small" data-act="sp-connect">Spotify-Konto verknüpfen</button></div>';
       return;
     }
     const my = ++spToken;
@@ -1198,22 +1413,22 @@
     if (/redirect/i.test(msg)) return 'In der Spotify-App fehlen die Redirect-URIs: ' + Platform.redirectUris.join(' und ');
     if (e && e.status === 0) return 'Spotify ist gerade nicht erreichbar. Prüfe die Internetverbindung.';
     if (e && e.status === 429) return 'Spotify bremst gerade. Versuch es gleich noch einmal.';
-    if (e && e.auth && !sp.isLoggedIn()) return 'Die Verbindung zu Spotify ist abgelaufen – bitte neu verbinden.';
+    if (e && e.auth && !sp.isLoggedIn()) return 'Die Verbindung zu Spotify ist abgelaufen – bitte das Konto neu verknüpfen.';
     return msg || 'Spotify meldet einen Fehler.';
   }
 
-  /** Dialog: eigene Spotify-Entwickler-App eintragen und das Konto verbinden. */
+  /** Dialog: eigene Spotify-Entwickler-App eintragen und das Konto verknüpfen. */
   function connectSpotify() {
     const m = modal({
-      title: 'Spotify verbinden',
-      html: '<p>Danach findest du in der Suche <b>jeden Song auf Spotify</b> und kannst ihn abspielen (Vorschau), liken und in Playlists packen. Dafür braucht Klangwelt einmalig eine eigene, kostenlose Spotify-Entwickler-App:</p><ol class="steps-ol">' +
+      title: 'Spotify-Konto verknüpfen',
+      html: '<p>Danach zeigt Klangwelt <b>deine Spotify-Playlists</b> (eigene und gespeicherte von anderen), <b>Lieblingssongs</b>, Alben und Künstler, speichert Herzen auch bei Spotify und findet in der Suche <b>jeden Song auf Spotify</b>. Dafür braucht Klangwelt einmalig eine eigene, kostenlose Spotify-Entwickler-App:</p><ol class="steps-ol">' +
         '<li>Auf <a href="#" data-ext="https://developer.spotify.com/dashboard">developer.spotify.com/dashboard</a> <b>Create app</b> wählen (oder die App von Klangraum nehmen).</li>' +
         '<li>Bei <b>Redirect URIs</b> eintragen:' + Platform.redirectUris.map(u => '<div class="copyrow"><code>' + esc(u) + '</code><button class="btn btn-small" data-copy="' + esc(u) + '" aria-label="Kopieren">' + ic('copy') + '</button></div>').join('') + '</li>' +
         '<li><b>Web API</b> ankreuzen, speichern, unter <b>Settings</b> die <b>Client ID</b> kopieren.</li></ol>' +
         '<p class="muted small">Premium braucht nur der Besitzer der Entwickler-App; dein eigenes Konto darf kostenlos sein (dann im Dashboard unter „User Management“ eintragen).</p>' +
         '<label class="field"><span>Client ID</span><input id="sp-cid" value="' + esc(sp.clientId) + '" placeholder="32 Zeichen" autocomplete="off" autocapitalize="off" spellcheck="false"></label><div id="sp-status" class="error-text"></div>',
       actions: [{ label: 'Abbrechen', value: null, onClick: () => { Platform.cancelLogin(); } }, {
-        label: 'Mit Spotify verbinden', primary: true, onClick: w => {
+        label: 'Konto verknüpfen', primary: true, onClick: w => {
           const id = $('#sp-cid', w).value.replace(/\s+/g, '');
           const status = $('#sp-status', w);
           if (!/^[0-9a-f]{32}$/i.test(id)) { status.textContent = 'Die Client-ID hat 32 Zeichen (Ziffern und a–f).'; return false; }
@@ -1222,8 +1437,9 @@
           status.innerHTML = '<span class="wait"><span class="spinner small"></span>Spotify hat sich im Browser geöffnet. Melde dich an und tippe auf „Zustimmen“ …</span>';
           sp.login().then(() => {
             m.close(true);
-            toast('Mit Spotify verbunden – jetzt findest du alle Songs');
+            toast('Spotify-Konto verknüpft – deine Bibliothek wird geladen');
             route();
+            SA.sync(true);
           }, e => {
             status.classList.add('error-text');
             status.textContent = e.message === 'Abgebrochen' ? '' : spExplain(e);
@@ -1241,7 +1457,7 @@
   }
 
   function needSpotify(what) {
-    viewEl.innerHTML = '<div class="page"><div class="sp-promo">' + ic('search') + '<div><b>' + esc(what) + ' kommt von Spotify</b><span>Verbinde Spotify, um Alben und Künstler außerhalb des Katalogs zu sehen.</span></div><button class="btn btn-white btn-small" data-act="sp-connect">Spotify verbinden</button></div></div>';
+    viewEl.innerHTML = '<div class="page"><div class="sp-promo">' + ic('search') + '<div><b>' + esc(what) + ' kommt von Spotify</b><span>Verknüpfe dein Spotify-Konto, um das hier zu sehen.</span></div><button class="btn btn-white btn-small" data-act="sp-connect">Spotify-Konto verknüpfen</button></div></div>';
   }
 
   async function spotifyAlbumView(sid, seq) {
@@ -1370,11 +1586,9 @@
         'Ganze Songs gibt es nur in Spotify selbst: Tippe dafür im Player auf ' + ic('external') + ' „Ganzer Song“.</p>' +
         '<div class="set-btns"><button class="btn btn-ghost" data-set="sleep">' + ic('moon') + (Player.sleepAt ? 'Sleep-Timer: ' + new Date(Player.sleepAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : 'Sleep-Timer') + '</button>' +
         (desktop ? '' : '') + '</div></section>' +
-        '<section class="set-card"><h2>Spotify-Suche</h2>' + (sp.isLoggedIn()
-          ? '<p class="muted"><b>Verbunden.</b> In der Suche findest du zusätzlich jeden Song auf Spotify (Client-ID <code>' + esc(sp.clientId.slice(0, 6)) + '…</code>).</p><div class="set-btns"><button class="btn btn-ghost" data-set="sp-off">Verbindung trennen</button></div>'
-          : '<p class="muted">Der Katalog hat ' + num(Catalog.count) + ' Songs. Mit einer Spotify-Verbindung durchsucht Klangwelt zusätzlich den ganzen Spotify-Katalog (über 100 Millionen Songs).</p><div class="set-btns"><button class="btn btn-ghost" data-act="sp-connect">Spotify verbinden</button></div>') + '</section>' +
+        spotifyCard() +
         '<section class="set-card"><h2>Deine Bibliothek</h2><div class="stats">' +
-        '<div><b>' + num(Lib.liked().length) + '</b><span>Lieblingssongs</span></div><div><b>' + num(own) + '</b><span>Playlists</span></div>' +
+        '<div><b>' + num(likedEntries().length) + '</b><span>Lieblingssongs</span></div><div><b>' + num(own) + '</b><span>Playlists</span></div>' +
         '<div><b>' + num(Lib.albums().length) + '</b><span>Alben</span></div><div><b>' + num(Lib.artists().length) + '</b><span>Künstler</span></div></div>' +
         '<p class="muted">Deine Bibliothek ist nur auf diesem Gerät gespeichert. Mit einem Code nimmst du sie auf ein anderes Gerät mit (z. B. vom PC aufs Handy).</p>' +
         '<div class="set-btns"><button class="btn btn-ghost" data-set="export">' + ic('copy') + 'Code kopieren</button><button class="btn btn-ghost" data-set="import">Code einfügen</button></div></section>' +
@@ -1414,7 +1628,8 @@
           }],
         });
       }
-      if (k === 'sp-off') { sp.logout(); toast('Verbindung zu Spotify getrennt'); render(); }
+      if (k === 'sp-off') { sp.logout(); SA.clear(); toast('Spotify-Konto getrennt'); render(); }
+      if (k === 'sp-sync') SA.sync(true).then(render);
       if (k === 'reset') modal({ title: 'Bibliothek zurücksetzen?', html: '<p>Alle Lieblingssongs, Playlists, Alben und Künstler auf diesem Gerät werden gelöscht.</p>', actions: [{ label: 'Abbrechen', value: null }, { label: 'Zurücksetzen', danger: true, onClick: () => { Lib.reset(); toast('Bibliothek zurückgesetzt'); } }] });
     };
     viewRefresh = what => { if (what !== 'recent') render(); };
@@ -1769,7 +1984,7 @@
     if (!el) return;
     const has = Player.current >= 0;
     const t = has ? T(Player.current) : null;
-    const liked = t && Lib.isLiked(t.id);
+    const liked = t && isLiked(t.id);
     el.classList.toggle('idle', !has);
     if ((t ? coverKey(t) : null) !== lastCover) {
       lastCover = t ? coverKey(t) : null;
@@ -1877,7 +2092,7 @@
     onAuthCallback(url) {
       if (Platform._authCallback(url)) return;
       // App wurde zwischendurch neu gestartet: Anmeldung direkt abschließen
-      sp.finishLogin(url).then(() => { toast('Mit Spotify verbunden'); route(); }, e => toast(spExplain(e), 6000));
+      sp.finishLogin(url).then(() => { toast('Spotify-Konto verknüpft'); route(); SA.sync(true); }, e => toast(spExplain(e), 6000));
     },
     player: Player,
     lib: Lib,

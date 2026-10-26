@@ -220,7 +220,8 @@
       auth.access = tok.access_token;
       if (tok.refresh_token) auth.refresh = tok.refresh_token;
       auth.expires = Date.now() + ((tok.expires_in || 3600) - 60) * 1000;
-      auth.scope = tok.scope || auth.scope;
+      // Schickt Spotify keine Rechte mit, gelten die angefragten
+      auth.scope = typeof tok.scope === 'string' ? tok.scope : auth.scope ?? scopes.join(' ');
       saveAuth();
     }
 
@@ -273,6 +274,7 @@
         code_verifier: pk.verifier,
       });
       write(PKCE, null);
+      delete auth.scope;
       saveTokens(tok);
       emit('login');
       return true;
@@ -506,6 +508,7 @@
       get clientId() { return auth.clientId || ''; },
       setClientId(id) { auth = { clientId: String(id || '').trim() }; saveAuth(); },
       isLoggedIn: () => !!(auth.access && auth.refresh),
+      hasScope: name => String(auth.scope || '').split(/\s+/).includes(name),
       onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
       login, finishLogin, logout, api, pages,
       me, myPlaylists, likedTracks, savedAlbums, followedArtists,
