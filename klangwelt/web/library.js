@@ -7,7 +7,8 @@
   const VERSION = 1;
 
   function blank() {
-    return { v: VERSION, liked: [], playlists: [], albums: [], artists: [], recent: [], settings: { autoplay: true } };
+    // extra: Angaben zu Spotify-Songs, die nicht im Datensatz sind (id -> {name, artists, album, sec, explicit})
+    return { v: VERSION, liked: [], playlists: [], albums: [], artists: [], recent: [], extra: {}, settings: { autoplay: true } };
   }
 
   function create(storage) {
@@ -91,22 +92,30 @@
         save('playlists');
       },
 
-      // Alben (Name + Hauptkünstler) und Künstler (Name)
+      // Alben (Name + Hauptkünstler) und Künstler (Name); bei Spotify-Alben/-Künstlern zusätzlich sid und Bild
       isAlbumSaved: (name, artist) => L.albums.some(a => a.name === name && a.artist === artist),
-      toggleAlbum(name, artist) {
+      toggleAlbum(name, artist, more) {
         const k = L.albums.findIndex(a => a.name === name && a.artist === artist);
-        if (k >= 0) L.albums.splice(k, 1); else L.albums.unshift({ name, artist, t: now() });
+        if (k >= 0) L.albums.splice(k, 1); else L.albums.unshift(Object.assign({ name, artist, t: now() }, more));
         save('albums');
         return k < 0;
       },
       albums: () => L.albums,
       isFollowing: name => L.artists.some(a => a.name === name),
-      toggleArtist(name) {
+      toggleArtist(name, more) {
         const k = L.artists.findIndex(a => a.name === name);
-        if (k >= 0) L.artists.splice(k, 1); else L.artists.unshift({ name, t: now() });
+        if (k >= 0) L.artists.splice(k, 1); else L.artists.unshift(Object.assign({ name, t: now() }, more));
         save('artists');
         return k < 0;
       },
+
+      /** Merkt sich die Angaben eines Spotify-Songs, damit er nach dem Neustart wieder da ist (ohne Benachrichtigung). */
+      rememberTrack(meta) {
+        if (!meta || !meta.id || L.extra[meta.id]) return;
+        L.extra[meta.id] = meta;
+        try { storage.setItem(KEY, JSON.stringify(L)); } catch (e) { /* Speicher voll */ }
+      },
+      extras: () => Object.values(L.extra),
       artists: () => L.artists,
 
       // Zuletzt gehört: Songs und woher sie kamen (Playlist, Album, Mix …)
@@ -149,6 +158,7 @@
           for (const p of d.playlists) if (!plIds.has(p.id)) L.playlists.push(p);
           for (const a of d.albums || []) if (!L.albums.some(x => x.name === a.name && x.artist === a.artist)) L.albums.push(a);
           for (const a of d.artists || []) if (!L.artists.some(x => x.name === a.name)) L.artists.push(a);
+          Object.assign(L.extra, d.extra || {});
         }
         save('import');
         return { liked: d.liked.length, playlists: d.playlists.length };

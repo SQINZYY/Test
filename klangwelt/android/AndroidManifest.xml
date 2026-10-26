@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="de.klangwelt.app">
 
-    <!-- Spotify-Player (Vorschauen) und Cover -->
+    <!-- Spotify-Player (Vorschauen), Cover und Spotify-Suche -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Damit "Ganzer Song in Spotify" die Spotify-App findet (Android 11+) -->
@@ -35,6 +35,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Rückkehr von der (optionalen) Spotify-Anmeldung: klangwelt://callback?code=… -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="klangwelt" android:host="callback" />
             </intent-filter>
         </activity>
     </application>

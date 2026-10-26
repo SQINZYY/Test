@@ -127,6 +127,14 @@ Klangwelt spielt über den offiziellen Spotify-Player die 30-Sekunden-
 Vorschau jedes Songs (Internet nötig, keine Anmeldung). Den ganzen Song
 öffnet der Knopf "Ganzen Song in Spotify hören" in Spotify.
 
+Alle Songs von Spotify (optional)
+---------------------------------
+Einstellungen -> "Spotify verbinden": Dann findet die Suche jeden Song auf
+Spotify. Dafür einmalig auf https://developer.spotify.com/dashboard eine App
+anlegen, als Redirect URIs http://127.0.0.1:43822/callback und
+klangwelt://callback eintragen, "Web API" ankreuzen und die Client ID in
+Klangwelt einfügen. Premium braucht nur der Besitzer dieser Entwickler-App.
+
 Deine Bibliothek bleibt auf diesem PC. Unter Einstellungen -> "Code kopieren"
 nimmst du sie aufs Handy mit (dort "Code einfügen").
 

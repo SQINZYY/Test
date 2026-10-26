@@ -69,8 +69,57 @@ const server = http.createServer((req, res) => {
 let BASE = '';
 const oembedCalls = [];
 
+// ---------- Nachgebaute Spotify Web API (Suche im ganzen Katalog) ----------
+const spLog = [];
+const extId = n => ('ext' + String(n).padStart(4, '0')).padEnd(22, 'x');
+const img = name => [{ url: BASE + '/mock/cover/' + name + '.svg', width: 300, height: 300 }];
+const spTrack = (n, extra) => Object.assign({
+  id: extId(n), uri: 'spotify:track:' + extId(n), type: 'track', name: 'Neuer Song ' + n, duration_ms: 181000 + n * 1000, explicit: n % 4 === 0,
+  artists: [{ id: 'sa1', name: 'Neue Band', uri: 'spotify:artist:sa1' }],
+  album: { id: 'salb1', name: 'Neues Album', uri: 'spotify:album:salb1', images: img('salb1') },
+}, extra);
+function spotifyApi(u) {
+  const p = u.pathname.replace(/^\/v1/, '');
+  spLog.push(p + u.search);
+  if (p === '/search') {
+    const offset = Number(u.searchParams.get('offset') || 0);
+    const types = u.searchParams.get('type').split(',');
+    const total = 25;
+    const items = [];
+    for (let n = offset; n < Math.min(total, offset + 10); n++) items.push(n === 0 ? spTrack(0, { id: '3nqQXoyQOWXiESFLlDF1hG', name: 'Unholy (feat. Kim Petras)' }) : spTrack(n));
+    return {
+      tracks: types.includes('track') ? { items, total } : undefined,
+      artists: types.includes('artist') ? { items: [{ id: 'sa1', name: 'Neue Band', images: img('sa1'), genres: ['indie pop'] }], total: 1 } : undefined,
+      albums: types.includes('album') ? { items: [{ id: 'salb1', name: 'Neues Album', album_type: 'album', release_date: '2025-05-01', artists: [{ id: 'sa1', name: 'Neue Band' }], images: img('salb1') }], total: 1 } : undefined,
+    };
+  }
+  if (p === '/artists/sa1') return { id: 'sa1', name: 'Neue Band', images: img('sa1'), genres: ['indie pop', 'bedroom pop'] };
+  if (p === '/artists/sa1/albums') return [403, { error: { status: 403, message: 'Forbidden' } }];
+  if (p === '/albums/salb1') {
+    return { id: 'salb1', name: 'Neues Album', uri: 'spotify:album:salb1', album_type: 'album', release_date: '2025-05-01', images: img('salb1'), artists: [{ id: 'sa1', name: 'Neue Band' }],
+      copyrights: [{ text: '℗ 2025 Testlabel' }], tracks: { total: 3, items: [1, 2, 30].map(n => Object.assign(spTrack(n), { album: undefined, track_number: n })) } };
+  }
+  return [404, { error: { status: 404, message: 'Service not found' } }];
+}
+
 async function newPage(browser, opts, init) {
   const context = await browser.newContext(opts);
+  await context.route('https://api.spotify.com/**', async route => {
+    const r = spotifyApi(new URL(route.request().url()));
+    const [status, body] = Array.isArray(r) ? r : [200, r];
+    await route.fulfill({ status, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  });
+  await context.route('https://accounts.spotify.com/authorize**', route => {
+    const u = new URL(route.request().url());
+    const back = new URL(u.searchParams.get('redirect_uri'));
+    back.searchParams.set('code', 'KWCODE');
+    back.searchParams.set('state', u.searchParams.get('state'));
+    return route.fulfill({ status: 302, headers: { Location: back.toString() } });
+  });
+  await context.route('https://accounts.spotify.com/api/token', route => route.fulfill({
+    status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: 'KWTOKEN', refresh_token: 'KWREFRESH', expires_in: 3600 }),
+  }));
   await context.route('https://open.spotify.com/embed/iframe-api/v1', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_IFRAME_API }));
   await context.route('https://open.spotify.com/oembed**', r => {
     const id = new URL(new URL(r.request().url()).searchParams.get('url')).pathname.split('/').pop();
@@ -88,13 +137,16 @@ async function newPage(browser, opts, init) {
         copy: t => { window.__android.copied = t; },
         appVersion: () => '1.0.0',
         get: (id, url) => setTimeout(() => Platform._http(id, 200, JSON.stringify({ thumbnail_url: location.origin + '/mock/cover/a.svg' })), 20),
+        openAuth: url => { window.__android.auth = url; },
+        post: (id, url, body) => { window.__android.token = body; setTimeout(() => Platform._http(id, 200, JSON.stringify({ access_token: 'A', refresh_token: 'R', expires_in: 3600 })), 20); },
       };
     }
   }, init || {});
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e.stack || e)));
-  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  // 403 bei /artists/{id}/albums ist erwartet (Regel für Entwickler-Apps), der Browser meldet es trotzdem
+  page.on('console', m => { if (m.type() === 'error' && !/status of 403/.test(m.text())) errors.push(m.text()); });
   return { context, page, errors };
 }
 
@@ -271,6 +323,67 @@ async function shot(page, name) {
     assert.ok(oembedCalls.length > 3);
   });
 
+  await check('Spotify-Suche: ohne Verbindung ein Hinweis, Verbinden mit PKCE im Browser', async () => {
+    await P.goto(BASE + '/index.html#/search');
+    await P.fill('#q', 'neue band');
+    await P.waitForSelector('.sp-promo');
+    await P.click('.sp-promo [data-act="sp-connect"]');
+    await P.fill('#sp-cid', '0123456789abcdef0123456789abcdef');
+    await P.click('.modal .btn-primary');
+    // Spotify leitet zurück, Klangwelt löst den Code ein und startet neu
+    await P.waitForFunction(() => window.KW && document.querySelector('#home-secs, #results'), null, { timeout: 20000 });
+    await P.waitForFunction(() => /Mit Spotify verbunden/.test(document.querySelector('#toasts').textContent), null, { timeout: 10000 });
+    assert.ok(!P.url().includes('code='));
+  });
+  await shot(P, 'pc-9-spotify-verbunden');
+
+  await check('Spotify-Suche: Songs, Künstler, Alben von Spotify, „Mehr laden“', async () => {
+    await P.goto(BASE + '/index.html#/search');
+    await P.fill('#q', 'neue band');
+    await P.waitForSelector('#sp-songs .trow');
+    assert.strictEqual(await P.$$eval('#sp-songs .trow', r => r.length), 10);
+    const secs = await P.$$eval('.sec-head h2', h => h.map(x => x.textContent));
+    assert.ok(secs.includes('Künstler auf Spotify') && secs.includes('Alben auf Spotify'), secs.join());
+    await P.click('#sp-more');
+    await P.waitForFunction(() => document.querySelectorAll('#sp-songs .trow').length === 20);
+    // Ein Treffer ist auch im Datensatz: er nutzt den Katalog-Eintrag (mit Audio-Merkmalen)
+    assert.strictEqual(await P.evaluate(() => Catalog.indexOf('3nqQXoyQOWXiESFLlDF1hG')), 0);
+  });
+  await shot(P, 'pc-10-spotify-suche');
+
+  await check('Spotify-Song abspielen, liken – bleibt nach dem Neustart gespeichert', async () => {
+    await P.dblclick('#sp-songs .trow:nth-child(2) .c-dur');
+    await P.waitForFunction(() => window.__embed && window.__embed.loads.includes('spotify:track:ext0001xxxxxxxxxxxxxxx'));
+    assert.ok((await P.textContent('.npp-info')).includes('keine Audio-Merkmale'));
+    await P.click('#sp-songs .trow:nth-child(2) [data-act="like"]', { force: true });
+    await P.reload();
+    await P.waitForSelector('.shell', { timeout: 20000 });
+    await P.goto(BASE + '/index.html#/liked');
+    await P.waitForSelector('#list .trow');
+    assert.ok((await P.textContent('#list')).includes('Neuer Song 1'));
+  });
+
+  await check('Spotify-Album: Songs, Speichern in der Bibliothek', async () => {
+    await P.goto(BASE + '/index.html#/salbum/salb1');
+    await P.waitForSelector('#list .trow');
+    assert.strictEqual(await P.$$eval('#list .trow', r => r.length), 3);
+    assert.strictEqual(await P.textContent('.hero-title'), 'Neues Album');
+    await P.click('[data-act="save-album"]');
+    await P.click('.side-lib [data-chip="albums"]');
+    assert.ok((await P.textContent('.side-list')).includes('Neues Album'));
+    await P.click('.side-lib [data-chip="albums"]');
+  });
+  await shot(P, 'pc-11-spotify-album');
+
+  await check('Spotify-Künstler: Songs, Alben (Rückfall auf die Suche), Folgen', async () => {
+    await P.goto(BASE + '/index.html#/sartist/sa1');
+    await P.waitForSelector('#sa-songs .trow');
+    const secs = await P.$$eval('.sec-head h2', h => h.map(x => x.textContent));
+    assert.ok(secs.includes('Songs') && secs.includes('Alben und Singles'), secs.join());
+    await P.click('[data-act="follow"]');
+    assert.ok(await P.evaluate(() => KW.lib.isFollowing('Neue Band')));
+  });
+
   let code = '';
   await check('Bibliothek als Code exportieren', async () => {
     await P.goto(BASE + '/index.html#/settings');
@@ -301,6 +414,7 @@ async function shot(page, name) {
     await M.tap('.tabbar a[href="#/library"]');
     await M.waitForSelector('.lib-page .lib-row');
     const t = await M.textContent('.lib-page');
+    assert.ok(t.includes('Neues Album') && t.includes('Neue Band'), 'Spotify-Album und -Künstler aus dem Code');
     assert.ok(t.includes('Lieblingssongs') && t.includes('Sommer 2026') && t.includes('Rammstein'), t);
   });
   await shot(M, 'handy-2-bibliothek');
@@ -333,6 +447,26 @@ async function shot(page, name) {
     assert.strictEqual(await M.evaluate(() => KW.back()), true);
     await M.waitForFunction(() => document.querySelector('#full').hidden);
     assert.ok(await M.$eval('#embed-host', e => e.classList.contains('parked')));
+  });
+  await check('Handy: Spotify-Song aus dem Code ist in den Lieblingssongs', async () => {
+    await M.goto(BASE + '/index.html#/liked');
+    await M.waitForSelector('#list .trow');
+    assert.ok((await M.textContent('#list')).includes('Neuer Song 1'));
+  });
+  await check('Handy: Spotify verbinden über Browser und klangwelt://callback', async () => {
+    await M.goto(BASE + '/index.html#/settings');
+    await M.waitForSelector('#set-play, .set-card');
+    await M.tap('.set-card [data-act="sp-connect"]');
+    await M.fill('#sp-cid', 'abcdefabcdefabcdefabcdefabcdef12');
+    await M.tap('.modal .btn-primary');
+    await M.waitForFunction(() => window.__android.auth);
+    const auth = new URL(await M.evaluate(() => window.__android.auth));
+    assert.strictEqual(auth.searchParams.get('redirect_uri'), 'klangwelt://callback');
+    await M.evaluate(u => KW.onAuthCallback(u), 'klangwelt://callback?code=AC&state=' + auth.searchParams.get('state'));
+    await M.waitForFunction(() => /Verbunden/.test(document.querySelector('.view').textContent));
+    const body = Object.fromEntries(new URLSearchParams(await M.evaluate(() => window.__android.token)));
+    assert.strictEqual(body.code, 'AC');
+    assert.strictEqual(body.redirect_uri, 'klangwelt://callback');
   });
   await M.goto(BASE + '/index.html#/search');
   await M.waitForSelector('.tile');

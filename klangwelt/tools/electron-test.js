@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const assert = require('assert');
+const http = require('http');
 const { _electron: electron } = require('playwright');
 
 const DESKTOP = path.join(__dirname, '..', 'desktop');
@@ -39,6 +40,10 @@ const FAKE_IFRAME_API = `(() => {
     shell.openExternal = async url => { global.__opened.push(url); };
     const real = net.fetch.bind(net);
     net.fetch = async (url, opts) => {
+      if (String(url) === 'https://accounts.spotify.com/api/token') {
+        global.__tokenBody = String(opts.body);
+        return new Response(JSON.stringify({ access_token: 'EA', refresh_token: 'ER', expires_in: 3600 }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
       if (String(url).startsWith('https://open.spotify.com/oembed?')) return new Response(JSON.stringify({ thumbnail_url: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22%3E%3Crect width=%2210%22 height=%2210%22 fill=%22%23e91e63%22/%3E%3C/svg%3E' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       return real(url, opts);
     };
@@ -81,6 +86,25 @@ const FAKE_IFRAME_API = `(() => {
     await win.waitForTimeout(200);
     const opened = await app.evaluate(() => global.__opened);
     assert.ok(opened.length === 1 && opened[0].startsWith('spotify:track:'), JSON.stringify(opened));
+  });
+
+  await check('Spotify verbinden: Browser, Rückkehr über 127.0.0.1:43822, Token im Hauptprozess', async () => {
+    await win.evaluate(() => { location.hash = '#/settings'; });
+    await win.click('.set-card [data-act="sp-connect"]');
+    await win.fill('#sp-cid', 'abcdefabcdefabcdefabcdefabcdef12');
+    const before = (await app.evaluate(() => global.__opened)).length;
+    await win.click('.modal .btn-primary');
+    let opened = [];
+    for (let k = 0; k < 50 && opened.length <= before; k++) { await win.waitForTimeout(100); opened = await app.evaluate(() => global.__opened); }
+    const auth = new URL(opened[opened.length - 1]);
+    assert.strictEqual(auth.searchParams.get('redirect_uri'), 'http://127.0.0.1:43822/callback');
+    const res = await new Promise((resolve, reject) => http.get('http://127.0.0.1:43822/callback?code=EC&state=' + auth.searchParams.get('state'), r => { let b = ''; r.on('data', d => { b += d; }); r.on('end', () => resolve({ status: r.statusCode, body: b })); }).on('error', reject));
+    assert.strictEqual(res.status, 200);
+    assert.ok(res.body.includes('Verbunden!'));
+    await win.waitForFunction(() => /Verbunden\./.test(document.querySelector('.view').textContent));
+    const body = Object.fromEntries(new URLSearchParams(await app.evaluate(() => global.__tokenBody)));
+    assert.strictEqual(body.code, 'EC');
+    assert.strictEqual(body.redirect_uri, 'http://127.0.0.1:43822/callback');
   });
 
   await win.waitForTimeout(500);

@@ -3,7 +3,8 @@
 Musik-App im Stil von Spotify für **Windows (EXE)** und **Android (APK)**, gebaut auf dem
 [Spotify Tracks Dataset](https://huggingface.co/datasets/maharshipandya/spotify-tracks-dataset): **81.206 Songs** von rund
 30.000 Künstlern aus 114 Genres, mit Audio-Merkmalen (Tempo, Tonart, Energie, Tanzbarkeit, Stimmung …).
-Keine Anmeldung, kein Spotify-Konto nötig.
+Keine Anmeldung, kein Spotify-Konto nötig. Wer will, verbindet zusätzlich Spotify und findet dann **jeden Song auf Spotify**
+(siehe „Spotify-Suche“).
 
 ## Download
 
@@ -30,6 +31,24 @@ Windows SmartScreen bzw. Android/Play Protect warnen eventuell, weil die Apps ni
   (Leertaste, Strg+←/→, Strg+K). Handy: Mini-Player und Vollbild-Player.
 - **Übertragen:** Einstellungen → „Code kopieren“ / „Code einfügen“ nimmt die Bibliothek vom PC aufs Handy (und umgekehrt).
 
+### Spotify-Suche (alle Songs, optional)
+
+Der Datensatz hat „nur“ 81.206 Songs. Über **Einstellungen → Spotify verbinden** (oder den Hinweis in der Suche) durchsucht
+Klangwelt zusätzlich den ganzen Spotify-Katalog über die offizielle Spotify Web API:
+
+- Unter den Katalog-Treffern erscheinen „Songs/Künstler/Alben auf Spotify“ (10 Treffer pro Abruf, „Mehr laden“ bis 200).
+- Spotify-Songs lassen sich abspielen (Vorschau), liken, in Playlists und die Warteschlange packen; sie bleiben gespeichert und
+  wandern mit dem Bibliotheks-Code mit. Spotify-Alben und -Künstler haben eigene Seiten (speichern/folgen).
+- Für Spotify-Songs außerhalb des Datensatzes gibt es keine Audio-Merkmale; Radio und Endlos-Wiedergabe nehmen dann die Songs
+  desselben Künstlers aus dem Katalog.
+
+Einmalig nötig ist eine eigene Spotify-Entwickler-App (die von Klangraum geht auch): auf
+[developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) **Create app**, bei **Redirect URIs**
+`http://127.0.0.1:43822/callback` (Windows) und `klangwelt://callback` (Android) eintragen, **Web API** ankreuzen und die
+**Client ID** in Klangwelt einfügen. Premium braucht nur der Besitzer der Entwickler-App (Regel seit Februar 2026); das eigene
+Konto darf kostenlos sein und wird dann im Dashboard unter „User Management“ eingetragen. Das automatische Auslesen von
+open.spotify.com ist nach den Spotify-Nutzungsbedingungen nicht erlaubt und wird deshalb nicht verwendet.
+
 ### Was abgespielt wird
 
 Der Datensatz enthält **keine Musik**, nur Songdaten. Klangwelt spielt deshalb über den **offiziellen Spotify-Player**
@@ -43,10 +62,13 @@ Cover: zuerst ein erzeugtes Farbcover (geht offline), dann – wenn online – d
 ## Aufbau
 
 - `web/` – Oberfläche (HTML/CSS/JS, ohne Abhängigkeiten): `catalog.js` (Katalog laden, Suche, Künstler/Alben/Genres,
-  ähnliche Songs über die Audio-Merkmale, Mixe), `library.js` (Bibliothek in `localStorage`, Export-Code), `preview.js`
+  ähnliche Songs über die Audio-Merkmale, Mixe, Spotify-Songs außerhalb des Datensatzes), `library.js` (Bibliothek in
+  `localStorage`, Export-Code), `spotify.js` (Spotify-Anmeldung mit PKCE und Suche, gleiche Datei wie in Klangraum), `preview.js`
   (Spotify-Player steuern, Ende erkennen), `covers.js`, `platform.js`, `app.js`, `data/catalog.json` (Katalog, 8 MB)
-- `desktop/` – Electron-Hülle (`app://klangwelt/`, Cover-Abruf im Hauptprozess) und `build.mjs` (Windows-ZIP ohne Wine)
-- `android/` – WebView-Hülle (`MainActivity.java`), Manifest, Icons
+- `desktop/` – Electron-Hülle (`app://klangwelt/`, Cover-Abruf und Spotify-Anmeldung über `127.0.0.1:43822` im Hauptprozess)
+  und `build.mjs` (Windows-ZIP ohne Wine)
+- `android/` – WebView-Hülle (`MainActivity.java`: Spotify-Anmeldung im Custom Tab, Rückkehr über `klangwelt://callback`),
+  Manifest, Icons
 - `tools/` – `build_catalog.py` (CSV → Katalog), APK-Build, Icons, Tests
 
 ## Selbst bauen

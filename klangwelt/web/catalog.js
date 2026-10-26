@@ -9,6 +9,8 @@
   let idx = null;      // Listen je Künstler/Album/Genre (nach Beliebtheit sortiert, weil der Katalog es ist)
   let hay = null;      // Suchtexte
   let artistHay = null, albumHay = null;
+  // Songs von Spotify, die nicht im Datensatz sind (aus der Spotify-Suche): Index ab C.count
+  let ext = [];
 
   const F = { pop: 0, dance: 1, energy: 2, valence: 3, acoustic: 4, instr: 5, speech: 6, live: 7 };
   const KEYS = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'H'];
@@ -62,7 +64,7 @@
     for (let k = 0; k < C.alphabet.length; k++) VAL[C.alphabet.charCodeAt(k)] = k;
     byId = new Map();
     for (let i = 0; i < C.count; i++) byId.set(C.ids.substr(i * 22, 22), i);
-    idx = null; hay = null; artistHay = null; albumHay = null;
+    idx = null; hay = null; artistHay = null; albumHay = null; ext = [];
     return C.count;
   }
 
@@ -94,14 +96,48 @@
   const id = i => C.ids.substr(i * 22, 22);
   const pop = i => Math.round(VAL[C.q.charCodeAt(i * 8)] / 0.9);
 
+  /**
+   * Song von Spotify registrieren (meta: id, name, artists [{name, sid}], album {name, sid, img}, sec, explicit).
+   * Ist er im Datensatz, kommt dessen Index zurück, sonst ein Index ab count.
+   */
+  function addExternal(meta) {
+    if (!meta || !meta.id) return -1;
+    if (byId.has(meta.id)) return byId.get(meta.id);
+    const k = C.count + ext.length;
+    ext.push(meta);
+    byId.set(meta.id, k);
+    return k;
+  }
+
+  function externalTrack(i) {
+    const m = ext[i - C.count];
+    const artists = (m.artists || []).map(a => {
+      const local = artistLookup(a.name);
+      return { i: local, name: a.name, sid: a.sid || null, href: a.sid ? '#/sartist/' + a.sid : local >= 0 ? '#/artist/' + local : '' };
+    });
+    const album = m.album || {};
+    return {
+      i, id: m.id, uri: 'spotify:track:' + m.id, name: m.name, external: true,
+      artists, album: { i: -1, name: album.name || '', sid: album.sid || null, img: album.img || '', href: album.sid ? '#/salbum/' + album.sid : '' },
+      sec: m.sec || 0, tempo: null, pop: null, explicit: !!m.explicit, key: null, major: null, genres: [],
+    };
+  }
+
+  let artistMap = null;
+  function artistLookup(name) {
+    if (!artistMap) { artistMap = new Map(); C.artists.forEach((n, k) => { if (!artistMap.has(n)) artistMap.set(n, k); }); }
+    return artistMap.has(name) ? artistMap.get(name) : -1;
+  }
+
   /** Song als Objekt für die Oberfläche. */
   function track(i) {
+    if (i >= C.count) return externalTrack(i);
     const x = VAL[C.x.charCodeAt(i)];
     const tid = id(i);
     return {
       i, id: tid, uri: 'spotify:track:' + tid, name: C.names[i],
-      artists: artistsOf(i).map(a => ({ i: a, name: C.artists[a] })),
-      album: { i: C.al[i], name: C.albums[C.al[i]] },
+      artists: artistsOf(i).map(a => ({ i: a, name: C.artists[a], href: '#/artist/' + a })),
+      album: { i: C.al[i], name: C.albums[C.al[i]], href: '#/album/' + C.al[i] },
       sec: C.dur[i], tempo: C.tempo[i], pop: pop(i),
       explicit: x >= 24, key: KEYS[(x % 24) >> 1], major: (x % 2) === 1,
       genres: genresOf(i).map(g => C.genres[g]),
@@ -109,6 +145,7 @@
   }
 
   function features(i) {
+    if (i >= C.count) return null; // Spotify-Song ohne Audio-Merkmale
     const o = {};
     for (const k of Object.keys(F)) o[k] = f(i, k);
     o.tempo = C.tempo[i];
@@ -211,6 +248,7 @@
    */
   function similar(seeds, n, opts) {
     opts = opts || {};
+    seeds = seeds.filter(s => s < C.count); // nur Songs mit Audio-Merkmalen
     if (!seeds.length) return [];
     const exclude = new Set(opts.exclude || []);
     for (const s of seeds) exclude.add(s);
@@ -286,9 +324,13 @@
     return out;
   }
 
-  /** Radio: Start-Songs zuerst, dann passende Songs. */
+  /** Radio: Start-Songs zuerst, dann passende Songs. Für Spotify-Songs über die Songs des Künstlers im Katalog. */
   function radio(seeds, n, opts) {
-    return seeds.slice(0, 1).concat(similar(seeds, (n || 50) - 1, Object.assign({ sameArtist: true }, opts)));
+    let base = seeds.filter(s => s < C.count);
+    if (!base.length) {
+      for (const s of seeds) for (const a of track(s).artists) if (a.i >= 0) base = base.concat(ensureIndex().artists[a.i].slice(0, 5));
+    }
+    return seeds.slice(0, 1).concat(similar(base, (n || 50) - 1, Object.assign({ sameArtist: true, exclude: seeds }, opts)));
   }
 
   // ---------- Mixe ----------
@@ -329,7 +371,7 @@
    */
   function dailyMixes(liked, count) {
     count = count || 6;
-    liked = [...new Set(liked)];
+    liked = [...new Set(liked)].filter(i => i < C.count);
     const day = Math.floor(Date.now() / 864e5);
     const groups = new Map();
     for (const i of liked) {
@@ -354,7 +396,7 @@
 
   /** "Mix der Woche": neue Songs, die zu allen Lieblingssongs passen (jede Woche andere). */
   function weekly(liked, n) {
-    liked = [...new Set(liked)];
+    liked = [...new Set(liked)].filter(i => i < C.count);
     if (!liked.length) return [];
     const rand = rng(hash('weekly') + week());
     const seeds = shuffled(liked, rand).slice(0, 30);
@@ -367,7 +409,9 @@
   }
 
   const Catalog = {
-    load, use, track, features, search, similar, radio, moodMix, top, dailyMixes, weekly, genreStats, genreName, shuffled, rng, hash,
+    load, use, track, features, addExternal,
+    isExternal: i => i >= C.count,
+    externalMeta: i => (i >= C.count ? ext[i - C.count] : null), search, similar, radio, moodMix, top, dailyMixes, weekly, genreStats, genreName, shuffled, rng, hash,
     MOODS,
     get count() { return C ? C.count : 0; },
     get source() { return C ? C.source : ''; },

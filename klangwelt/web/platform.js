@@ -7,10 +7,49 @@
   const kind = desktop ? 'desktop' : android ? 'android' : 'web';
   const waiters = {};
   let seq = 0;
+  // Rückkehr von der Spotify-Anmeldung (eigener Port/eigenes Schema, damit Klangraum und Klangwelt nebeneinander laufen)
+  const REDIRECTS = { desktop: 'http://127.0.0.1:43822/callback', android: 'klangwelt://callback' };
+  const TOKEN_URL = 'https://accounts.spotify.com/api/token';
+  let authWaiter = null;
 
   const Platform = {
     kind,
     version: (desktop && desktop.version) || (android && android.appVersion && android.appVersion()) || 'web',
+    redirectUri: REDIRECTS[kind] || (location.origin + location.pathname),
+    redirectUris: [REDIRECTS.desktop, REDIRECTS.android],
+
+    /** Öffnet die Spotify-Anmeldung und liefert die Weiterleitungs-URL (mit code oder error). */
+    login(url) {
+      if (desktop) return desktop.login(url);
+      if (android) {
+        if (authWaiter) authWaiter.reject(new Error('Neue Anmeldung gestartet'));
+        return new Promise((resolve, reject) => {
+          authWaiter = { resolve, reject };
+          android.openAuth(url);
+        });
+      }
+      location.assign(url);
+      return new Promise(() => {});
+    },
+
+    cancelLogin() {
+      if (desktop) desktop.cancelLogin();
+      if (authWaiter) { authWaiter.reject(new Error('Abgebrochen')); authWaiter = null; }
+    },
+
+    /** POST an den Token-Endpunkt – in den Apps nativ, damit CORS keine Rolle spielt. */
+    tokenRequest(body) {
+      if (desktop) return desktop.token(body);
+      if (android) {
+        return new Promise(resolve => {
+          const id = 't' + (++seq);
+          waiters[id] = resolve;
+          android.post(id, TOKEN_URL, body);
+        });
+      }
+      return fetch(TOKEN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body })
+        .then(async r => ({ status: r.status, text: await r.text() }));
+    },
 
     openExternal(url) {
       if (desktop) return desktop.open(url);
@@ -45,6 +84,12 @@
     },
 
     // vom nativen Teil aufgerufen
+    _authCallback(url) {
+      if (!authWaiter) return false;
+      authWaiter.resolve(url);
+      authWaiter = null;
+      return true;
+    },
     _http(id, status, text) {
       const w = waiters[id];
       delete waiters[id];

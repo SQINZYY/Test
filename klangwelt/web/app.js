@@ -5,6 +5,8 @@
   const app = document.getElementById('app');
   const coarse = matchMedia('(pointer: coarse)').matches;
   const Lib = Library.create();
+  // Optional: Suche im ganzen Spotify-Katalog (eigene Spotify-Entwickler-App nötig, wie bei Klangraum)
+  const sp = Spotify.create({ platform: Platform, prefix: 'kw', scopes: [] });
   const ROW_CHUNK = 120;
 
   const S = {
@@ -117,7 +119,31 @@
       (cached ? '<img src="' + esc(cached) + '" alt="" loading="lazy" decoding="async">' : '') + '</div>';
   }
 
-  const trackCover = (t, cls) => albumCover(t.album.i, cls);
+  /** Cover mit Bild-Adresse (Spotify-Suche); ohne Bild das erzeugte Farbcover. */
+  function extCover(img, title, cls, round) {
+    const g = Covers.generated(title, 'x' + title);
+    return '<div class="cv ' + (round ? 'round ' : '') + (cls || '') + (img ? ' has-img' : '') + '" style="' + g.style + '" data-shape="' + g.shape + '"><span>' + esc(g.letters) + '</span>' +
+      (img ? '<img src="' + esc(img) + '" alt="" loading="lazy" decoding="async">' : '') + '</div>';
+  }
+
+  const trackCover = (t, cls) => (t.external ? extCover(t.album.img, t.album.name || t.name, cls) : albumCover(t.album.i, cls));
+  const coverKey = t => (t.external ? 'x' + (t.album.sid || t.id) : 'a' + t.album.i);
+  const trackColor = (t, l) => hashColor(t.external ? coverKey(t) : albumKey(t.album.i), l);
+
+  /** Spotify-Songs außerhalb des Datensatzes in der Bibliothek merken, bevor sie gespeichert werden. */
+  function keep(i) {
+    const m = Catalog.externalMeta(i);
+    if (m) Lib.rememberTrack(m);
+  }
+
+  /** Spotify-API-Song (aus spotify.js) als Klangwelt-Index. */
+  function fromSpotify(t, albumImg) {
+    return Catalog.addExternal({
+      id: t.id, name: t.name, sec: Math.round((t.ms || 0) / 1000), explicit: !!t.explicit,
+      artists: t.artists.map(a => ({ name: a.name, sid: a.id })),
+      album: { name: t.album ? t.album.name : '', sid: t.album ? t.album.id : null, img: (t.album && (t.album.imgL || t.album.img)) || albumImg || '' },
+    });
+  }
 
   function artistCover(a, cls) {
     const g = Covers.generated(Catalog.artistName(a), 'artist' + Catalog.artistName(a));
@@ -131,16 +157,23 @@
 
   function playlistCover(p, cls) {
     const ids = p.tracks.map(x => Catalog.indexOf(x.id)).filter(i => i >= 0);
-    const albums = [...new Set(ids.map(i => T(i).album.i))];
-    if (albums.length >= 4) return '<div class="cv mosaic ' + (cls || '') + '">' + albums.slice(0, 4).map(al => albumCover(al)).join('') + '</div>';
-    if (albums.length) return albumCover(albums[0], cls);
+    const seen = new Set(), firsts = [];
+    for (const i of ids) {
+      const t = T(i);
+      if (seen.has(coverKey(t))) continue;
+      seen.add(coverKey(t));
+      firsts.push(t);
+      if (firsts.length === 4) break;
+    }
+    if (firsts.length >= 4) return '<div class="cv mosaic ' + (cls || '') + '">' + firsts.map(t => trackCover(t)).join('') + '</div>';
+    if (firsts.length) return trackCover(firsts[0], cls);
     return '<div class="cv ph ' + (cls || '') + '">' + ic('note') + '</div>';
   }
 
   const likedCover = cls => '<div class="cv liked-img ' + (cls || '') + '">' + ic('heartFill') + '</div>';
 
   function artistLinks(t) {
-    return t.artists.map(a => '<a href="#/artist/' + a.i + '">' + esc(a.name) + '</a>').join(', ');
+    return t.artists.map(a => (a.href ? '<a href="' + esc(a.href) + '">' + esc(a.name) + '</a>' : '<span>' + esc(a.name) + '</span>')).join(', ');
   }
   const artistNames = t => t.artists.map(a => a.name).join(', ');
 
@@ -268,8 +301,16 @@
       return;
     }
     S.ready = true;
+    Lib.extras().forEach(m => Catalog.addExternal(m));
+    // Browser-Variante: Spotify leitet nach der Anmeldung auf diese Seite zurück
+    if (Platform.kind === 'web' && /[?&](code|error)=/.test(location.search)) {
+      const url = location.href;
+      history.replaceState(null, '', location.pathname + location.hash);
+      await sp.finishLogin(url).then(() => toast('Mit Spotify verbunden'), e => toast(spExplain(e), 6000));
+    }
     renderShell();
     Lib.onChange(what => {
+      if (what === 'import') Lib.extras().forEach(m => Catalog.addExternal(m));
       if (what === 'liked' || what === 'import') S.mixesKey = '';
       renderLibLists();
       if (viewRefresh) viewRefresh(what);
@@ -339,6 +380,7 @@
     const a = act.dataset.act;
     if (a === 'back') history.back();
     else if (a === 'fwd') history.forward();
+    else if (a === 'sp-connect') connectSpotify();
     else if (a === 'new-playlist') newPlaylist();
     else Player.action(a, act);
   }
@@ -363,6 +405,10 @@
     }
     if (f === 'all' || f === 'albums') {
       for (const a of Lib.albums()) {
+        if (a.sid) {
+          items.push('<a class="lib-row" href="#/salbum/' + esc(a.sid) + '">' + extCover(a.img, a.name, 'lib-img') + '<div class="lib-meta"><div class="lib-t">' + esc(a.name) + '</div><div class="lib-s">Album • ' + esc(a.artist) + '</div></div></a>');
+          continue;
+        }
         const al = Catalog.albumIndex(a.name, a.artist);
         if (al < 0) continue;
         items.push('<a class="lib-row" href="#/album/' + al + '">' + albumCover(al, 'lib-img') + '<div class="lib-meta"><div class="lib-t">' + esc(a.name) + '</div><div class="lib-s">Album • ' + esc(a.artist) + '</div></div></a>');
@@ -370,6 +416,10 @@
     }
     if (f === 'all' || f === 'artists') {
       for (const a of Lib.artists()) {
+        if (a.sid) {
+          items.push('<a class="lib-row" href="#/sartist/' + esc(a.sid) + '">' + extCover(a.img, a.name, 'lib-img', true) + '<div class="lib-meta"><div class="lib-t">' + esc(a.name) + '</div><div class="lib-s">Künstler</div></div></a>');
+          continue;
+        }
         const k = Catalog.artistIndex(a.name);
         if (k < 0) continue;
         items.push('<a class="lib-row" href="#/artist/' + k + '">' + artistCover(k, 'lib-img') + '<div class="lib-meta"><div class="lib-t">' + esc(a.name) + '</div><div class="lib-s">Künstler</div></div></a>');
@@ -393,7 +443,7 @@
   // ---------- Router ----------
 
   let navSeq = 0;
-  const views = { home: homeView, search: searchView, library: libraryView, liked: likedView, playlist: playlistView, mix: mixView, album: albumView, artist: artistView, genre: genreView, queue: queueView, settings: settingsView };
+  const views = { home: homeView, search: searchView, library: libraryView, liked: likedView, playlist: playlistView, mix: mixView, album: albumView, artist: artistView, genre: genreView, queue: queueView, settings: settingsView, salbum: spotifyAlbumView, sartist: spotifyArtistView };
 
   function route() {
     if (!viewEl) return;
@@ -574,7 +624,7 @@
       '<div class="c-num"><span class="n">' + (pos + 1) + '</span><button class="rowplay" data-act="play" aria-label="Abspielen">' + ic('play') + '</button>' + EQ + '</div>' +
       '<div class="c-title">' + (o.cover === false ? '' : trackCover(t, 'tcover')) +
       '<div class="tmeta"><div class="tname">' + esc(t.name) + '</div><div class="tsub">' + (t.explicit ? '<span class="explicit">E</span>' : '') + artistLinks(t) + '</div></div></div>' +
-      (o.album !== false ? '<div class="c-album"><a href="#/album/' + t.album.i + '">' + esc(t.album.name) + '</a></div>' : '') +
+      (o.album !== false ? '<div class="c-album">' + (t.album.href ? '<a href="' + esc(t.album.href) + '">' + esc(t.album.name) + '</a>' : esc(t.album.name)) + '</div>' : '') +
       (o.added ? '<div class="c-added">' + esc(ago(o.added[x.k])) + '</div>' : '') +
       '<div class="c-like">' + (o.onAdd
         ? '<button class="btn btn-small btn-ghost" data-act="add">Hinzufügen</button>'
@@ -604,8 +654,8 @@
       (o && o.playlist && o.reorder ? item('up', 'up', 'Nach oben') + item('down', 'downSmall', 'Nach unten') : '') +
       '<div class="pop-sep"></div>' +
       item('radio', 'radio', 'Song-Radio starten') +
-      item('artist', 'artist', 'Zum Künstler') +
-      item('album', 'album', 'Zum Album') +
+      (t.artists[0] && t.artists[0].href ? item('artist', 'artist', 'Zum Künstler') : '') +
+      (t.album.href ? item('album', 'album', 'Zum Album') : '') +
       item('info', 'info', 'Song-Infos') +
       '<div class="pop-sep"></div>' +
       item('spotify', 'external', 'Ganzen Song in Spotify hören') +
@@ -619,8 +669,8 @@
       if (key === 'up') Lib.movePlaylistTrack(o.playlist, k, k - 1);
       if (key === 'down') Lib.movePlaylistTrack(o.playlist, k, k + 1);
       if (key === 'radio') startRadio([t.i], 'Radio: ' + t.name);
-      if (key === 'artist') location.hash = '#/artist/' + t.artists[0].i;
-      if (key === 'album') location.hash = '#/album/' + t.album.i;
+      if (key === 'artist') location.hash = t.artists[0].href;
+      if (key === 'album') location.hash = t.album.href;
       if (key === 'info') songInfo(t);
       if (key === 'spotify') openFullSong(t);
       if (key === 'copy') Platform.copy('https://open.spotify.com/track/' + t.id).then(() => toast('Link kopiert'), () => toast('https://open.spotify.com/track/' + t.id));
@@ -631,6 +681,7 @@
     const pls = Lib.playlists();
     popup(anchor, '<div class="pop-title">Zur Playlist hinzufügen</div>' + item('__new', 'plus', 'Neue Playlist') +
       (pls.length ? '<div class="pop-sep"></div>' : '') + pls.map(p => item(p.id, 'note', p.name)).join(''), key => {
+      ids.forEach(keep);
       const tids = ids.map(i => T(i).id);
       if (key === '__new') { newPlaylist(tids, p => toast('Zu „' + p.name + '“ hinzugefügt')); return; }
       const p = Lib.playlist(key);
@@ -640,6 +691,7 @@
   }
 
   function toggleLike(t) {
+    keep(t.i);
     const on = Lib.setLiked(t.id, !Lib.isLiked(t.id));
     $$('.trow[data-id="' + t.id + '"] .like').forEach(b => { b.classList.toggle('on', on); b.innerHTML = ic(on ? 'heartFill' : 'heart'); });
     renderPlayer();
@@ -652,6 +704,10 @@
 
   function featuresHtml(t) {
     const f = Catalog.features(t.i);
+    if (!f) {
+      return '<div class="facts"><div><b>' + dur(t.sec) + '</b><span>Länge</span></div>' + (t.explicit ? '<div><b>E</b><span>Explicit</span></div>' : '') + '</div>' +
+        '<p class="muted small">Dieser Song kommt aus der Spotify-Suche. Für ihn gibt es keine Audio-Merkmale; Radio und Endlos-Wiedergabe nehmen dafür die Songs des Künstlers aus dem Katalog.</p>';
+    }
     return '<div class="facts"><div><b>' + t.tempo + '</b><span>BPM</span></div><div><b>' + esc(t.key) + (t.major ? '-Dur' : '-Moll') + '</b><span>Tonart</span></div>' +
       '<div><b>' + dur(t.sec) + '</b><span>Länge</span></div><div><b>' + t.pop + '</b><span>Beliebtheit</span></div></div>' +
       bar('Energie', f.energy) + bar('Tanzbarkeit', f.dance) + bar('Gute Laune', f.valence) + bar('Akustisch', f.acoustic) + bar('Instrumental', f.instr) + bar('Gesprochen', f.speech) + bar('Live-Gefühl', f.live) +
@@ -664,6 +720,7 @@
 
   function startRadio(seeds, name) {
     const tracks = Catalog.radio(seeds, 60);
+    if (tracks.length < 2) { toast('Für diesen Song gibt es kein Radio – der Künstler ist nicht im Katalog'); return; }
     S.radio = { name, tracks, seed: seeds[0] };
     Player.playList(tracks, 0, { kind: 'mix', id: 'radio', name, href: '#/mix/radio' });
     toast(name + ' läuft');
@@ -788,15 +845,16 @@
     if (r.kind === 'artist') return artistCover(Number(r.id), cls);
     if (r.kind === 'playlist') { const p = Lib.playlist(r.id); return p ? playlistCover(p, cls) : '<div class="cv ph ' + cls + '">' + ic('note') + '</div>'; }
     if (r.kind === 'genre') return mixCover(r.name, hashColor('genre' + Catalog.genreIndex(r.id), 38), cls);
+    if (r.kind === 'salbum' || r.kind === 'sartist') return extCover(r.img, r.name, cls, r.kind === 'sartist');
     if (r.kind === 'mix') { const m = r.id === 'radio' ? null : getMix(r.id); return mixCover(m ? m.title || m.name : r.name, m ? m.color : hashColor(r.name, 34), cls); }
     return '<div class="cv ph ' + cls + '">' + ic('note') + '</div>';
   }
 
   function cardFor(r) {
     if (r.kind === 'playlist' && !Lib.playlist(r.id)) return '';
-    return '<a class="card" href="' + esc(r.href) + '"><div class="card-img' + (r.kind === 'artist' ? ' round' : '') + '">' + recentCover(r, 'cimg') +
+    return '<a class="card" href="' + esc(r.href) + '"><div class="card-img' + (r.kind === 'artist' || r.kind === 'sartist' ? ' round' : '') + '">' + recentCover(r, 'cimg') +
       (r.play ? '<button class="card-play" data-play="' + esc(r.play) + '" aria-label="Abspielen">' + ic('play') + '</button>' : '') + '</div>' +
-      '<div class="card-t">' + esc(r.name) + '</div><div class="card-s">' + esc({ album: 'Album', artist: 'Künstler', playlist: 'Playlist', genre: 'Genre', mix: 'Mix' }[r.kind] || '') + '</div></a>';
+      '<div class="card-t">' + esc(r.name) + '</div><div class="card-s">' + esc({ album: 'Album', artist: 'Künstler', playlist: 'Playlist', genre: 'Genre', mix: 'Mix', salbum: 'Album', sartist: 'Künstler' }[r.kind] || '') + '</div></a>';
   }
 
   function libraryView() {
@@ -874,7 +932,7 @@
         }),
       });
       $('.hero-title').addEventListener('click', () => rename(p));
-      const addOpts = { head: false, max: 10, ctx: { kind: 'list', name: 'Empfohlen' }, onAdd: (i, r) => { Lib.addToPlaylist(p.id, [T(i).id]); toast('Zu „' + p.name + '“ hinzugefügt'); } };
+      const addOpts = { head: false, max: 10, ctx: { kind: 'list', name: 'Empfohlen' }, onAdd: (i, r) => { keep(i); Lib.addToPlaylist(p.id, [T(i).id]); toast('Zu „' + p.name + '“ hinzugefügt'); } };
       const showAdd = q => {
         const box = $('#pl-add');
         if (!box) return;
@@ -1060,7 +1118,8 @@
       if (r.artists.length) secs.push(section('Künstler', row(r.artists.map(artistCard))));
       if (r.albums.length) secs.push(section('Alben', row(r.albums.map(albumCard))));
       if (r.genres.length) secs.push(section('Genres', row(r.genres.map(genreCard))));
-      $('#results').innerHTML = secs.join('') || '<div class="empty">Keine Treffer für „' + esc(q) + '“</div>';
+      $('#results').innerHTML = (secs.join('') || (sp.isLoggedIn() ? '' : '<div class="empty">Keine Treffer im Katalog für „' + esc(q) + '“</div>')) + '<div id="sp-results"></div>';
+      spotifyResults(q, seq);
       const ctx = { kind: 'list', name: 'Suche „' + q + '“' };
       if (r.tracks.length) {
         let max = 5;
@@ -1076,6 +1135,192 @@
     input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 200); });
     run();
     if (!coarse) input.focus();
+  }
+
+  // ---------- Spotify-Suche (ganzer Spotify-Katalog, optional) ----------
+
+  let spToken = 0;
+
+  /** Ergebnisse von Spotify unter den Katalog-Treffern; ohne Verbindung ein Hinweis zum Verbinden. */
+  async function spotifyResults(q, seq) {
+    const box = $('#sp-results');
+    if (!box) return;
+    if (!sp.isLoggedIn()) {
+      box.innerHTML = '<div class="sp-promo">' + ic('search') + '<div><b>Nicht dabei, was du suchst?</b><span>Verbinde Spotify, dann durchsucht Klangwelt den ganzen Spotify-Katalog – über 100 Millionen Songs.</span></div>' +
+        '<button class="btn btn-white btn-small" data-act="sp-connect">Spotify verbinden</button></div>';
+      return;
+    }
+    const my = ++spToken;
+    box.innerHTML = section('Auf Spotify', loading('Suche bei Spotify …'));
+    await new Promise(r => setTimeout(r, 250));
+    if (my !== spToken || !alive(seq)) return;
+    let r;
+    try { r = await sp.search(q, ['track', 'artist', 'album']); } catch (e) {
+      if (my === spToken && alive(seq) && $('#sp-results')) $('#sp-results').innerHTML = section('Auf Spotify', '<div class="empty">' + esc(spExplain(e)) + '</div>');
+      return;
+    }
+    if (my !== spToken || !alive(seq) || !$('#sp-results')) return;
+    const tracks = r.tracks.map(t => fromSpotify(t));
+    const secs = [];
+    if (tracks.length) secs.push(section('Songs auf Spotify', '<div class="tracks-slot" id="sp-songs"></div>' + (r.totals.tracks > tracks.length ? '<button class="link-btn" id="sp-more">Mehr laden</button>' : '')));
+    if (r.artists.length) secs.push(section('Künstler auf Spotify', row(r.artists.map(spArtistCard))));
+    if (r.albums.length) secs.push(section('Alben auf Spotify', row(r.albums.map(spAlbumCard))));
+    $('#sp-results').innerHTML = secs.join('') || '<div class="empty">Auch bei Spotify nichts gefunden.</div>';
+    if (!tracks.length) return;
+    const ctx = { kind: 'list', name: 'Spotify: „' + q + '“' };
+    const list = tracks.slice();
+    const show = () => mountTracks($('#sp-songs'), list, { head: false, max: list.length, ctx });
+    show();
+    const more = $('#sp-more');
+    if (more) {
+      more.addEventListener('click', async () => {
+        more.disabled = true;
+        try {
+          const next = await sp.search(q, ['track'], list.length);
+          for (const t of next.tracks) { const i = fromSpotify(t); if (!list.includes(i)) list.push(i); }
+          show();
+          if (!next.tracks.length || list.length >= next.totals.tracks || list.length >= 200) more.remove();
+        } catch (e) { toast(spExplain(e), 5000); }
+        more.disabled = false;
+      });
+    }
+    markNow();
+  }
+
+  const spArtistCard = a => cardHtml({ href: '#/sartist/' + a.id, cover: extCover(a.img, a.name, 'cimg', true), title: a.name, sub: 'Künstler • Spotify', round: true });
+  const spAlbumCard = a => cardHtml({ href: '#/salbum/' + a.id, cover: extCover(a.img, a.name, 'cimg'), title: a.name, sub: (a.year ? a.year + ' • ' : '') + a.artists.map(x => x.name).join(', ') });
+
+  function spExplain(e) {
+    const msg = String(e && e.message || e || '');
+    if (/premium subscription required/i.test(msg)) return 'Spotify verlangt, dass der Besitzer der Entwickler-App (die mit dieser Client-ID) Spotify Premium hat.';
+    if (/not be registered|not registered/i.test(msg)) return 'Dein Spotify-Konto ist in der Entwickler-App nicht eingetragen: im Spotify-Dashboard unter „User Management“ Name und E-Mail deines Kontos hinzufügen.';
+    if (e && (e.reason === 'invalid_client' || /invalid client/i.test(msg))) return 'Spotify kennt diese Client-ID nicht. Bitte im Spotify-Dashboard unter „Settings“ noch einmal kopieren.';
+    if (/redirect/i.test(msg)) return 'In der Spotify-App fehlen die Redirect-URIs: ' + Platform.redirectUris.join(' und ');
+    if (e && e.status === 0) return 'Spotify ist gerade nicht erreichbar. Prüfe die Internetverbindung.';
+    if (e && e.status === 429) return 'Spotify bremst gerade. Versuch es gleich noch einmal.';
+    if (e && e.auth && !sp.isLoggedIn()) return 'Die Verbindung zu Spotify ist abgelaufen – bitte neu verbinden.';
+    return msg || 'Spotify meldet einen Fehler.';
+  }
+
+  /** Dialog: eigene Spotify-Entwickler-App eintragen und das Konto verbinden. */
+  function connectSpotify() {
+    const m = modal({
+      title: 'Spotify verbinden',
+      html: '<p>Danach findest du in der Suche <b>jeden Song auf Spotify</b> und kannst ihn abspielen (Vorschau), liken und in Playlists packen. Dafür braucht Klangwelt einmalig eine eigene, kostenlose Spotify-Entwickler-App:</p><ol class="steps-ol">' +
+        '<li>Auf <a href="#" data-ext="https://developer.spotify.com/dashboard">developer.spotify.com/dashboard</a> <b>Create app</b> wählen (oder die App von Klangraum nehmen).</li>' +
+        '<li>Bei <b>Redirect URIs</b> eintragen:' + Platform.redirectUris.map(u => '<div class="copyrow"><code>' + esc(u) + '</code><button class="btn btn-small" data-copy="' + esc(u) + '" aria-label="Kopieren">' + ic('copy') + '</button></div>').join('') + '</li>' +
+        '<li><b>Web API</b> ankreuzen, speichern, unter <b>Settings</b> die <b>Client ID</b> kopieren.</li></ol>' +
+        '<p class="muted small">Premium braucht nur der Besitzer der Entwickler-App; dein eigenes Konto darf kostenlos sein (dann im Dashboard unter „User Management“ eintragen).</p>' +
+        '<label class="field"><span>Client ID</span><input id="sp-cid" value="' + esc(sp.clientId) + '" placeholder="32 Zeichen" autocomplete="off" autocapitalize="off" spellcheck="false"></label><div id="sp-status" class="error-text"></div>',
+      actions: [{ label: 'Abbrechen', value: null, onClick: () => { Platform.cancelLogin(); } }, {
+        label: 'Mit Spotify verbinden', primary: true, onClick: w => {
+          const id = $('#sp-cid', w).value.replace(/\s+/g, '');
+          const status = $('#sp-status', w);
+          if (!/^[0-9a-f]{32}$/i.test(id)) { status.textContent = 'Die Client-ID hat 32 Zeichen (Ziffern und a–f).'; return false; }
+          sp.setClientId(id);
+          status.classList.remove('error-text');
+          status.innerHTML = '<span class="wait"><span class="spinner small"></span>Spotify hat sich im Browser geöffnet. Melde dich an und tippe auf „Zustimmen“ …</span>';
+          sp.login().then(() => {
+            m.close(true);
+            toast('Mit Spotify verbunden – jetzt findest du alle Songs');
+            route();
+          }, e => {
+            status.classList.add('error-text');
+            status.textContent = e.message === 'Abgebrochen' ? '' : spExplain(e);
+          });
+          return false;
+        },
+      }],
+    });
+    m.el.addEventListener('click', e => {
+      const c = e.target.closest('[data-copy]');
+      if (c) Platform.copy(c.dataset.copy).then(() => toast('Kopiert'), () => toast(c.dataset.copy));
+      const x = e.target.closest('[data-ext]');
+      if (x) { e.preventDefault(); Platform.openExternal(x.dataset.ext); }
+    });
+  }
+
+  function needSpotify(what) {
+    viewEl.innerHTML = '<div class="page"><div class="sp-promo">' + ic('search') + '<div><b>' + esc(what) + ' kommt von Spotify</b><span>Verbinde Spotify, um Alben und Künstler außerhalb des Katalogs zu sehen.</span></div><button class="btn btn-white btn-small" data-act="sp-connect">Spotify verbinden</button></div></div>';
+  }
+
+  async function spotifyAlbumView(sid, seq) {
+    if (!sp.isLoggedIn()) { needSpotify('Dieses Album'); return; }
+    setHero(hashColor('x' + sid, 32), '');
+    viewEl.innerHTML = '<div class="page">' + loading('Album wird von Spotify geladen …') + '</div>';
+    let r;
+    try { r = await sp.getAlbum(sid); } catch (e) {
+      if (alive(seq)) viewEl.innerHTML = '<div class="page"><div class="empty">' + esc(spExplain(e)) + '</div></div>';
+      return;
+    }
+    if (!alive(seq)) return;
+    const a = r.meta;
+    const tracks = r.tracks.map(t => fromSpotify(t, a.img));
+    const sec = tracks.reduce((x, i) => x + T(i).sec, 0);
+    const artist = a.artists[0] || { name: '' };
+    const saved = () => Lib.isAlbumSaved(a.name, artist.name);
+    setHero(hashColor('x' + sid, 32), a.name);
+    viewEl.innerHTML = '<div class="page-bg"></div>' + heroHtml({ kind: (a.type === 'single' ? 'Single' : 'Album') + ' • Spotify', title: a.name, cover: extCover(a.img, a.name, 'himg'),
+      by: a.artists.map(x => '<a class="b" href="#/sartist/' + esc(x.id) + '">' + esc(x.name) + '</a>').join(', ') + (a.year ? ' • ' + a.year : '') + ' • ' + plural(tracks.length, 'Song', 'Songs') + ', ' + longDur(sec) }) +
+      '<div class="page">' + actionsHtml({ extra: '<button class="icon-btn big save' + (saved() ? ' on' : '') + '" data-act="save-album" title="In der Bibliothek speichern">' + ic(saved() ? 'check' : 'plusCircle') + '</button>' }) + '<div id="list"></div>' +
+      (a.copyright ? '<p class="copyright">' + esc(a.copyright) + '</p>' : '') + '</div>';
+    const ctx = { kind: 'salbum', id: sid, name: a.name, href: '#/salbum/' + sid, img: a.img };
+    const list = mountTracks($('#list'), tracks, { album: false, ctx });
+    bindActions(() => list, {
+      href: ctx.href,
+      menu: el => listMenu(el, () => list.order(), a.name),
+      on: (k, el) => {
+        if (k !== 'save-album') return;
+        const on = Lib.toggleAlbum(a.name, artist.name, { sid, img: a.img });
+        el.classList.toggle('on', on);
+        el.innerHTML = ic(on ? 'check' : 'plusCircle');
+        toast(on ? 'In deiner Bibliothek gespeichert' : 'Aus deiner Bibliothek entfernt');
+      },
+    });
+  }
+
+  async function spotifyArtistView(sid, seq) {
+    if (!sp.isLoggedIn()) { needSpotify('Dieser Künstler'); return; }
+    setHero(hashColor('x' + sid, 34), '');
+    viewEl.innerHTML = '<div class="page">' + loading('Künstler wird von Spotify geladen …') + '</div>';
+    let a;
+    try { a = await sp.getArtist(sid); } catch (e) {
+      if (alive(seq)) viewEl.innerHTML = '<div class="page"><div class="empty">' + esc(spExplain(e)) + '</div></div>';
+      return;
+    }
+    if (!alive(seq)) return;
+    const local = Catalog.artistIndex(a.name);
+    const q = 'artist:"' + a.name.replace(/"/g, '') + '"';
+    const [songs, albums] = await Promise.all([
+      sp.search(q, ['track']).then(r => r.tracks.filter(t => t.artists.some(x => x.id === sid))).catch(() => []),
+      sp.artistAlbums(sid).catch(() => sp.search(q, ['album']).then(r => r.albums.filter(x => x.artists.some(y => y.id === sid))).catch(() => [])),
+    ]);
+    if (!alive(seq)) return;
+    const tracks = songs.map(t => fromSpotify(t));
+    if (local >= 0) for (const i of Catalog.artistTracks(local).slice(0, 20)) if (!tracks.includes(i)) tracks.push(i);
+    const following = () => Lib.isFollowing(a.name);
+    setHero(hashColor('x' + sid, 34), a.name);
+    viewEl.innerHTML = '<div class="page-bg"></div>' + heroHtml({ kind: 'Künstler • Spotify', title: a.name, round: true, cover: extCover(a.img, a.name, 'himg', true),
+      by: esc(a.genres.slice(0, 3).join(', ')) + (local >= 0 ? (a.genres.length ? ' • ' : '') + '<a class="b" href="#/artist/' + local + '">' + plural(Catalog.artistTracks(local).length, 'Song', 'Songs') + ' im Katalog</a>' : '') }) +
+      '<div class="page">' + actionsHtml({ extra: '<button class="btn btn-ghost btn-small follow' + (following() ? ' on' : '') + '" data-act="follow">' + (following() ? 'Gefolgt' : 'Folgen') + '</button>' +
+        (local >= 0 ? '<button class="btn btn-ghost btn-small" data-act="artist-radio">' + ic('radio') + 'Radio</button>' : '') }) +
+      section('Songs', tracks.length ? '<div class="tracks-slot" id="sa-songs"></div>' : '<p class="muted">Keine Songs gefunden.</p>') +
+      (albums.length ? section('Alben und Singles', row(albums.map(spAlbumCard))) : '') + '</div>';
+    const ctx = { kind: 'sartist', id: sid, name: a.name, href: '#/sartist/' + sid, img: a.img };
+    let list = null;
+    if (tracks.length) list = mountTracks($('#sa-songs'), tracks, { head: false, max: 50, ctx });
+    bindActions(() => list, {
+      href: ctx.href,
+      menu: el => listMenu(el, () => (list ? list.order() : []), a.name),
+      on: (k, el) => {
+        if (k === 'follow') {
+          const on = Lib.toggleArtist(a.name, { sid, img: a.img });
+          el.classList.toggle('on', on);
+          el.textContent = on ? 'Gefolgt' : 'Folgen';
+        }
+        if (k === 'artist-radio') startRadio(Catalog.artistTracks(local).slice(0, 8), 'Radio: ' + a.name);
+      },
+    });
   }
 
   function queueView() {
@@ -1125,6 +1370,9 @@
         'Ganze Songs gibt es nur in Spotify selbst: Tippe dafür im Player auf ' + ic('external') + ' „Ganzer Song“.</p>' +
         '<div class="set-btns"><button class="btn btn-ghost" data-set="sleep">' + ic('moon') + (Player.sleepAt ? 'Sleep-Timer: ' + new Date(Player.sleepAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : 'Sleep-Timer') + '</button>' +
         (desktop ? '' : '') + '</div></section>' +
+        '<section class="set-card"><h2>Spotify-Suche</h2>' + (sp.isLoggedIn()
+          ? '<p class="muted"><b>Verbunden.</b> In der Suche findest du zusätzlich jeden Song auf Spotify (Client-ID <code>' + esc(sp.clientId.slice(0, 6)) + '…</code>).</p><div class="set-btns"><button class="btn btn-ghost" data-set="sp-off">Verbindung trennen</button></div>'
+          : '<p class="muted">Der Katalog hat ' + num(Catalog.count) + ' Songs. Mit einer Spotify-Verbindung durchsucht Klangwelt zusätzlich den ganzen Spotify-Katalog (über 100 Millionen Songs).</p><div class="set-btns"><button class="btn btn-ghost" data-act="sp-connect">Spotify verbinden</button></div>') + '</section>' +
         '<section class="set-card"><h2>Deine Bibliothek</h2><div class="stats">' +
         '<div><b>' + num(Lib.liked().length) + '</b><span>Lieblingssongs</span></div><div><b>' + num(own) + '</b><span>Playlists</span></div>' +
         '<div><b>' + num(Lib.albums().length) + '</b><span>Alben</span></div><div><b>' + num(Lib.artists().length) + '</b><span>Künstler</span></div></div>' +
@@ -1166,6 +1414,7 @@
           }],
         });
       }
+      if (k === 'sp-off') { sp.logout(); toast('Verbindung zu Spotify getrennt'); render(); }
       if (k === 'reset') modal({ title: 'Bibliothek zurücksetzen?', html: '<p>Alle Lieblingssongs, Playlists, Alben und Künstler auf diesem Gerät werden gelöscht.</p>', actions: [{ label: 'Abbrechen', value: null }, { label: 'Zurücksetzen', danger: true, onClick: () => { Lib.reset(); toast('Bibliothek zurückgesetzt'); } }] });
     };
     viewRefresh = what => { if (what !== 'recent') render(); };
@@ -1212,7 +1461,7 @@
       this.order = this.shuffle ? [first].concat(Catalog.shuffled(list.filter((x, k) => k !== list.indexOf(first)), Catalog.rng(Date.now()))) : this.base.slice();
       this.pos = this.order.indexOf(first);
       this.ctx = ctx;
-      if (ctx && ctx.href && ctx.id !== 'radio') Lib.addRecent({ kind: ctx.kind, id: ctx.id || ctx.kind, name: ctx.name, href: ctx.href, play: playKey(ctx) });
+      if (ctx && ctx.href && ctx.id !== 'radio') Lib.addRecent({ kind: ctx.kind, id: ctx.id || ctx.kind, name: ctx.name, href: ctx.href, play: playKey(ctx), img: ctx.img || '' });
       this.start(first);
     },
 
@@ -1247,7 +1496,10 @@
       if (Lib.setting('autoplay') && this.current >= 0) {
         // Endlos-Wiedergabe: passende Songs zu den zuletzt gehörten anhängen
         const seeds = [...new Set(this.history.slice(-8))].slice(-5);
-        const more = Catalog.similar(seeds, 25, { exclude: this.history.slice(-300), seed: Date.now(), jitter: 0.1 });
+        let more = Catalog.similar(seeds, 25, { exclude: this.history.slice(-300), seed: Date.now(), jitter: 0.1 });
+        // Nur Spotify-Songs gehört: über deren Künstler im Katalog, sonst die Charts
+        if (!more.length) more = Catalog.radio(seeds.slice(-1), 26).slice(1);
+        if (!more.length) more = Catalog.shuffled(Catalog.top(200).filter(i => !this.history.includes(i)), Catalog.rng(Date.now())).slice(0, 25);
         if (more.length) {
           this.base = this.base.concat(more);
           this.order = this.order.concat(more);
@@ -1354,15 +1606,17 @@
       if (a === 'np-menu' && this.current >= 0) trackMenu(el, T(this.current), null);
       if (a === 'full') openFull();
       if (a === 'close-full') closeFull();
-      if (a === 'np-artist' && this.current >= 0) { closeFull(); location.hash = '#/artist/' + T(this.current).artists[0].i; }
+      if (a === 'np-artist' && this.current >= 0 && T(this.current).artists[0].href) { closeFull(); location.hash = T(this.current).artists[0].href; }
       if (a === 'np-context' && this.ctx && this.ctx.href) { closeFull(); location.hash = this.ctx.href; }
     },
 
     save() {
       try {
+        const base = this.base.slice(0, 500), up = this.upNext.slice(0, 100);
+        const ext = base.concat(up, [this.current]).map(i => Catalog.externalMeta(i)).filter(Boolean);
         localStorage.setItem('kw.player', JSON.stringify({
-          ctx: this.ctx, base: this.base.slice(0, 500).map(i => T(i).id), cur: T(this.current).id,
-          up: this.upNext.slice(0, 100).map(i => T(i).id),
+          ctx: this.ctx, base: base.map(i => T(i).id), cur: T(this.current).id,
+          up: up.map(i => T(i).id), ext,
         }));
       } catch (e) { /* egal */ }
     },
@@ -1372,6 +1626,7 @@
       let d = null;
       try { d = JSON.parse(localStorage.getItem('kw.player') || 'null'); } catch (e) { d = null; }
       if (!d || !d.cur) { renderPlayer(); return; }
+      (d.ext || []).forEach(m => Catalog.addExternal(m));
       const toIdx = ids => (ids || []).map(id => Catalog.indexOf(id)).filter(i => i >= 0);
       const cur = Catalog.indexOf(d.cur);
       if (cur < 0) { renderPlayer(); return; }
@@ -1516,16 +1771,16 @@
     const t = has ? T(Player.current) : null;
     const liked = t && Lib.isLiked(t.id);
     el.classList.toggle('idle', !has);
-    if ((t && t.album.i) !== lastCover) {
-      lastCover = t && t.album.i;
+    if ((t ? coverKey(t) : null) !== lastCover) {
+      lastCover = t ? coverKey(t) : null;
       $('.np-cover', el).innerHTML = t ? trackCover(t, 'np-img') : '<div class="cv ph np-img">' + ic('note') + '</div>';
       $('.full-art').innerHTML = t ? trackCover(t, 'full-img') : '<div class="cv ph full-img">' + ic('note') + '</div>';
-      $('#full').style.setProperty('--hero', t ? hashColor(albumKey(t.album.i), 32) : '#333');
-      el.style.setProperty('--np', t ? hashColor(albumKey(t.album.i), 26) : '#282828');
+      $('#full').style.setProperty('--hero', t ? trackColor(t, 32) : '#333');
+      el.style.setProperty('--np', t ? trackColor(t, 26) : '#282828');
       Covers.watch(el);
       Covers.watch($('#full'));
     }
-    $('.np-t', el).innerHTML = t ? '<a href="#/album/' + t.album.i + '">' + esc(t.name) + '</a>' : 'Gerade läuft nichts';
+    $('.np-t', el).innerHTML = t ? (t.album.href ? '<a href="' + esc(t.album.href) + '">' + esc(t.name) + '</a>' : esc(t.name)) : 'Gerade läuft nichts';
     $('.np-a', el).innerHTML = t ? artistLinks(t) : 'Such dir einen Song aus – oder starte einen Mix';
     $$('.np-like').forEach(b => { b.hidden = !t; b.classList.toggle('on', !!liked); b.innerHTML = ic(liked ? 'heartFill' : 'heart'); });
     $$('.pp, .mini-pp').forEach(b => { b.innerHTML = ic(Player.playing ? 'pause' : 'play'); });
@@ -1543,7 +1798,7 @@
     // Jetzt läuft
     const p = $('#np-panel');
     $('.npp-ctx', p).textContent = Player.ctx && Player.ctx.name ? Player.ctx.name : 'Jetzt läuft';
-    $('.npp-t', p).innerHTML = t ? '<a href="#/album/' + t.album.i + '">' + esc(t.name) + '</a>' : 'Gerade läuft nichts';
+    $('.npp-t', p).innerHTML = t ? (t.album.href ? '<a href="' + esc(t.album.href) + '">' + esc(t.name) + '</a>' : esc(t.name)) : 'Gerade läuft nichts';
     $('.npp-a', p).innerHTML = t ? artistLinks(t) : '';
     $('.npp-status', p).textContent = Player.status || (t ? 'Vorschau über den Spotify-Player (30 Sekunden)' : '');
     $('.full-song', p).hidden = !t;
@@ -1619,6 +1874,11 @@
       return false;
     },
     onResume() { placeEmbed(); },
+    onAuthCallback(url) {
+      if (Platform._authCallback(url)) return;
+      // App wurde zwischendurch neu gestartet: Anmeldung direkt abschließen
+      sp.finishLogin(url).then(() => { toast('Mit Spotify verbunden'); route(); }, e => toast(spExplain(e), 6000));
+    },
     player: Player,
     lib: Lib,
   };
