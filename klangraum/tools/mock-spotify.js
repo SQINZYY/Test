@@ -50,7 +50,8 @@ function page(all, u) {
 
 const log = [];
 // mode.noDevice: kein Spotify-Gerät aktiv (Wiedergabe-Befehle ohne device_id liefern 404 NO_ACTIVE_DEVICE)
-const mode = { noDevice: false, devices: null };
+// mode.free: kostenloses Konto – Steuerbefehle liefern 403 PREMIUM_REQUIRED (Lesen geht weiter)
+const mode = { noDevice: false, devices: null, free: false };
 
 function api(u, method, body) {
   const p = u.pathname.replace(/^\/v1/, '');
@@ -60,6 +61,9 @@ function api(u, method, body) {
   if (p === '/me/tracks') return page(LIKED, u);
   if (p === '/me/albums') return page(ALBUMS, u);
   if (p === '/me/following') return { artists: { items: [0, 1, 2, 3].map(i => Object.assign(artistObj(i), { images: images('ar' + i), genres: ['indie pop'] })), cursors: { after: null } } };
+  if (mode.free && p.startsWith('/me/player') && method !== 'GET') {
+    return [403, { error: { status: 403, message: 'Player command failed: Premium required', reason: 'PREMIUM_REQUIRED' } }];
+  }
   if (p === '/me/player' && method === 'GET') return mode.noDevice ? [204, null] : state();
   if (p === '/me/player/devices') return { devices: mode.devices || (mode.noDevice ? [] : DEVICES) };
   if (mode.noDevice && p.startsWith('/me/player') && !u.searchParams.get('device_id')) {

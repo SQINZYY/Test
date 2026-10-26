@@ -39,14 +39,27 @@ und gibst ihre Client-ID in Klangraum ein (PC und Handy können dieselbe Client-
 
 Spotify hat die Regeln für selbst angelegte Apps („Development Mode“) im Februar 2026 verschärft. Klangraum ist darauf ausgelegt:
 
-- **Premium:** Der Besitzer der Entwickler-App braucht Spotify Premium, sonst lehnt Spotify alle Anfragen ab. Auch das Steuern der
-  Wiedergabe geht nur mit Premium. Ohne Premium öffnet Klangraum Songs/Playlists in der Spotify-App.
+- **Premium:** Nur der Besitzer der Entwickler-App braucht Spotify Premium, sonst lehnt Spotify alle Anfragen ab. Die (bis zu 5)
+  eingetragenen Konten dürfen kostenlos sein – siehe „Ohne Premium“.
 - **Bis zu 5 Konten** pro Entwickler-App; weitere Konten im Dashboard unter „User Management“ eintragen.
 - **Playlists von anderen:** Spotify liefert die Songliste nur noch für eigene und gemeinsame Playlists. Gespeicherte Playlists anderer
   Leute erscheinen trotzdem vollständig in der Bibliothek (Name, Cover, Ersteller, Anzahl Songs) und lassen sich komplett abspielen
   (auch mit Zufall); die Songliste zeigt Klangraum dort über den offiziellen Spotify-Player (Embed) an.
 - Die Suche liefert höchstens 10 Treffer pro Typ; Künstler-Top-Songs gibt es nicht mehr (Klangraum zeigt stattdessen Songs aus der Suche
   und deine Lieblingssongs dieses Künstlers).
+
+## Ohne Premium
+
+Wer selbst kein Premium hat, kann Klangraum trotzdem mit dem eigenen (kostenlosen) Konto nutzen:
+
+1. Jemand mit Premium (Familie, Freunde) legt die Entwickler-App an wie oben beschrieben.
+2. Er trägt dich im Dashboard unter **User Management** ein (Name + E-Mail-Adresse deines Spotify-Kontos).
+3. Er gibt dir die **Client ID**; du fügst sie in Klangraum ein und verbindest **dein eigenes Konto**.
+
+Bibliothek, alle Playlists (eigene und gespeicherte von anderen), Lieblingssongs, Suche und das Herz funktionieren dann normal.
+Fernsteuern lässt Spotify kostenlose Konten nicht. Klangraum erkennt das beim ersten Abspielen und öffnet Songs, Playlists und Alben
+ab dann direkt in der Spotify-App (am PC wahlweise im Browser); dort gelten die Regeln des kostenlosen Kontos. In den Einstellungen
+lässt sich das umschalten („Ich habe jetzt Premium“ / „Kostenloses Konto: in Spotify öffnen“).
 
 ## Bedienung
 
@@ -80,7 +93,7 @@ npm start                    # App direkt starten (Entwicklung)
 
 # Android-APK (JDK 17+, Python 3 mit "cryptography")
 ./klangraum/tools/build-android.sh            # -> klangraum/release/Klangraum.apk
-VERSION_CODE=3 VERSION_NAME=1.1.0 ./klangraum/tools/build-android.sh
+VERSION_CODE=4 VERSION_NAME=1.2.0 ./klangraum/tools/build-android.sh
 
 # Icons neu erzeugen (Python mit Pillow)
 python3 klangraum/tools/make_icons.py

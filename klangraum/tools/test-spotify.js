@@ -305,6 +305,7 @@ test('Anmeldung: falscher state und Ablehnung werden erkannt', async () => {
 test('webUrl für Links nach open.spotify.com', () => {
   assert.strictEqual(Spotify.webUrl('spotify:playlist:abc'), 'https://open.spotify.com/playlist/abc');
   assert.strictEqual(Spotify.webUrl('spotify:user:me:collection'), 'https://open.spotify.com/collection/tracks');
+  assert.strictEqual(Spotify.webUrl('spotify:collection:tracks'), 'https://open.spotify.com/collection/tracks');
   assert.strictEqual(Spotify.webUrl(''), 'https://open.spotify.com/');
 });
 

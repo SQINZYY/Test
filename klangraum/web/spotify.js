@@ -516,7 +516,7 @@
     webUrl(uri) {
       const m = /^spotify:(track|album|artist|playlist|episode|show):([A-Za-z0-9]+)$/.exec(uri || '');
       if (m) return 'https://open.spotify.com/' + m[1] + '/' + m[2];
-      if (/^spotify:user:[^:]+:collection$/.test(uri || '')) return 'https://open.spotify.com/collection/tracks';
+      if (/^spotify:(user:[^:]+:)?collection(:tracks)?$/.test(uri || '')) return 'https://open.spotify.com/collection/tracks';
       return 'https://open.spotify.com/';
     },
   };

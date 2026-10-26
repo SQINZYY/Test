@@ -391,6 +391,16 @@ h1, h2, h3 { margin: 0; }
 .range:hover::-webkit-slider-thumb, .range:active::-webkit-slider-thumb { opacity: 1; }
 .range:disabled { cursor: default; opacity: .4; }
 
+/* Kostenloses Konto: Steuerung passiert in Spotify, hier nur Öffnen */
+body.free .ctl-btns [data-act="shuffle"], body.free .ctl-btns [data-act="prev"], body.free .ctl-btns [data-act="next"], body.free .ctl-btns [data-act="repeat"],
+body.free .full-btns [data-act="shuffle"], body.free .full-btns [data-act="prev"], body.free .full-btns [data-act="next"], body.free .full-btns [data-act="repeat"],
+body.free .seek, body.free .vol, body.free .vol-btn { opacity: .3; pointer-events: none; }
+body.free .dev-line { display: flex; }
+.dev-line { align-items: center; gap: 6px; color: var(--accent); font-size: 12px; }
+.dev-line .ic { width: 16px; height: 16px; }
+body.free .player .dev-line { position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%); white-space: nowrap; color: var(--text-2); }
+.set-choice { margin-bottom: 12px; }
+
 /* ---------- Vollbild-Player (Handy) ---------- */
 
 .full { position: fixed; inset: 0; z-index: 60; background: #121212; transform: translateY(100%); transition: transform .22s ease-out; --hero: #333; }
@@ -509,6 +519,8 @@ h1, h2, h3 { margin: 0; }
   .mini-progress { display: block; position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; background: rgba(255, 255, 255, .25); border-radius: 1px; overflow: hidden; }
   .mini-progress i { display: block; height: 100%; width: 0; background: #fff; }
   .player.idle .mini-progress, .player.idle .mini-pp { display: none; }
+  body.free .player .dev-line { display: none; }
+  body.free .player.idle .mini-pp { display: inline-flex; }
 
   .tabbar { grid-area: tabs; display: flex; align-items: flex-start; justify-content: space-around; padding: 6px 0 var(--safe-b); background: linear-gradient(180deg, rgba(0, 0, 0, .75), #000 40%); }
   .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 33%; color: var(--text-2); font-size: 11px; }

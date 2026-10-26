@@ -79,7 +79,7 @@ async function shot(page, name) {
   const browser = await chromium.launch();
   let failures = 0;
   const check = async (name, fn) => {
-    try { await fn(); console.log('ok   ' + name); } catch (e) { failures++; console.log('FAIL ' + name + '\n     ' + String(e.stack || e).split('\n').slice(0, 3).join('\n     ')); }
+    try { await fn(); console.log('ok   ' + name); } catch (e) { failures++; console.log('FAIL ' + name + '\n     ' + String(e.stack || e).split('\n').slice(0, 8).join('\n     ')); }
   };
 
   // ---------- PC ----------
@@ -232,6 +232,50 @@ async function shot(page, name) {
     assert.ok(stats.includes('14eigene Playlists') && stats.includes('9von anderen'), stats);
   });
   await shot(P, 'pc-9-einstellungen');
+  await check('Desktop: kostenloses Konto – einmal Hinweis, danach öffnet sich Spotify statt einer Fehlermeldung', async () => {
+    mode.free = true;
+    await P.evaluate(() => { window.__opened = []; window.open = u => { window.__opened.push(u); return null; }; location.hash = '#/playlist/own2'; });
+    await P.waitForSelector('#list .trow');
+    log.length = 0;
+    await P.click('.actions .bigplay');
+    await P.waitForSelector('.modal h2');
+    assert.strictEqual(await P.textContent('.modal h2'), 'Kostenloses Spotify-Konto');
+    await shot(P, 'pc-10-kostenlos-hinweis');
+    await P.click('.modal .btn-primary');
+    assert.deepStrictEqual(await P.evaluate(() => window.__opened), ['https://open.spotify.com/playlist/own2']);
+    assert.ok(await P.evaluate(() => document.body.classList.contains('free')));
+    // Ab jetzt ohne Dialog und ohne weitere Steuerbefehle an Spotify
+    await P.dblclick('#list .trow:nth-child(3) .c-dur');
+    const t3 = await P.getAttribute('#list .trow:nth-child(3)', 'data-uri');
+    assert.strictEqual(await P.evaluate(() => window.__opened[1]), 'https://open.spotify.com/track/' + t3.split(':')[2]);
+    assert.strictEqual(await P.$$eval('.modal-wrap', m => m.length), 0);
+    assert.strictEqual(log.filter(l => /^(PUT|POST) \/me\/player/.test(l)).length, 1, log.join(' | '));
+    assert.strictEqual(await P.$eval('.ctl-btns [data-act="next"]', b => getComputedStyle(b).pointerEvents), 'none');
+    await P.evaluate(() => { location.hash = '#/liked'; });
+    await P.waitForSelector('#list .trow');
+    await P.click('.actions .bigplay');
+    assert.strictEqual(await P.evaluate(() => window.__opened[2]), 'https://open.spotify.com/collection/tracks');
+    await shot(P, 'pc-11-kostenlos');
+  });
+  await check('Desktop: kostenloses Konto – Einstellungen zeigen den Modus, Umschalten auf Premium', async () => {
+    await P.evaluate(() => { location.hash = '#/settings'; });
+    await P.waitForSelector('#set-play');
+    assert.ok((await P.textContent('#set-play')).includes('Kostenloses Spotify-Konto'));
+    await P.click('[data-set="target-web"]');
+    assert.ok(await P.$eval('[data-set="target-web"]', b => b.classList.contains('on')));
+    await P.click('[data-set="premium"]');
+    assert.ok(!(await P.evaluate(() => document.body.classList.contains('free'))));
+    assert.ok((await P.textContent('#set-play')).includes('Spotify Connect'));
+    // Klick-Handler hängen nicht mehrfach (zweimal Einstellungen öffnen, ein Klick = ein Umschalten)
+    await P.evaluate(() => { location.hash = '#/home'; });
+    await P.evaluate(() => { location.hash = '#/settings'; });
+    await P.waitForSelector('#set-play [data-set="free"]');
+    await P.click('[data-set="free"]');
+    assert.ok(await P.evaluate(() => document.body.classList.contains('free')));
+    await P.click('[data-set="premium"]');
+    assert.ok(!(await P.evaluate(() => document.body.classList.contains('free'))));
+    mode.free = false;
+  });
   assert.deepStrictEqual(d.errors, [], 'Konsolenfehler: ' + d.errors.join('\n'));
 
   // ---------- Einrichtung + Anmeldung (Browser-Variante) ----------
@@ -392,6 +436,24 @@ async function shot(page, name) {
     await a.page.waitForSelector('#connect');
     await a.page.evaluate(u => KR.onAuthCallback(u), 'klangraum://callback?code=C2&state=' + auth.searchParams.get('state'));
     await a.page.waitForSelector('.shortcut', { timeout: 15000 });
+  });
+  await check('Android: kostenloses Konto öffnet die Spotify-App mit der Playlist', async () => {
+    mode.free = true;
+    await a.page.evaluate(() => { location.hash = '#/playlist/own2'; });
+    await a.page.waitForSelector('#list .trow');
+    await a.page.tap('.actions .bigplay');
+    await a.page.waitForSelector('.modal h2');
+    await a.page.tap('.modal .btn-primary');
+    assert.deepStrictEqual(await a.page.evaluate(() => window.__android.spotify), ['spotify:playlist:own2']);
+    await a.page.tap('#list .trow:nth-child(2) .tname');
+    const t2 = await a.page.getAttribute('#list .trow:nth-child(2)', 'data-uri');
+    assert.strictEqual(await a.page.evaluate(() => window.__android.spotify[1]), t2);
+    await a.page.evaluate(() => { location.hash = '#/home'; });
+    await a.page.waitForSelector('.shortcut');
+    await a.page.waitForTimeout(400);
+    await shot(a.page, 'handy-8-kostenlos');
+    await a.page.evaluate(() => { localStorage.removeItem('kr.free'); });
+    mode.free = false;
   });
   await check('Android: Zurück-Taste schließt Menü, dann Seite, dann App', async () => {
     await a.page.evaluate(() => { location.hash = '#/library'; });

@@ -23,6 +23,8 @@
     home: null,
     player: null,
     device: local('kr.device'),
+    // Kostenloses Konto: Spotify lässt dann keine Steuerung zu, Klangraum öffnet stattdessen Spotify
+    free: local('kr.free') === '1',
     lastQuery: '',
   };
 
@@ -235,7 +237,7 @@
   function explain(e) {
     const msg = String(e && e.message || e || '');
     if (/premium subscription required/i.test(msg)) {
-      return { title: 'Premium für die Entwickler-App nötig', text: 'Seit Februar 2026 verlangt Spotify, dass der Besitzer der Entwickler-App (die mit deiner Client-ID) Spotify Premium hat. Ohne Premium lehnt Spotify alle Anfragen dieser App ab.' };
+      return { title: 'Premium für die Entwickler-App nötig', text: 'Seit Februar 2026 verlangt Spotify, dass der Besitzer der Entwickler-App (die mit deiner Client-ID) Spotify Premium hat. Ohne Premium lehnt Spotify alle Anfragen dieser App ab. Du selbst brauchst kein Premium: Hat jemand aus Familie oder Freundeskreis Premium, kann er die Entwickler-App anlegen, dein Konto unter „User Management“ eintragen und dir seine Client-ID geben.' };
     }
     if (/not be registered|not registered/i.test(msg)) {
       return { title: 'Konto nicht freigeschaltet', text: 'Dieses Spotify-Konto ist in deiner Entwickler-App nicht eingetragen. Öffne developer.spotify.com/dashboard → deine App → „User Management“ und trage Name und E-Mail-Adresse dieses Kontos ein (bis zu 5 Konten).' };
@@ -291,6 +293,7 @@
   let started = false;
 
   async function start() {
+    document.body.classList.toggle('free', S.free);
     renderShell();
     await loadCache();
     renderAvatar();
@@ -321,7 +324,13 @@
       Platform.redirectUris.map(u => '<div class="copyrow"><code>' + esc(u) + '</code><button class="btn btn-small" data-copy="' + esc(u) + '" aria-label="Kopieren">' + ic('copy') + '<span>Kopieren</span></button></div>').join('') + '</li>' +
       '<li>Bei „Which API/SDKs are you planning to use?“ <b>Web API</b> ankreuzen, den Bedingungen zustimmen und <b>Save</b> klicken.</li>' +
       '<li>In der App unter <b>Settings</b> die <b>Client ID</b> kopieren und unten einfügen. Auf PC und Handy kannst du dieselbe Client-ID nutzen.</li>' +
-      '</ol><p class="note">' + ic('info') + '<span>Spotify erlaubt solche Apps seit Februar 2026 nur, wenn der Besitzer der App Spotify Premium hat. Bis zu 5 Konten können sie nutzen – weitere Konten unter „User Management“ eintragen.</span></p></details>' +
+      '</ol><p class="note">' + ic('info') + '<span>Spotify erlaubt solche Apps seit Februar 2026 nur, wenn der Besitzer der Entwickler-App Spotify Premium hat. Bis zu 5 Konten können sie nutzen – weitere Konten unter „User Management“ eintragen.</span></p></details>' +
+      '<details class="steps"><summary>Kein Spotify Premium?</summary>' +
+      '<p>Premium braucht nur, wer die Entwickler-App anlegt – <b>dein eigenes Konto darf kostenlos sein</b>.</p><ol>' +
+      '<li>Jemand mit Premium (Familie, Freunde) legt die App wie oben beschrieben an.</li>' +
+      '<li>Er trägt dich in der App unter <b>User Management</b> ein: deinen Namen und die <b>E-Mail-Adresse deines Spotify-Kontos</b>.</li>' +
+      '<li>Er schickt dir die <b>Client ID</b>. Die fügst du unten ein und verbindest dein eigenes Konto.</li>' +
+      '</ol><p class="note">' + ic('info') + '<span>Mit kostenlosem Konto lädt Klangraum Bibliothek, Playlists und Lieblingssongs ganz normal. Abgespielt wird dann in der Spotify-App (oder im Browser), weil Spotify bei kostenlosen Konten keine Fernsteuerung erlaubt.</span></p></details>' +
       '<label class="field"><span>Client ID</span><input id="cid" value="' + esc(cid) + '" placeholder="32 Zeichen, z. B. 8f2c…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
       '<button class="btn btn-primary btn-big" id="connect">Mit Spotify verbinden</button>' +
       '<div class="setup-status" id="setup-status"></div>' +
@@ -473,6 +482,7 @@
   function logout() {
     Store.clear();
     S.playlists = []; S.liked = []; S.likedSet = new Set(); S.albums = []; S.artists = []; S.me = null; S.home = null; S.player = null;
+    setFree(false);
     sp.logout();
   }
 
@@ -802,10 +812,11 @@
     return {
       filter(q) { st.q = q; apply(); },
       playFirst(shuffle) {
+        if (S.free && o.context) { openForFree(o.context); return; }
         if (!st.list.length) return;
         const k = shuffle ? Math.floor(Math.random() * st.list.length) : 0;
-        // Normales Abspielen lässt den Zufallsmodus, wie er ist
-        playTracks(tracks, st.list[k].i, o, custom() ? st.list.map(x => x.t) : null, shuffle ? true : undefined);
+        // Normales Abspielen lässt den Zufallsmodus, wie er ist; ohne Premium geht die ganze Liste in Spotify auf
+        playTracks(tracks, st.list[k].i, o, custom() ? st.list.map(x => x.t) : null, shuffle ? true : undefined, o.context || undefined);
       },
     };
   }
@@ -835,7 +846,7 @@
     const a = t.artists && t.artists[0];
     popup(anchor,
       '<div class="pop-title">' + esc(t.name) + '<small>' + esc(artistNames(t)) + '</small></div>' +
-      '<button class="pop-item" data-k="queue">' + ic('queue') + '<span>Zur Warteschlange hinzufügen</span></button>' +
+      (S.free ? '' : '<button class="pop-item" data-k="queue">' + ic('queue') + '<span>Zur Warteschlange hinzufügen</span></button>') +
       '<button class="pop-item" data-k="like">' + ic(liked ? 'heartFill' : 'heart') + '<span>' + (liked ? 'Aus Lieblingssongs entfernen' : 'Zu Lieblingssongs hinzufügen') + '</span></button>' +
       (a && a.id && !a.show ? '<button class="pop-item" data-k="artist">' + ic('artist') + '<span>Zum Künstler</span></button>' : '') +
       (t.album && t.album.id && !o.noAlbumLink ? '<button class="pop-item" data-k="album">' + ic('album') + '<span>Zum Album</span></button>' : '') +
@@ -890,21 +901,23 @@
 
   // ---------- Abspielen ----------
 
-  function playTracks(tracks, i, o, order, shuffle) {
+  /** freeUri: was bei kostenlosem Konto in Spotify aufgeht (Standard: der Song selbst). */
+  function playTracks(tracks, i, o, order, shuffle, freeUri) {
     const t = tracks[i];
     if (!t) return;
     if (!t.playable) { toast('Dieser Song ist in deinem Land nicht verfügbar'); return; }
     if (order) {
       const k = order.indexOf(t);
-      return Player.playUris(order.slice(k, k + MAX_URIS).filter(x => x === t || !x.local).map(x => x.uri), shuffle);
+      return Player.playUris(order.slice(k, k + MAX_URIS).filter(x => x === t || !x.local).map(x => x.uri), shuffle, freeUri);
     }
     const fallback = () => tracks.slice(i, i + MAX_URIS).filter(x => x === t || !x.local).map(x => x.uri);
-    if (o.context && !t.local) return Player.playContext(o.context, t.uri, o.uriFallback ? fallback : null, shuffle);
-    return Player.playUris(fallback(), shuffle);
+    if (o.context && !t.local) return Player.playContext(o.context, t.uri, o.uriFallback ? fallback : null, shuffle, freeUri);
+    return Player.playUris(fallback(), shuffle, freeUri);
   }
 
   function playUri(uri) {
     if (!uri) return;
+    if (S.free) { openForFree(uri); return; }
     if (uri === likedContext()) {
       if (!S.liked.length) { toast('Keine Lieblingssongs'); return; }
       const k = 0;
@@ -1218,16 +1231,21 @@
       '<div><b>' + num(S.likedTotal != null ? S.likedTotal : S.liked.length) + '</b><span>Lieblingssongs</span></div><div><b>' + num(S.albums.length) + '</b><span>Alben</span></div>' +
       '<div><b>' + num(S.artists.length) + '</b><span>Künstler</span></div></div>' +
       '<div class="set-btns"><button class="btn btn-ghost" data-set="sync">' + ic('refresh') + 'Neu laden</button><button class="btn btn-ghost" data-set="clear">Zwischenspeicher leeren</button></div></section>' +
-      '<section class="set-card"><h2>Wiedergabe</h2><p class="muted">Klangraum steuert die Musik über Spotify Connect – sie läuft in der Spotify-App auf diesem oder einem anderen Gerät (PC, Handy, Lautsprecher, Web-Player). Dafür ist Spotify Premium nötig. Unten im Player wählst du das Gerät mit ' + ic('devices') + '.</p>' +
-      '<div class="set-btns"><button class="btn btn-ghost" data-set="spotify">' + ic('external') + 'Spotify-App öffnen</button>' + (Platform.kind !== 'android' ? '<button class="btn btn-ghost" data-ext="https://open.spotify.com/">Web-Player öffnen</button>' : '') + '</div></section>' +
+      playbackSection() +
       '<section class="set-card"><h2>Spotify-Entwickler-App</h2><p class="muted">Client-ID: <code>' + esc(sp.clientId ? sp.clientId.slice(0, 6) + '…' + sp.clientId.slice(-4) : '–') + '</code><br>Redirect-URIs: ' + Platform.redirectUris.map(u => '<code>' + esc(u) + '</code>').join(' ') + '</p>' +
       '<div class="set-btns"><button class="btn btn-ghost" data-ext="https://developer.spotify.com/dashboard">Dashboard öffnen</button><button class="btn btn-ghost" data-set="cid">Client-ID ändern</button></div></section>' +
       '<section class="set-card"><h2>Über Klangraum</h2><p class="muted">Version ' + esc(Platform.version) + ' (' + esc({ desktop: 'Windows-App', android: 'Android-App', web: 'Browser' }[Platform.kind]) + ').<br>' +
       'Klangraum ist kein offizielles Spotify-Produkt. Musik, Cover und Daten stammen von Spotify und gehören den jeweiligen Rechteinhabern.</p></section></div>';
-    viewEl.addEventListener('click', e => {
+    $('.settings', viewEl).addEventListener('click', e => {
       const b = e.target.closest('[data-set]');
       if (!b) return;
       const k = b.dataset.set;
+      if (k === 'free' || k === 'premium') {
+        setFree(k === 'free');
+        toast(k === 'free' ? 'Songs öffnen sich jetzt direkt in Spotify' : 'Klangraum steuert die Wiedergabe wieder selbst');
+      }
+      if (k === 'target-app' || k === 'target-web') local('kr.freeTarget', k.slice(7));
+      if (k === 'free' || k === 'premium' || k === 'target-app' || k === 'target-web') { $('#set-play').outerHTML = playbackSection(); return; }
       if (k === 'logout') logout();
       if (k === 'sync') syncLibrary(true);
       if (k === 'spotify') openInSpotify('');
@@ -1238,6 +1256,63 @@
         modal({ title: 'Client-ID ändern?', html: '<p>Du wirst abgemeldet und kannst danach eine andere Client-ID eintragen.</p>', actions: [{ label: 'Abbrechen' }, { label: 'Ändern', primary: true, onClick: () => { logout(); } }] });
       }
     });
+  }
+
+  function playbackSection() {
+    if (S.free) {
+      const target = local('kr.freeTarget') || 'app';
+      return '<section class="set-card" id="set-play"><h2>Wiedergabe</h2><p class="muted"><b>Kostenloses Spotify-Konto:</b> Klangraum öffnet Songs und Playlists direkt in Spotify – dort läuft die Musik mit den Regeln des kostenlosen Kontos. Bibliothek, Playlists, Lieblingssongs, Suche und das Herz funktionieren hier ganz normal.</p>' +
+        (Platform.kind !== 'android' ? '<div class="chips set-choice"><button class="chip' + (target === 'app' ? ' on' : '') + '" data-set="target-app">In der Spotify-App öffnen</button><button class="chip' + (target === 'web' ? ' on' : '') + '" data-set="target-web">Im Browser öffnen</button></div>' : '') +
+        '<div class="set-btns"><button class="btn btn-ghost" data-set="spotify">' + ic('external') + 'Spotify öffnen</button><button class="btn btn-ghost" data-set="premium">Ich habe jetzt Premium</button></div></section>';
+    }
+    return '<section class="set-card" id="set-play"><h2>Wiedergabe</h2><p class="muted">Klangraum steuert die Musik über Spotify Connect – sie läuft in der Spotify-App auf diesem oder einem anderen Gerät (PC, Handy, Lautsprecher, Web-Player). Das geht mit Spotify Premium. Unten im Player wählst du das Gerät mit ' + ic('devices') + '.<br>Kostenloses Konto? Dann öffnet Klangraum Songs und Playlists direkt in Spotify (stellt sich beim ersten Abspielen automatisch um).</p>' +
+      '<div class="set-btns"><button class="btn btn-ghost" data-set="spotify">' + ic('external') + 'Spotify-App öffnen</button>' + (Platform.kind !== 'android' ? '<button class="btn btn-ghost" data-ext="https://open.spotify.com/">Web-Player öffnen</button>' : '') +
+      '<button class="btn btn-ghost" data-set="free">Kostenloses Konto: in Spotify öffnen</button></div></section>';
+  }
+
+  // ---------- Kostenloses Konto ----------
+
+  function isPremiumRequired(e) {
+    const msg = String(e && e.message || '');
+    return !!e && (e.reason === 'PREMIUM_REQUIRED' || (e.status === 403 && /premium required/i.test(msg) && !/owner/i.test(msg)));
+  }
+
+  function setFree(on) {
+    S.free = !!on;
+    local('kr.free', on ? '1' : null);
+    document.body.classList.toggle('free', S.free);
+    renderPlayer();
+  }
+
+  /** Spotify hat "Premium nötig" gemeldet: einmal erklären, dann ab jetzt in Spotify öffnen. */
+  function startFreeMode(uri) {
+    if (S.free) { openForFree(uri); return; }
+    setFree(true);
+    const desktop = Platform.kind !== 'android';
+    modal({
+      title: 'Kostenloses Spotify-Konto',
+      html: '<p>Dein Spotify-Konto hat kein Premium. Dann erlaubt Spotify anderen Apps nicht, die Wiedergabe zu steuern.</p>' +
+        '<p>Kein Problem: Klangraum öffnet Songs und Playlists ab jetzt direkt in Spotify – dort läuft die Musik wie gewohnt. ' +
+        'Bibliothek, Playlists, Lieblingssongs, Suche und das Herz funktionieren in Klangraum ganz normal.</p>' +
+        (desktop ? '<p>Wo soll Spotify aufgehen? (Später unter Einstellungen änderbar.)</p>' : ''),
+      actions: desktop
+        ? [{ label: 'Im Browser', value: 'web' }, { label: 'In der Spotify-App', primary: true, value: 'app' }]
+        : [{ label: 'Spotify öffnen', primary: true, value: 'app' }],
+      onClose: v => {
+        if (!v) return;
+        local('kr.freeTarget', v);
+        openForFree(uri);
+      },
+    });
+  }
+
+  /** uri: Song/Playlist/Album öffnen; '' = nur Spotify starten; null = Steuerbefehl, geht nur in Spotify selbst. */
+  function openForFree(uri) {
+    if (uri == null) { toast('Mit kostenlosem Konto steuerst du das direkt in Spotify'); return; }
+    const target = Platform.kind === 'android' ? 'app' : (local('kr.freeTarget') || 'app');
+    const u = uri === likedContext() ? 'spotify:collection:tracks' : uri;
+    if (target === 'web') Platform.openExternal(Spotify.webUrl(u));
+    else openInSpotify(u);
   }
 
   // ---------- Player ----------
@@ -1291,15 +1366,20 @@
       if (p.playing && ms >= p.track.ms - 300 && Date.now() - p.at > 1500) this.soon(400);
     },
 
-    /** Führt einen Player-Befehl aus; ohne aktives Gerät wird eins gewählt bzw. auf Spotify gewartet. */
-    async run(fn) {
+    /**
+     * Führt einen Player-Befehl aus; ohne aktives Gerät wird eins gewählt bzw. auf Spotify gewartet.
+     * uri: was bei kostenlosem Konto stattdessen in Spotify geöffnet wird (siehe openForFree).
+     */
+    async run(fn, uri) {
+      if (S.free) { openForFree(uri); return; }
       try {
         await fn(undefined);
       } catch (e) {
+        if (isPremiumRequired(e)) { startFreeMode(uri); return; }
         if (!isNoDevice(e)) { showError(e); this.soon(); return; }
         const device = await this.chooseDevice();
         if (!device) return;
-        try { await fn(device); } catch (err) { showError(err); }
+        try { await fn(device); } catch (err) { if (isPremiumRequired(err)) startFreeMode(uri); else showError(err); }
       }
       this.soon(600);
     },
@@ -1351,24 +1431,24 @@
       });
     },
 
-    playContext(context, offsetUri, fallback, shuffle) {
+    playContext(context, offsetUri, fallback, shuffle, freeUri) {
       return this.run(async device => {
         if (shuffle !== undefined) await sp.player.shuffle(!!shuffle, device).catch(e => { if (isNoDevice(e)) throw e; });
         try {
           await sp.player.play(Object.assign({ context_uri: context }, offsetUri ? { offset: { uri: offsetUri } } : {}), device);
         } catch (e) {
-          if (!fallback || isNoDevice(e) || e.reason === 'PREMIUM_REQUIRED') throw e;
+          if (!fallback || isNoDevice(e) || isPremiumRequired(e)) throw e;
           await sp.player.play({ uris: fallback() }, device);
         }
-      });
+      }, freeUri || offsetUri || context);
     },
 
-    playUris(uris, shuffle) {
+    playUris(uris, shuffle, freeUri) {
       if (!uris.length) return;
       return this.run(async device => {
         if (shuffle !== undefined) await sp.player.shuffle(!!shuffle, device).catch(e => { if (isNoDevice(e)) throw e; });
         await sp.player.play({ uris }, device);
-      });
+      }, freeUri || uris[0]);
     },
 
     queue(t) {
@@ -1377,6 +1457,7 @@
 
     toggle() {
       const p = S.player;
+      if (S.free) { openForFree(''); return; }
       if (p && p.track) {
         const play = !p.playing;
         p.progress = this.pos();
@@ -1384,14 +1465,15 @@
         p.playing = play;
         renderPlayer();
         markPlaying();
-        return this.run(d => (play ? sp.player.resume(d) : sp.player.pause(d)));
+        return this.run(d => (play ? sp.player.resume(d) : sp.player.pause(d)), '');
       }
       if (S.liked.length) return playUri(likedContext());
-      return this.run(d => sp.player.resume(d));
+      return this.run(d => sp.player.resume(d), '');
     },
 
     action(act, el) {
       const p = S.player;
+      if (S.free && ['next', 'prev', 'shuffle', 'repeat', 'mute'].includes(act)) { openForFree(null); return; }
       switch (act) {
         case 'toggle': this.toggle(); break;
         case 'next': this.run(d => sp.player.next(d)); break;
@@ -1415,6 +1497,7 @@
     seekTo(ms) {
       const p = S.player;
       if (!p) return;
+      if (S.free) { openForFree(null); renderPlayer(); return; }
       p.progress = ms;
       p.at = Date.now();
       this.run(d => sp.player.seek(ms, d));
@@ -1423,6 +1506,7 @@
     setVolume(v) {
       const p = S.player;
       if (!p || !p.device) return;
+      if (S.free) { openForFree(null); renderPlayer(); return; }
       if (v > 0) local('kr.vol', String(Math.round(v)));
       p.device.volume = v;
       renderPlayer();
@@ -1455,6 +1539,11 @@
   const devIcon = type => (type === 'Smartphone' || type === 'Tablet' ? 'phone' : type === 'Computer' ? 'computer' : 'speaker');
 
   async function showDevices(anchor) {
+    if (S.free) {
+      popup(anchor, '<div class="pop-title">Wiedergabe in Spotify<small>Mit kostenlosem Konto wählst du das Gerät direkt in Spotify.</small></div>' +
+        '<button class="pop-item" data-k="__app">' + ic('external') + '<span>Spotify öffnen</span></button>', () => openForFree(''));
+      return;
+    }
     const pop = popup(anchor, '<div class="pop-title">Gerät auswählen</div><div class="pop-wait"><span class="spinner small"></span>Suche Geräte …</div>', pick);
     const devices = await sp.player.devices().catch(e => { if (e.reason === 'PREMIUM_REQUIRED') showError(e); return []; });
     if (openPopup !== pop) return;
@@ -1469,7 +1558,7 @@
       if (k === '__app') { if (Platform.openSpotify('') === false) toast('Spotify-App nicht gefunden'); return; }
       if (k === '__web') { Platform.openExternal('https://open.spotify.com/'); return; }
       Player.remember(k);
-      sp.player.transfer(k, true).then(() => { toast('Wiedergabe gewechselt'); Player.soon(800); }, showError);
+      sp.player.transfer(k, true).then(() => { toast('Wiedergabe gewechselt'); Player.soon(800); }, e => { if (isPremiumRequired(e)) startFreeMode(''); else showError(e); });
     }
   }
 
@@ -1557,7 +1646,7 @@
       if (t) coverColor(npImg, t.uri).then(c => el.style.setProperty('--np', c));
     }
     $('.np-t', el).innerHTML = t ? (t.album && t.album.id ? '<a href="#/album/' + esc(t.album.id) + '">' + esc(t.name) + '</a>' : esc(t.name)) : 'Gerade läuft nichts';
-    $('.np-a', el).innerHTML = t ? artistLinks(t.artists) : 'Wähle einen Song – oder öffne Spotify auf einem Gerät';
+    $('.np-a', el).innerHTML = t ? artistLinks(t.artists) : S.free ? 'Wähle einen Song – er öffnet sich in Spotify' : 'Wähle einen Song – oder öffne Spotify auf einem Gerät';
     $$('.np-like').forEach(b => { b.hidden = !t || !t.id; b.classList.toggle('on', !!liked); b.innerHTML = ic(liked ? 'heartFill' : 'heart'); });
     $$('.pp, .mini-pp').forEach(b => { b.innerHTML = ic(p && p.playing ? 'pause' : 'play'); });
     $$('[data-act="shuffle"]').forEach(b => b.classList.toggle('on', !!(p && p.shuffle)));
@@ -1573,7 +1662,10 @@
     if (d && typeof d.volume === 'number' && document.activeElement !== vol) { vol.value = d.volume; }
     paintRange(vol);
     $('.vol-btn', el).innerHTML = ic(d && d.volume === 0 ? 'volumeOff' : 'volume');
-    $$('.dev-line').forEach(x => { x.innerHTML = d ? ic(devIcon(d.type)) + '<span>' + (p.playing ? 'Läuft auf ' : 'Bereit auf ') + esc(d.name) + '</span>' : ''; });
+    $$('.dev-line').forEach(x => {
+      x.innerHTML = S.free ? ic('external') + '<span>Kostenloses Konto – gesteuert wird in Spotify' + (d ? ' (' + esc(d.name) + ')' : '') + '</span>'
+        : d ? ic(devIcon(d.type)) + '<span>' + (p.playing ? 'Läuft auf ' : 'Bereit auf ') + esc(d.name) + '</span>' : '';
+    });
     $$('.dev-btn, .mini-dev').forEach(b => b.classList.toggle('on', !!d));
     // Vollbild-Player
     const full = $('#full');
