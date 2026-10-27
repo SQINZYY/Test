@@ -5,6 +5,8 @@
     <!-- Wecker der Samsung-Uhr lesen und den Klingelton ändern (von der Uhr-App als "normal" freigegeben) -->
     <uses-permission android:name="com.sec.android.app.clockpackage.permission.READ_ALARM" />
     <uses-permission android:name="com.sec.android.app.clockpackage.permission.WRITE_ALARM" />
+    <!-- Ohne diese Berechtigung öffnet die Samsung-Uhr ihre Wecker-Liste nicht für andere Apps -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- Uhr-App im Hintergrund beenden, damit sie beim Öffnen den nächsten Wecker neu plant -->
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <!-- Optional: MP3 als Standard-Weckton des Handys setzen (fragt Android extra nach) -->

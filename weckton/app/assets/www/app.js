@@ -86,15 +86,19 @@
       denied: ['Die Uhr-App verweigert den Zugriff',
         'Meist hilft es, Weckton einmal zu deinstallieren und neu zu installieren – deine Wecker bleiben dabei, wie sie sind. '
         + 'Klappt es danach immer noch nicht, lässt deine Version der Uhr-App keinen Zugriff zu.'],
+      locked: ['Deine Uhr-App sperrt den Zugriff',
+        'Samsung hat in neueren Versionen der Uhr (ab One UI 7) die Wecker für andere Apps gesperrt. Weckton kann sie deshalb '
+        + 'weder auslesen noch ändern – daran ändert auch eine Neuinstallation nichts.'],
       no_app: ['Nur in der App', 'Diese Seite funktioniert nur in der Weckton-App auf dem Handy.'],
     }[S.status] || ['Wecker-Liste nicht erreichbar', 'Die Uhr-App hat keine Wecker geliefert. Öffne sie einmal und versuch es dann noch mal.'];
     let html = '<section class="card notice">' + ICON.warn + '<div><h3>' + why[0] + '</h3><p>' + why[1] + '</p>'
-      + (S.status === 'no_samsung' || S.status === 'no_app' ? '' : '<button class="btn" data-a="retry">Erneut versuchen</button>')
+      + (['no_samsung', 'no_app', 'locked'].includes(S.status) ? '' : '<button class="btn" data-a="retry">Erneut versuchen</button>')
       + '</div></section>';
     if (S.status !== 'no_app') {
       html += '<section class="card"><h2>So geht es trotzdem</h2>'
         + '<p class="muted">' + (S.sound ? '„' + esc(S.sound.title) + '“ liegt jetzt' : 'Die MP3, die du oben wählst, landet') + ' im Ordner „Alarms“. '
-        + 'In deiner Uhr-App erscheint sie deshalb beim Wecker unter <b>Weckton</b> zur Auswahl.</p>'
+        + 'In deiner Uhr-App erscheint sie deshalb zur Auswahl: Wecker antippen → <b>Weckton</b> → '
+        + (S.sound ? '„' + esc(S.sound.title) + '“' : 'deine MP3') + ' wählen → <b>Speichern</b>.</p>'
         + '<button class="btn wide" data-a="clock">' + ICON.clock + 'Uhr-App öffnen</button>'
         + '<p class="muted top">Oder setze sie als <b>Standard-Weckton</b> des Handys – das gilt für alle Wecker, die den Standardton nutzen'
         + (S.defaultAlarm ? ' (gerade: „' + esc(S.defaultAlarm) + '“)' : '') + '.</p>'

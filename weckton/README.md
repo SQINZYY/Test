@@ -1,7 +1,7 @@
 # Weckton
 
 Android-App, mit der du eine eigene MP3 als Klingelton für **alle oder ausgewählte Wecker** deiner Uhr-App setzt. Weckton liest dafür alle
-Wecker aus, die in der Samsung-Uhr gespeichert sind (auch alle 100, wenn das Limit voll ist), und zeigt sie mit Uhrzeit, Tagen, Name und
+Wecker aus, die in der Samsung-Uhr gespeichert sind (auch alle 100, wenn das Limit voll ist; neuere Samsung-Uhren sperren das, siehe unten), und zeigt sie mit Uhrzeit, Tagen, Name und
 aktuellem Ton an.
 
 **APK:** [`release/Weckton.apk`](release/Weckton.apk) (ab Android 10, ca. 30 KB, braucht kein Internet).
@@ -36,8 +36,12 @@ die App den alten Ton jedes Weckers; **„Alte Töne wiederherstellen“** setzt
   beendet sie deshalb im Hintergrund und öffnet sie neu, damit sie auch diesen Wecker mit dem neuen Ton plant. Ohne diesen Schritt klingelt
   höchstens der nächste Wecker noch einmal mit dem alten Ton.
 - Wecker mit ausgeschaltetem Weckton (nur Vibration) bleiben stumm. Wecker mit Bixby-Briefing bekommen den normalen Weckton mit der MP3.
-- Die Schnittstelle der Samsung-Uhr ist nicht offiziell dokumentiert. Geprüft wurde der Aufbau anhand der Samsung-Uhr 10; spätere Versionen
-  können ihn ändern. Meldet Weckton „Die Uhr-App verweigert den Zugriff“, hilft meist eine Neuinstallation von Weckton.
+- **Neuere Samsung-Uhr (ab One UI 7, Uhr 12.x) sperrt den Zugriff.** Dort legt die Uhr-App `READ_ALARM`/`WRITE_ALARM` mit der
+  Schutzstufe „signature“ an, nur Samsung-eigene Apps bekommen sie. Weckton zeigt dann „Deine Uhr-App sperrt den Zugriff“; eine
+  Neuinstallation hilft nicht. Die MP3 lässt sich in der Uhr-App aber weiter von Hand pro Wecker auswählen (Wecker → Weckton).
+  Geprüft: Uhr 10 (Zugriff erlaubt), Uhr 12.5.60 (gesperrt).
+- Die Schnittstelle der Samsung-Uhr ist nicht offiziell dokumentiert. Meldet Weckton bei einer älteren Uhr-App „Die Uhr-App verweigert
+  den Zugriff“, hilft meist eine Neuinstallation von Weckton.
 
 ## Aufbau
 
@@ -54,7 +58,7 @@ die App den alten Ton jedes Weckers; **„Alte Töne wiederherstellen“** setzt
 ```sh
 pip install cryptography
 ./weckton/tools/build.sh                         # -> weckton/release/Weckton.apk
-VERSION_CODE=2 VERSION_NAME=1.1 ./weckton/tools/build.sh
+VERSION_CODE=3 VERSION_NAME=1.2 ./weckton/tools/build.sh
 ```
 
 Nutzt dieselben Werkzeuge und denselben Debug-Schlüssel wie SetupBuilder (`tools/sign_apk.py`, `tools/debug-signing.p12`).

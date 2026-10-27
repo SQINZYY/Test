@@ -94,6 +94,12 @@ function mock(opts) {
   await shot(page, '7-keine-samsung-uhr');
   await page.close();
 
+  page = await open({ status: 'locked' });
+  await page.click('[data-a=pick]');
+  await page.waitForSelector('.play');
+  await shot(page, '9-gesperrt', true);
+  await page.close();
+
   page = await open({ status: 'ok', count: 0 });
   await shot(page, '8-keine-wecker');
   await page.close();

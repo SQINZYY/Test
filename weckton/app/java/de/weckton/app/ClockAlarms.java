@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PermissionInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -22,8 +23,9 @@ import java.util.Map;
  * Liest und ändert die Wecker der Samsung-Uhr (com.sec.android.app.clockpackage).
  *
  * Die Uhr-App stellt ihre Wecker-Datenbank als Content Provider bereit. Lesen und Schreiben ist mit den
- * Berechtigungen READ_ALARM/WRITE_ALARM erlaubt, die die Uhr-App mit der Schutzstufe "normal" anlegt –
- * jede App bekommt sie bei der Installation. Geändert werden nur Klingelton und Ton-Modus; vor der ersten
+ * Berechtigungen READ_ALARM/WRITE_ALARM erlaubt. Ältere Versionen der Uhr-App legen sie mit der Schutzstufe
+ * "normal" an – jede App bekommt sie bei der Installation; neuere sperren sie (siehe isLocked). Geändert
+ * werden nur Klingelton und Ton-Modus; vor der ersten
  * Änderung eines Weckers merkt sich die App die alten Werte, damit sie sich wiederherstellen lassen.
  */
 final class ClockAlarms {
@@ -31,6 +33,7 @@ final class ClockAlarms {
     static final String PKG = "com.sec.android.app.clockpackage";
     static final Uri URI = Uri.parse("content://com.samsung.sec.android.clockpackage/alarm");
     static final String SILENT = "alarm_silent_ringtone";
+    private static final String READ_PERMISSION = "com.sec.android.app.clockpackage.permission.READ_ALARM";
 
     // Bits in der Spalte "dailybrief", die bestimmen, was beim Wecken abgespielt wird
     private static final int TONE_OFF = 64;
@@ -77,13 +80,30 @@ final class ClockAlarms {
         }
     }
 
+    /**
+     * Neuere Versionen der Samsung-Uhr (One UI 7/8, Uhr 12.x) geben READ_ALARM nur noch Samsung-eigenen Apps
+     * (Schutzstufe "signature"). Dann hilft auch keine Neuinstallation.
+     */
+    static boolean isLocked(Context context) {
+        try {
+            PermissionInfo p = context.getPackageManager().getPermissionInfo(READ_PERMISSION, 0);
+            int base = p.protectionLevel & PermissionInfo.PROTECTION_MASK_BASE;
+            return base != PermissionInfo.PROTECTION_NORMAL && base != PermissionInfo.PROTECTION_DANGEROUS;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
     /** Alle Wecker der Uhr-App als JSON-Liste. Wirft eine Exception mit verständlicher Meldung, wenn das nicht geht. */
     JSONArray list() throws Exception {
+        if (context.checkSelfPermission(READ_PERMISSION) != PackageManager.PERMISSION_GRANTED && isLocked(context)) {
+            throw new Exception("locked");
+        }
         Cursor c;
         try {
             c = context.getContentResolver().query(URI, null, null, null, "alarmtime ASC");
         } catch (SecurityException e) {
-            throw new Exception("denied");
+            throw new Exception(isLocked(context) ? "locked" : "denied");
         } catch (IllegalArgumentException e) {
             throw new Exception("unavailable");
         }

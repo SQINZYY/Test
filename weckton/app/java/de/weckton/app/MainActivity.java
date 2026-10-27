@@ -263,9 +263,16 @@ public class MainActivity extends Activity {
         show.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(show);
-        } catch (ActivityNotFoundException e) {
-            Intent launch = getPackageManager().getLaunchIntentForPackage(ClockAlarms.PKG);
-            if (launch != null) startActivity(launch);
+            return;
+        } catch (RuntimeException e) {
+            // keine Uhr-App für SHOW_ALARMS oder fehlende Berechtigung → normal starten
+        }
+        Intent launch = getPackageManager().getLaunchIntentForPackage(ClockAlarms.PKG);
+        try {
+            if (launch == null) throw new ActivityNotFoundException();
+            startActivity(launch);
+        } catch (RuntimeException e) {
+            call("W.onError(" + JSONObject.quote("Die Uhr-App ließ sich nicht öffnen.") + ")");
         }
     }
 
