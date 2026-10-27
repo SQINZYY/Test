@@ -4,6 +4,9 @@ Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die ga
 
 **APK:** [`release/SetupBuilder.apk`](release/SetupBuilder.apk) (ab Android 7, ca. 8 MB). Internet wird nur für Geizhals (Wunschlisten, Preise, Online-Suche) und „PC verbinden“ im eigenen WLAN genutzt.
 
+> Außerdem in diesem Repo: **[Weckton](weckton/README.md)** – eigene MP3 als Klingelton für alle oder ausgewählte Wecker der Samsung-Uhr
+> ([`weckton/release/Weckton.apk`](weckton/release/Weckton.apk)).
+
 ## Installieren
 
 1. `release/SetupBuilder.apk` aufs Handy laden und öffnen.
