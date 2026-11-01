@@ -981,6 +981,106 @@
     return head + ' und willst gegen ' + arr + ' da sein. Die App markiert die Verbindung, die am besten passt.';
   }
 
+  // ---------------------------------------------------------------- Favoriten
+
+  /*
+   * Favorit = { id, kind: 'home'|'work'|'other', label, place }
+   * Zuhause und Arbeit gibt es höchstens einmal; eigene Favoriten beliebig viele.
+   */
+  var FAV_KIND = {
+    home: { label: 'Zuhause', icon: 'home' },
+    work: { label: 'Arbeit', icon: 'work' },
+    other: { label: 'Favorit', icon: 'star' }
+  };
+
+  function favLabel(f) {
+    if (!f) return '';
+    if (f.kind === 'home' || f.kind === 'work') return FAV_KIND[f.kind].label;
+    return cleanStr(f.label) || (f.place ? f.place.name : '') || 'Favorit';
+  }
+
+  function cleanPlace(p) {
+    if (!p || num(+p.lat) === null || num(+p.lon) === null) return null;
+    var out = { name: cleanStr(p.name) || 'Ort', detail: cleanStr(p.detail), lat: +p.lat, lon: +p.lon, kind: p.kind || 'place' };
+    if (p.kind === 'here') {
+      // Standort als Favorit: die Adresse aus der Standortsuche wird zum Namen
+      var parts = out.detail.split(',');
+      out.name = cleanStr(parts.shift()) || 'Gespeicherter Standort';
+      out.detail = parts.join(',').trim();
+      out.kind = 'address';
+    }
+    if (p.stopId) out.stopId = String(p.stopId);
+    return out;
+  }
+
+  /** Favoriten aufräumen und sortieren: Zuhause, Arbeit, dann eigene in Reihenfolge. */
+  function normFavs(list) {
+    var out = [], seen = {};
+    (Array.isArray(list) ? list : []).forEach(function (f) {
+      if (!f || !f.place) return;
+      var kind = f.kind === 'home' || f.kind === 'work' ? f.kind : 'other';
+      var id = kind === 'other' ? String(f.id || '') : kind;
+      var place = cleanPlace(f.place);
+      if (!id || !place || seen[id]) return;
+      seen[id] = 1;
+      out.push({ id: id, kind: kind, label: kind === 'other' ? cleanStr(f.label) || place.name : FAV_KIND[kind].label, place: place });
+    });
+    var rank = { home: 0, work: 1, other: 2 };
+    return out.map(function (f, i) { return [f, i]; })
+      .sort(function (a, b) { return (rank[a[0].kind] - rank[b[0].kind]) || (a[1] - b[1]); })
+      .map(function (x) { return x[0]; });
+  }
+
+  /** Favorit speichern; ersetzt Zuhause/Arbeit bzw. denselben eigenen Favoriten. */
+  function upsertFav(list, fav, newId) {
+    var kind = fav.kind === 'home' || fav.kind === 'work' ? fav.kind : 'other';
+    var id = kind === 'other' ? (fav.id && fav.id !== 'home' && fav.id !== 'work' ? fav.id : newId || 'f' + Date.now()) : kind;
+    var entry = { id: id, kind: kind, label: kind === 'other' ? cleanStr(fav.label) : FAV_KIND[kind].label, place: fav.place };
+    // alten Eintrag entfernen, falls der Favorit die Art gewechselt hat (z. B. eigener → Zuhause)
+    var favs = normFavs(list).filter(function (f) { return !(fav.id && f.id === fav.id && f.id !== id); });
+    var found = false;
+    favs = favs.map(function (f) {
+      if (f.id !== id) return f;
+      found = true;
+      return entry;
+    });
+    if (!found) favs.push(entry);
+    return normFavs(favs);
+  }
+
+  function removeFav(list, id) {
+    return normFavs(list).filter(function (f) { return f.id !== id; });
+  }
+
+  /** Favorit zu einem Ort (gleiche Haltestelle oder näher als 30 m). */
+  function findFav(list, place) {
+    if (!place || place.kind === 'here') return null;
+    var favs = normFavs(list);
+    for (var i = 0; i < favs.length; i++) {
+      var p = favs[i].place;
+      if ((place.stopId && p.stopId === place.stopId) || haversine([p.lat, p.lon], [+place.lat, +place.lon]) < 30) return favs[i];
+    }
+    return null;
+  }
+
+  /** Favoriten passend zur Eingabe ("zu" → Zuhause, "Haupt" → Hauptstraße 5 …). */
+  function matchFavs(list, text) {
+    var t = cleanStr(text).toLowerCase();
+    var favs = normFavs(list);
+    if (!t) return favs;
+    return favs.filter(function (f) {
+      return favLabel(f).toLowerCase().indexOf(t) >= 0 || f.place.name.toLowerCase().indexOf(t) >= 0;
+    });
+  }
+
+  /** Ort aus einem Favoriten für Start/Ziel (mit Favoriten-Namen). */
+  function favPlace(f) {
+    var p = cleanPlace(f.place);
+    p.fav = favLabel(f);
+    p.favId = f.id;
+    return p;
+  }
+
   // ---------------------------------------------------------------- Google Maps
 
   var GMAPS_MODE = { walk: 'walking', bike: 'bicycling', car: 'driving', transit: 'transit' };
@@ -1157,7 +1257,9 @@
     normSpec: normSpec, checkSpec: checkSpec, earliestLeave: earliestLeave, specQuery: specQuery,
     specFallbackQuery: specFallbackQuery, timeDirectSpec: timeDirectSpec, judgeRoute: judgeRoute,
     bestRoute: bestRoute, earliestArrival: earliestArrival, describeSpec: describeSpec, explainSpec: explainSpec,
-    gmapsDirUrl: gmapsDirUrl, gmapsNavUri: gmapsNavUri, GMAPS_PACKAGE: GMAPS_PACKAGE
+    gmapsDirUrl: gmapsDirUrl, gmapsNavUri: gmapsNavUri, GMAPS_PACKAGE: GMAPS_PACKAGE,
+    FAV_KIND: FAV_KIND, favLabel: favLabel, normFavs: normFavs, upsertFav: upsertFav, removeFav: removeFav,
+    findFav: findFav, matchFavs: matchFavs, favPlace: favPlace
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = core;

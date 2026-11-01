@@ -355,6 +355,54 @@ test('Zeitwunsch: Texte', () => {
   assert.ok(/um 08:00 los/.test(core.explainSpec({ dep: 'at', depTime: at(8, 0) }, NOW)));
 });
 
+// ------------------------------------------------------------ Favoriten
+
+test('Favoriten: speichern, ersetzen, sortieren, löschen', () => {
+  const home = { name: 'Ebertplatz 2', detail: '50668 Köln', lat: fx.P.start[0], lon: fx.P.start[1], kind: 'address' };
+  const work = { name: 'Poppelsdorfer Allee 49', detail: '53115 Bonn', lat: fx.P.ziel[0], lon: fx.P.ziel[1], kind: 'address' };
+  const oma = { name: 'Poppelsdorfer Platz', detail: 'Bonn', lat: fx.P.poppelsdorferPlatz[0], lon: fx.P.poppelsdorferPlatz[1], kind: 'stop', stopId: 'de:05314:61107' };
+  let l = [];
+  l = core.upsertFav(l, { kind: 'other', label: 'Oma', place: oma }, 'f1');
+  l = core.upsertFav(l, { kind: 'work', place: work });
+  l = core.upsertFav(l, { kind: 'home', place: home });
+  assert.deepStrictEqual(l.map(f => f.id + ':' + core.favLabel(f)), ['home:Zuhause', 'work:Arbeit', 'f1:Oma']);
+  assert.strictEqual(l[2].place.stopId, 'de:05314:61107');
+  // neues Zuhause ersetzt das alte
+  l = core.upsertFav(l, { kind: 'home', place: work });
+  assert.strictEqual(l.filter(f => f.kind === 'home').length, 1);
+  assert.strictEqual(l[0].place.name, 'Poppelsdorfer Allee 49');
+  // eigener Favorit umbenennen bleibt an seiner Stelle
+  l = core.upsertFav(l, { kind: 'other', label: 'Mama', place: home }, 'f2');
+  l = core.upsertFav(l, { id: 'f1', kind: 'other', label: 'Oma & Opa', place: oma });
+  assert.deepStrictEqual(l.map(f => core.favLabel(f)), ['Zuhause', 'Arbeit', 'Oma & Opa', 'Mama']);
+  // eigener Favorit wird zu "Arbeit" → alter Eintrag weg
+  l = core.upsertFav(l, { id: 'f2', kind: 'work', place: home });
+  assert.deepStrictEqual(l.map(f => f.id), ['home', 'work', 'f1']);
+  assert.strictEqual(l[1].place.name, 'Ebertplatz 2');
+  l = core.removeFav(l, 'home');
+  assert.deepStrictEqual(l.map(f => f.id), ['work', 'f1']);
+  assert.deepStrictEqual(core.normFavs([{ kind: 'home', place: { name: 'x' } }, null, { kind: 'other', place: home }]), [], 'kaputte Einträge fallen weg');
+});
+
+test('Favoriten: finden, Suche, Standort speichern', () => {
+  const home = { name: 'Ebertplatz 2', detail: '50668 Köln', lat: 50.95105, lon: 6.95712, kind: 'address' };
+  const l = core.upsertFav([], { kind: 'home', place: home });
+  assert.strictEqual(core.findFav(l, { lat: 50.95106, lon: 6.95714 }).id, 'home', 'wenige Meter daneben');
+  assert.strictEqual(core.findFav(l, { lat: 50.952, lon: 6.957 }), null, '100 m daneben');
+  assert.strictEqual(core.findFav(l, { kind: 'here', lat: 50.95105, lon: 6.95712 }), null, 'Mein Standort bleibt Mein Standort');
+  assert.deepStrictEqual(core.matchFavs(l, 'zuh').map(core.favLabel), ['Zuhause']);
+  assert.deepStrictEqual(core.matchFavs(l, 'ebert').map(core.favLabel), ['Zuhause']);
+  assert.deepStrictEqual(core.matchFavs(l, 'xyz'), []);
+  const p = core.favPlace(l[0]);
+  assert.strictEqual(p.fav, 'Zuhause');
+  assert.strictEqual(p.favId, 'home');
+  // aktueller Standort als Zuhause: Adresse aus der Standortsuche wird der Name
+  const h = core.upsertFav([], { kind: 'home', place: { name: 'Mein Standort', detail: 'Ebertplatz 2, 50668 Köln', lat: 50.95, lon: 6.95, kind: 'here' } });
+  assert.strictEqual(h[0].place.name, 'Ebertplatz 2');
+  assert.strictEqual(h[0].place.detail, '50668 Köln');
+  assert.strictEqual(h[0].place.kind, 'address');
+});
+
 // ------------------------------------------------------------ Google Maps
 
 test('Google Maps: Route und Navigation', () => {

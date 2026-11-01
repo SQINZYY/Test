@@ -240,6 +240,89 @@ async function run(scheme) {
   assert.ok(await page.isVisible('#recent-box'));
   assert.ok((await page.textContent('#recent')).indexOf('Mein Standort → Poppelsdorfer Allee 49') >= 0);
 
+  // Favoriten: Zuhause festlegen über die Leiste
+  await page.click('#view-plan [data-clear="to"]');
+  await page.click('#view-plan [data-clear="from"]');
+  await page.keyboard.press('Escape');
+  assert.ok((await page.textContent('#favs')).indexOf('Zuhause festlegen') >= 0);
+  await page.click('#favs [data-fav-new="home"]');
+  await page.waitForSelector('#sheet:not([hidden]) #fav-addr');
+  await page.fill('#fav-addr', 'Ebertplatz');
+  await page.waitForSelector('#fav-sug [data-favsg="0"]');
+  await page.click('#fav-sug [data-favsg="0"]');
+  await page.waitForSelector('.fav-place');
+  await shot('14-favorit-zuhause');
+  await page.click('[data-fav-save]');
+  assert.ok(await page.isHidden('#sheet'));
+  assert.ok(await page.isVisible('#favs [data-fav="home"]'));
+
+  // Ziel eingeben und über den Stern als "Arbeit" speichern
+  await page.fill('#in-to', 'Poppelsdorfer');
+  await page.waitForSelector('.sg-item:has-text("Poppelsdorfer Allee 49")');
+  await page.click('.sg-item:has-text("Poppelsdorfer Allee 49")');
+  assert.ok(await page.isVisible('[data-star="to"]'));
+  await page.click('[data-star="to"]');
+  await page.waitForSelector('#sheet:not([hidden]) [data-fav-kind]');
+  assert.strictEqual(await page.inputValue('#fav-name'), 'Poppelsdorfer Allee 49');
+  await page.click('[data-fav-kind] [data-v="work"]');
+  await page.click('[data-fav-save]');
+  assert.strictEqual(await page.inputValue('#in-to'), 'Arbeit · Poppelsdorfer Allee 49');
+  assert.ok(await page.isVisible('[data-star="to"].on'));
+
+  // Eigener Favorit "Oma" über "Bearbeiten" → "Neuer Favorit"
+  await page.click('#favs [data-fav-manage]');
+  await page.waitForSelector('#sheet:not([hidden]) .fav-list');
+  await page.click('#sheet [data-fav-new="other"]');
+  await page.fill('#fav-name', 'Oma');
+  await page.fill('#fav-addr', 'Poppelsdorfer');
+  await page.waitForSelector('#fav-sug [data-favsg="1"]');
+  await page.click('#fav-sug [data-favsg="1"]');
+  assert.strictEqual(await page.inputValue('#fav-name'), 'Oma', 'Name bleibt nach Adresswahl erhalten');
+  await page.click('[data-fav-save]');
+  await page.waitForSelector('#sheet:not([hidden]) .fav-list');
+  const rows = await page.$$eval('.fav-row .fav-txt b', (els) => els.map((e) => e.textContent));
+  assert.deepStrictEqual(rows, ['Zuhause', 'Arbeit', 'Oma']);
+  await shot('15-favoriten-verwalten');
+  await page.click('.sheet-head [data-close-sheet]');
+  await shot('16-favoriten-leiste');
+
+  // Favorit antippen: Ziel = Oma, Start (leer) = Mein Standort (GPS)
+  assert.strictEqual(await page.inputValue('#in-from'), '');
+  await page.click('#favs [data-fav]:has-text("Oma")');
+  assert.strictEqual(await page.inputValue('#in-to'), 'Oma · Poppelsdorfer Platz');
+  await page.waitForFunction(() => document.getElementById('in-from').value.indexOf('Mein Standort') === 0);
+
+  // Vorschläge: Favoriten zuerst
+  await page.click('#view-plan [data-clear="to"]');
+  const firstSug = await page.textContent('#suggest .sg-item >> nth=1');
+  assert.ok(firstSug.indexOf('Zuhause') >= 0, 'nach "Mein Standort" kommt Zuhause: ' + firstSug);
+  await page.fill('#in-to', 'Om');
+  await page.waitForSelector('#suggest .sg-item:has-text("Oma")');
+  await page.click('#suggest .sg-item:has-text("Oma")');
+  await page.click('#btn-search');
+  await page.waitForSelector('#view-results.active');
+  assert.strictEqual(await page.textContent('#res-title'), 'Mein Standort → Oma');
+  await page.click('#view-results [data-back]');
+
+  // Zuhause löschen (zweimal tippen)
+  await page.click('#favs [data-fav-manage]');
+  await page.click('[data-fav-edit="home"]');
+  await page.click('[data-fav-delete]');
+  assert.ok(/Wirklich löschen/.test(await page.textContent('[data-fav-delete]')));
+  await page.click('[data-fav-delete]');
+  await page.waitForSelector('#sheet .fav-row.empty[data-fav-new="home"]');
+  await page.click('.sheet-head [data-close-sheet]');
+  assert.ok((await page.textContent('#favs')).indexOf('Zuhause festlegen') >= 0);
+  // Favoriten bleiben nach dem Neuladen erhalten
+  await page.reload();
+  await page.waitForSelector('#favs [data-fav="work"]');
+  assert.ok(await page.isVisible('#favs [data-fav]:has-text("Oma")'));
+  await page.fill('#in-to', 'Poppelsdorfer');
+  await page.waitForSelector('.sg-item:has-text("Poppelsdorfer Allee 49")');
+  await page.click('.sg-item:has-text("Poppelsdorfer Allee 49")');
+  await page.click('#btn-locate');
+  await page.waitForFunction(() => document.getElementById('in-from').value.indexOf('Mein Standort ·') === 0);
+
   // Fehlerfall: Fahrplanauskunft nicht erreichbar
   await page.unroute(/./);
   await page.route(/^https:\/\//, (route) => route.abort());

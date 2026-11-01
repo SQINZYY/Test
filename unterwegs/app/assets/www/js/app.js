@@ -32,6 +32,7 @@
     sel: load('modes', { walk: true, bus: true, bahn: true, zug: true }),
     dep: 'now',
     arr: 'any',
+    sheet: null,
     settings: core.withDefaults(load('settings', null)),
     view: 'plan',
     search: null,
@@ -91,13 +92,14 @@
   function placeLabel(p) {
     if (!p) return '';
     if (p.kind === 'here') return 'Mein Standort';
+    if (p.fav) return p.fav + ' · ' + p.name;
     var city = (p.detail || '').split(',').pop().trim().replace(/^\d{4,5}\s+/, '');
     return p.name + (city && p.name.indexOf(city) < 0 ? ', ' + city : '');
   }
 
   function shortName(p) {
     if (!p) return '';
-    return p.kind === 'here' ? 'Mein Standort' : p.name;
+    return p.kind === 'here' ? 'Mein Standort' : p.fav || p.name;
   }
 
   /** Countdown-Text; weit entfernte Zeiten als Tag. */
@@ -194,6 +196,7 @@
       var b = doc.querySelector('[data-clear="' + f + '"]');
       if (b) b.hidden = !input(f).value;
     });
+    updateStars();
   }
 
   function biasFor(field) {
@@ -208,7 +211,7 @@
   }
 
   function kindIcon(k) {
-    return { stop: 'stop', address: 'home', here: 'locate', recent: 'history' }[k] || 'pin';
+    return { stop: 'stop', address: 'pin', here: 'locate', recent: 'history' }[k] || 'pin';
   }
 
   function renderSuggest(field, items, message, heading) {
@@ -220,7 +223,7 @@
     var html = heading ? '<div class="sg-head">' + esc(heading) + '</div>' : '';
     sug.items.forEach(function (p, i) {
       html += '<button type="button" class="sg-item" data-sg="' + i + '" role="option">' +
-        '<span class="sg-icon k-' + esc(p.kind) + '">' + ic(p.action === 'locate' ? 'locate' : p.recent ? 'history' : kindIcon(p.kind)) + '</span>' +
+        '<span class="sg-icon k-' + esc(p.favIcon ? 'fav' : p.kind) + '">' + ic(p.favIcon || (p.action === 'locate' ? 'locate' : p.recent ? 'history' : kindIcon(p.kind))) + '</span>' +
         '<span class="sg-text"><b>' + esc(p.name) + '</b>' + (p.detail ? '<small>' + esc(p.detail) + '</small>' : '') + '</span></button>';
     });
     if (message) html += '<div class="sg-msg">' + esc(message) + '</div>';
@@ -230,14 +233,30 @@
 
   function recentPlaces() { return load('recentPlaces', []); }
 
-  function showDefaultSuggest(field) {
-    var items = [{ kind: 'here', name: 'Mein Standort', detail: 'Aktuellen Standort per GPS verwenden', action: 'locate' }];
-    recentPlaces().slice(0, 6).forEach(function (p) {
+  /** Favoriten als Vorschläge (passend zum getippten Text). */
+  function favItems(text) {
+    return core.matchFavs(load('favs', []), text).map(function (f) {
+      return {
+        kind: 'fav', favId: f.id, favIcon: core.FAV_KIND[f.kind].icon, name: core.favLabel(f),
+        detail: f.place.name + (f.place.detail ? ', ' + f.place.detail : '')
+      };
+    });
+  }
+
+  function showDefaultSuggest(field, text) {
+    text = (text || '').trim().toLowerCase();
+    var items = text ? [] : [{ kind: 'here', name: 'Mein Standort', detail: 'Aktuellen Standort per GPS verwenden', action: 'locate' }];
+    var favList = load('favs', []);
+    items = items.concat(favItems(text));
+    recentPlaces().filter(function (p) {
+      return !core.findFav(favList, p) && (!text || p.name.toLowerCase().indexOf(text) >= 0);
+    }).slice(0, 5).forEach(function (p) {
       var c = {}; for (var k in p) c[k] = p[k];
       c.recent = true;
       items.push(c);
     });
-    renderSuggest(field, items, '', items.length > 1 ? 'Vorschläge' : '');
+    if (!items.length) { hideSuggest(); return; }
+    renderSuggest(field, items, '', text ? '' : 'Vorschläge');
   }
 
   function onInput(field) {
@@ -245,19 +264,21 @@
     updateClear();
     var text = input(field).value.trim();
     clearTimeout(sug.timer);
-    if (text.length < 3) { showDefaultSuggest(field); return; }
+    if (text.length < 3) { showDefaultSuggest(field, text); return; }
     sug.timer = setTimeout(function () { runSuggest(field, text); }, 280);
   }
 
   function runSuggest(field, text) {
     var token = ++sug.token;
-    renderSuggest(field, [], 'Suche …');
+    var favs = favItems(text);
+    renderSuggest(field, favs, 'Suche …');
     api.geocode(text, biasFor(field)).then(function (list) {
       if (token !== sug.token || input(field).value.trim() !== text) return;
-      renderSuggest(field, list, list.length ? '' : 'Nichts gefunden – probiere Straße, Hausnummer und Ort.');
+      var all = favs.concat(list);
+      renderSuggest(field, all, all.length ? '' : 'Nichts gefunden – probiere Straße, Hausnummer und Ort.');
     }, function (err) {
       if (token !== sug.token) return;
-      renderSuggest(field, [], 'Adresssuche nicht möglich: ' + errorText(err));
+      renderSuggest(field, favs, 'Adresssuche nicht möglich: ' + errorText(err));
     });
   }
 
@@ -266,7 +287,15 @@
     if (!field || !p) return;
     hideSuggest();
     if (p.action === 'locate') { locate(field); return; }
-    var c = {}; for (var k in p) if (k !== 'recent') c[k] = p[k];
+    var c;
+    if (p.favId) {
+      var f = favById(p.favId);
+      if (!f) return;
+      c = core.favPlace(f);
+    } else {
+      c = {};
+      for (var k in p) if (k !== 'recent') c[k] = p[k];
+    }
     setPlace(field, c);
     if (field === 'from' && !S.to) input('to').focus();
     else input(field).blur();
@@ -393,7 +422,7 @@
       if (!p || p.kind === 'here') return;
       var key = core.placeKey(p);
       places = places.filter(function (o) { return core.placeKey(o) !== key; });
-      places.unshift({ name: p.name, detail: p.detail || '', lat: p.lat, lon: p.lon, kind: p.kind, stopId: p.stopId });
+      places.unshift({ name: p.name, detail: p.detail || '', lat: p.lat, lon: p.lon, kind: p.kind === 'fav' ? 'address' : p.kind, stopId: p.stopId });
     });
     save('recentPlaces', places.slice(0, 10));
 
@@ -1102,7 +1131,7 @@
     $('recent-box').hidden = !routes.length;
     $('recent').innerHTML = routes.map(function (r, i) {
       return '<button type="button" class="recent-item" data-recent="' + i + '">' + ic('history') +
-        '<span class="ri-text"><b>' + esc(r.from ? r.from.name : 'Mein Standort') + ' → ' + esc(r.to ? r.to.name : 'Mein Standort') + '</b>' +
+        '<span class="ri-text"><b>' + esc(r.from ? shortName(r.from) : 'Mein Standort') + ' → ' + esc(r.to ? shortName(r.to) : 'Mein Standort') + '</b>' +
         '<span class="ri-modes">' + selIcons(r.sel) + '</span></span></button>';
     }).join('');
   }
@@ -1118,6 +1147,207 @@
     if (r.from && r.to) onSearch();
   }
 
+  // ---------------------------------------------------------------- Favoriten
+
+  function favList() { return core.normFavs(load('favs', [])); }
+  function favById(id) { return favList().filter(function (f) { return f.id === id; })[0] || null; }
+
+  function saveFavs(list) {
+    save('favs', core.normFavs(list));
+    // Start/Ziel an geänderte Favoriten anpassen
+    ['from', 'to'].forEach(function (field) {
+      var p = S[field];
+      if (!p || p.kind === 'here') return;
+      var f = core.findFav(list, p);
+      if (f) setPlace(field, core.favPlace(f));
+      else if (p.favId) {
+        var c = {};
+        for (var k in p) if (k !== 'fav' && k !== 'favId') c[k] = p[k];
+        setPlace(field, c);
+      }
+    });
+    renderFavs();
+    updateStars();
+  }
+
+  function renderFavs() {
+    var list = favList(), html = '';
+    function chip(f) {
+      return '<button type="button" class="fav-chip k-' + f.kind + '" data-fav="' + esc(f.id) + '" title="' + esc(f.place.name) + '">' +
+        ic(core.FAV_KIND[f.kind].icon) + '<span>' + esc(core.favLabel(f)) + '</span></button>';
+    }
+    ['home', 'work'].forEach(function (k) {
+      var f = list.filter(function (x) { return x.id === k; })[0];
+      html += f ? chip(f) : '<button type="button" class="fav-chip empty" data-fav-new="' + k + '">' + ic(core.FAV_KIND[k].icon) +
+        '<span>' + core.FAV_KIND[k].label + ' festlegen</span></button>';
+    });
+    list.filter(function (f) { return f.kind === 'other'; }).forEach(function (f) { html += chip(f); });
+    html += '<button type="button" class="fav-chip manage" data-fav-manage>' + ic(list.length ? 'edit' : 'add') + '<span>' + (list.length ? 'Bearbeiten' : 'Favorit') + '</span></button>';
+    $('favs').innerHTML = html;
+  }
+
+  /** Favorit antippen = als Ziel nehmen; ist kein Start da, wird "Mein Standort" der Start. */
+  function useFav(id) {
+    var f = favById(id);
+    if (!f) return;
+    hideSuggest();
+    var p = core.favPlace(f);
+    setPlace('to', p);
+    if (!S.from || core.placeKey(S.from) === core.placeKey(p)) {
+      setPlace('from', null);
+      locate('from');
+    }
+  }
+
+  function updateStars() {
+    var list = load('favs', []);
+    ['from', 'to'].forEach(function (field) {
+      var b = doc.querySelector('[data-star="' + field + '"]');
+      if (!b) return;
+      var p = S[field];
+      var f = p ? (p.favId ? favById(p.favId) : core.findFav(list, p)) : null;
+      b.hidden = !p || (p.kind === 'here' && !p.detail);
+      b.classList.toggle('on', !!f);
+      b.innerHTML = ic(f ? 'star' : 'star-o');
+      b.setAttribute('aria-label', f ? 'Favorit „' + core.favLabel(f) + '“ bearbeiten' : 'Als Favorit speichern');
+    });
+  }
+
+  function onStar(field) {
+    var p = S[field];
+    if (!p) return;
+    hideSuggest();
+    var f = p.favId ? favById(p.favId) : core.findFav(load('favs', []), p);
+    if (f) { openFavEditor(f, false); return; }
+    var hasHome = !!favById('home');
+    openFavEditor({ kind: p.kind === 'here' && !hasHome ? 'home' : 'other', label: p.kind === 'here' ? '' : p.name, place: p }, false);
+  }
+
+  // Bearbeiten-Fenster für einen Favoriten
+  var favEd = { draft: null, sug: [], token: 0, timer: null };
+
+  function openFavEditor(f, fromManager) {
+    favEd.draft = {
+      id: f.id || null, kind: f.kind || 'other', label: f.kind === 'other' ? (f.label || '') : '',
+      place: f.place || null, fromManager: !!fromManager, confirmDelete: false
+    };
+    favEd.sug = [];
+    openSheet('fav');
+  }
+
+  function renderFavEditor() {
+    var d = favEd.draft;
+    $('sheet-title').textContent = d.id ? 'Favorit bearbeiten' : 'Favorit speichern';
+    var kinds = [['home', 'Zuhause'], ['work', 'Arbeit'], ['other', 'Eigener']];
+    var html = '<div class="set"><div class="set-label">Art</div><div class="segmented small" data-fav-kind>' +
+      kinds.map(function (k) {
+        return '<button type="button" data-v="' + k[0] + '" class="' + (d.kind === k[0] ? 'on' : '') + '">' + ic(core.FAV_KIND[k[0]].icon) + esc(k[1]) + '</button>';
+      }).join('') + '</div>';
+    var existing = d.kind !== 'other' ? favById(d.kind) : null;
+    if (existing && d.id !== d.kind && (!d.place || core.placeKey(existing.place) !== core.placeKey(d.place))) {
+      html += '<p class="set-help warn">Ersetzt dein bisheriges ' + esc(core.FAV_KIND[d.kind].label) + ' (' + esc(existing.place.name) + ').</p>';
+    }
+    html += '</div>';
+    if (d.kind === 'other') {
+      html += '<div class="set"><label class="set-label" for="fav-name">Name</label>' +
+        '<input id="fav-name" class="text-input" type="text" maxlength="40" placeholder="z. B. Oma, Schule, Sportverein" value="' + esc(d.label) + '"></div>';
+    }
+    html += '<div class="set"><div class="set-label">Adresse</div>';
+    if (d.place) {
+      html += '<div class="fav-place">' + ic('pin') + '<span><b>' + esc(d.place.kind === 'here' ? (d.place.detail || 'Mein Standort').split(',')[0] : d.place.name) + '</b>' +
+        '<small>' + esc(d.place.kind === 'here' ? 'Aktueller Standort' : d.place.detail || '') + '</small></span></div>';
+    }
+    html += '<div class="fav-search"><input id="fav-addr" class="text-input" type="text" autocomplete="off" spellcheck="false" placeholder="' +
+      (d.place ? 'Andere Adresse suchen' : 'Adresse, Haltestelle oder Ort suchen') + '">' +
+      '<button type="button" class="icon-btn small" data-fav-locate aria-label="Aktuellen Standort verwenden">' + ic('locate') + '</button></div>' +
+      '<div id="fav-sug" class="fav-sug"></div></div>';
+    html += '<div class="sheet-actions"><button type="button" class="primary" data-fav-save>' + ic('check') + 'Speichern</button>' +
+      (d.id ? '<button type="button" class="danger" data-fav-delete>' + ic('trash') + (d.confirmDelete ? 'Wirklich löschen?' : 'Löschen') + '</button>' : '') + '</div>';
+    $('sheet-body').innerHTML = html;
+  }
+
+  function renderFavSug(message) {
+    var el = $('fav-sug');
+    if (!el) return;
+    el.innerHTML = favEd.sug.map(function (p, i) {
+      return '<button type="button" class="sg-item" data-favsg="' + i + '"><span class="sg-icon k-' + esc(p.kind) + '">' + ic(kindIcon(p.kind)) + '</span>' +
+        '<span class="sg-text"><b>' + esc(p.name) + '</b>' + (p.detail ? '<small>' + esc(p.detail) + '</small>' : '') + '</span></button>';
+    }).join('') + (message ? '<div class="sg-msg">' + esc(message) + '</div>' : '');
+  }
+
+  function favSearch(text) {
+    clearTimeout(favEd.timer);
+    favEd.sug = [];
+    if (text.trim().length < 3) { renderFavSug(''); return; }
+    favEd.timer = setTimeout(function () {
+      var token = ++favEd.token;
+      renderFavSug('Suche …');
+      api.geocode(text.trim(), S.lastPos).then(function (list) {
+        if (token !== favEd.token) return;
+        favEd.sug = list;
+        renderFavSug(list.length ? '' : 'Nichts gefunden – probiere Straße, Hausnummer und Ort.');
+      }, function (err) {
+        if (token !== favEd.token) return;
+        renderFavSug('Adresssuche nicht möglich: ' + errorText(err));
+      });
+    }, 280);
+  }
+
+  function favLocate() {
+    if (!root.navigator.geolocation) { toast('Standort ist auf diesem Gerät nicht verfügbar.'); return; }
+    favEd.sug = [];
+    renderFavSug('Standort wird ermittelt …');
+    root.navigator.geolocation.getCurrentPosition(function (pos) {
+      var lat = pos.coords.latitude, lon = pos.coords.longitude;
+      api.reverse(lat, lon).then(function (p) {
+        if (!favEd.draft) return;
+        favEd.draft.place = p;
+        renderFavEditor();
+      });
+    }, function (err) {
+      renderFavSug(err && err.code === 1 ? 'Standortzugriff wurde nicht erlaubt.' : 'Standort konnte nicht ermittelt werden.');
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  }
+
+  function favSave() {
+    var d = favEd.draft;
+    if (!d.place) { toast('Bitte wähle eine Adresse.'); return; }
+    var name = $('fav-name') ? $('fav-name').value.trim() : d.label;
+    var list = core.upsertFav(favList(), { id: d.id, kind: d.kind, label: name, place: d.place }, 'f' + Date.now());
+    saveFavs(list);
+    var saved = d.kind === 'other' ? (name || core.normFavs(list).slice(-1)[0].label) : core.FAV_KIND[d.kind].label;
+    toast('Gespeichert: ' + saved);
+    if (d.fromManager) openSheet('favs'); else closeSheet();
+  }
+
+  function favDelete() {
+    var d = favEd.draft;
+    if (!d.confirmDelete) { d.confirmDelete = true; renderFavEditor(); return; }
+    var f = favById(d.id);
+    saveFavs(core.removeFav(favList(), d.id));
+    toast('Gelöscht: ' + core.favLabel(f));
+    if (d.fromManager) openSheet('favs'); else closeSheet();
+  }
+
+  function renderFavManager() {
+    $('sheet-title').textContent = 'Favoriten';
+    var list = favList(), html = '<div class="fav-list">';
+    function row(f) {
+      return '<button type="button" class="fav-row" data-fav-edit="' + esc(f.id) + '"><span class="fav-ic k-' + f.kind + '">' + ic(core.FAV_KIND[f.kind].icon) + '</span>' +
+        '<span class="fav-txt"><b>' + esc(core.favLabel(f)) + '</b><small>' + esc(f.place.name + (f.place.detail ? ', ' + f.place.detail : '')) + '</small></span>' + ic('edit') + '</button>';
+    }
+    ['home', 'work'].forEach(function (k) {
+      var f = list.filter(function (x) { return x.id === k; })[0];
+      html += f ? row(f) : '<button type="button" class="fav-row empty" data-fav-new="' + k + '"><span class="fav-ic k-' + k + '">' + ic(core.FAV_KIND[k].icon) + '</span>' +
+        '<span class="fav-txt"><b>' + core.FAV_KIND[k].label + ' festlegen</b><small>Noch nicht gespeichert</small></span>' + ic('add') + '</button>';
+    });
+    list.filter(function (f) { return f.kind === 'other'; }).forEach(function (f) { html += row(f); });
+    html += '</div><button type="button" class="secondary wide" data-fav-new="other">' + ic('add') + 'Neuer Favorit</button>' +
+      '<p class="set-help">Tippe auf der Startseite auf einen Favoriten, um ihn als Ziel zu nehmen. Als Start wählst du ihn im Startfeld aus. ' +
+      'Neue Favoriten auch über den Stern im Start- oder Zielfeld. Favoriten werden nur auf diesem Handy gespeichert.</p>';
+    $('sheet-body').innerHTML = html;
+  }
+
   // ---------------------------------------------------------------- Einstellungen
 
   function seg(name, options, value) {
@@ -1127,8 +1357,14 @@
   }
 
   function renderSheet() {
+    if (S.sheet === 'favs') { renderFavManager(); return; }
+    if (S.sheet === 'fav') { renderFavEditor(); return; }
     var s = S.settings;
+    var n = favList().length;
+    $('sheet-title').textContent = 'Einstellungen';
     $('sheet-body').innerHTML =
+      '<button type="button" class="fav-row" data-fav-manage><span class="fav-ic k-home">' + ic('star') + '</span><span class="fav-txt"><b>Favoriten</b><small>' +
+      (n ? n + ' gespeichert – Zuhause, Arbeit und eigene' : 'Zuhause, Arbeit und eigene Orte speichern') + '</small></span>' + ic('edit') + '</button>' +
       '<div class="set"><div class="set-label">Gehtempo</div>' + seg('pace', [['slow', 'gemütlich'], ['normal', 'normal'], ['fast', 'zügig']], s.pace) + '</div>' +
       '<div class="set"><div class="set-label">Schrittlänge <b id="stride-val">' + s.strideCm + ' cm</b></div>' +
       '<input type="range" min="50" max="100" step="1" id="stride" value="' + s.strideCm + '"><div class="set-help">Für die Schrittzahl. Grob: Körpergröße × 0,42 (z. B. 1,80 m → 75 cm).</div></div>' +
@@ -1141,15 +1377,22 @@
       '<p class="set-help">Tempo, Fußweg, Umstiege und stufenfreie Wege gelten ab der nächsten Suche.</p>';
   }
 
-  function openSheet() {
+  function openSheet(kind) {
+    S.sheet = typeof kind === 'string' ? kind : 'settings';
+    hideSuggest();
     renderSheet();
-    $('sheet').hidden = false;
-    setTimeout(function () { $('sheet').classList.add('open'); }, 10);
+    $('sheet').querySelector('.sheet-panel').scrollTop = 0;
+    if ($('sheet').hidden) {
+      $('sheet').hidden = false;
+      setTimeout(function () { $('sheet').classList.add('open'); }, 10);
+    }
   }
 
   function closeSheet() {
     $('sheet').classList.remove('open');
     $('sheet').hidden = true;
+    S.sheet = null;
+    favEd.draft = null;
   }
 
   function settingsChanged() {
@@ -1243,7 +1486,18 @@
     });
 
     $('btn-search').addEventListener('click', onSearch);
-    $('btn-settings').addEventListener('click', openSheet);
+    $('btn-settings').addEventListener('click', function () { openSheet('settings'); });
+
+    $('favs').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-fav]');
+      if (b) { useFav(b.getAttribute('data-fav')); return; }
+      var n = e.target.closest('[data-fav-new]');
+      if (n) { openFavEditor({ kind: n.getAttribute('data-fav-new') }, false); return; }
+      if (e.target.closest('[data-fav-manage]')) openSheet('favs');
+    });
+    ['from', 'to'].forEach(function (field) {
+      doc.querySelector('[data-star="' + field + '"]').addEventListener('click', function () { onStar(field); });
+    });
 
     $('recent').addEventListener('click', function (e) {
       var b = e.target.closest('[data-recent]');
@@ -1290,6 +1544,33 @@
 
     $('sheet').addEventListener('click', function (e) {
       if (e.target.closest('[data-close-sheet]')) { closeSheet(); return; }
+      // Favoriten
+      if (e.target.closest('[data-fav-manage]')) { openSheet('favs'); return; }
+      var fe = e.target.closest('[data-fav-edit]');
+      if (fe) { openFavEditor(favById(fe.getAttribute('data-fav-edit')), true); return; }
+      var fn = e.target.closest('[data-fav-new]');
+      if (fn) { openFavEditor({ kind: fn.getAttribute('data-fav-new') }, S.sheet === 'favs'); return; }
+      var fk = e.target.closest('[data-fav-kind] [data-v]');
+      if (fk && favEd.draft) {
+        if ($('fav-name')) favEd.draft.label = $('fav-name').value;
+        favEd.draft.kind = fk.getAttribute('data-v');
+        favEd.draft.confirmDelete = false;
+        renderFavEditor();
+        return;
+      }
+      var fs = e.target.closest('[data-favsg]');
+      if (fs && favEd.draft) {
+        if ($('fav-name')) favEd.draft.label = $('fav-name').value;
+        var picked = favEd.sug[+fs.getAttribute('data-favsg')];
+        favEd.draft.place = picked;
+        if (favEd.draft.kind === 'other' && !favEd.draft.label) favEd.draft.label = '';
+        favEd.sug = [];
+        renderFavEditor();
+        return;
+      }
+      if (e.target.closest('[data-fav-locate]')) { favLocate(); return; }
+      if (e.target.closest('[data-fav-save]')) { favSave(); return; }
+      if (e.target.closest('[data-fav-delete]')) { favDelete(); return; }
       var b = e.target.closest('[data-setting] [data-v]');
       if (b) {
         var name = b.parentNode.getAttribute('data-setting');
@@ -1300,6 +1581,8 @@
       }
     });
     $('sheet').addEventListener('input', function (e) {
+      if (e.target.id === 'fav-addr') { favSearch(e.target.value); return; }
+      if (e.target.id === 'fav-name' && favEd.draft) { favEd.draft.label = e.target.value; return; }
       if (e.target.id === 'stride') {
         S.settings.strideCm = Number(e.target.value);
         $('stride-val').textContent = S.settings.strideCm + ' cm';
@@ -1322,7 +1605,9 @@
     setDep('now');
     setArr('any');
     renderRecent();
+    renderFavs();
     bind();
+    updateStars();
     doc.documentElement.classList.toggle('android', !!root.Android);
   }
 

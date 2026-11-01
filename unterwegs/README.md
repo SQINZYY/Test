@@ -3,7 +3,7 @@
 Android-App, die eine Route von einer Adresse zu einer anderen berechnet – mit genau den Verkehrsmitteln, die du auswählst:
 **zu Fuß, Fahrrad, Auto, Bus, Bahn (S-/U-Bahn, Tram) und Zug (Regional- und Fernverkehr)**, auch kombiniert.
 
-**APK:** [`release/Unterwegs.apk`](../release/Unterwegs.apk) – Version 1.1 (ab Android 7, ca. 150 KB, braucht Internet).
+**APK:** [`release/Unterwegs.apk`](../release/Unterwegs.apk) – Version 1.2 (ab Android 7, ca. 150 KB, braucht Internet).
 
 ## Installieren
 
@@ -15,6 +15,14 @@ Android-App, die eine Route von einer Adresse zu einer anderen berechnet – mit
 
 1. **Start und Ziel** eingeben: Adresse, Haltestelle oder Ort. Beim Tippen erscheinen Vorschläge.
    Das Fadenkreuz setzt **„Mein Standort“** per GPS als Start.
+
+   **Favoriten:** Unter Start/Ziel gibt es eine Leiste mit **Zuhause**, **Arbeit** und eigenen Favoriten (z. B. „Oma“, „Schule“).
+   - Antippen setzt den Favoriten als **Ziel**; ist kein Start eingetragen, wird „Mein Standort“ der Start – „Nach Hause“ ist so ein Tipp.
+   - Speichern: „Zuhause festlegen“/„Arbeit festlegen“ in der Leiste, der **Stern** im Start- oder Zielfeld (speichert den
+     eingetragenen Ort, auch den aktuellen Standort) oder „Bearbeiten“ → „Neuer Favorit“.
+   - In den Vorschlägen stehen Favoriten ganz oben; Tippen von „zu“ findet „Zuhause“. So lassen sie sich auch als **Start** wählen.
+   - Umbenennen, Adresse ändern oder löschen über „Bearbeiten“ (oder Einstellungen → Favoriten).
+     Favoriten bleiben nur auf dem Handy gespeichert.
 2. **Verkehrsmittel antippen** (beliebig viele):
    - nur *Zu Fuß*, *Fahrrad* oder *Auto* → direkte Route mit Dauer und Strecke (zu Fuß auch mit **Schrittzahl**),
      bei mehreren bekommst du jede Variante zum Vergleich.
