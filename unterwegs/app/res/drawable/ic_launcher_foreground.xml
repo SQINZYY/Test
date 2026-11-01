@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Geschwungener Weg mit Start (Ring) und Ziel (Punkt), innerhalb der 66dp-Sicherheitszone -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="6"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M44,40 H64 a9,9 0 0 1 0,18 H44 a9,9 0 0 0 0,18 H66" />
+    <path android:fillColor="#FF0F766E" android:strokeColor="#FFFFFFFF" android:strokeWidth="5"
+        android:pathData="M37,40 m-7,0 a7,7 0 1 0 14,0 a7,7 0 1 0 -14,0" />
+    <path android:fillColor="#FFFDE68A"
+        android:pathData="M72,76 m-8,0 a8,8 0 1 0 16,0 a8,8 0 1 0 -16,0" />
+</vector>
