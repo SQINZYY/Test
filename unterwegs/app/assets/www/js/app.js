@@ -30,7 +30,8 @@
     from: null,
     to: null,
     sel: load('modes', { walk: true, bus: true, bahn: true, zug: true }),
-    when: 'now',
+    dep: 'now',
+    arr: 'any',
     settings: core.withDefaults(load('settings', null)),
     view: 'plan',
     search: null,
@@ -296,44 +297,82 @@
     }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
   }
 
-  // ---------------------------------------------------------------- Zeit
+  // ---------------------------------------------------------------- Zeit (losgehen / da sein)
 
-  function roundedNow() {
-    var d = new Date();
+  function roundedNow(addMin) {
+    var d = new Date(Date.now() + (addMin || 0) * 60000);
     d.setSeconds(0, 0);
     d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5);
     return d;
   }
 
-  function fillDateTime(d) {
-    $('in-date').value = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
-    $('in-time').value = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  function fillDateTime(prefix, d) {
+    $(prefix + '-date').value = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    $(prefix + '-time').value = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
   }
 
-  function setWhen(v) {
-    S.when = v;
-    var btns = $('when-type').querySelectorAll('button');
-    for (var i = 0; i < btns.length; i++) {
-      var on = btns[i].getAttribute('data-v') === v;
-      btns[i].classList.toggle('on', on);
-      btns[i].setAttribute('aria-checked', on);
-    }
-    $('when-inputs').hidden = v === 'now';
-    if (v !== 'now' && !$('in-time').value) fillDateTime(roundedNow());
-  }
-
-  function chosenTime() {
-    if (S.when === 'now') return new Date();
-    var d = $('in-date').value, t = $('in-time').value;
+  function readDateTime(prefix) {
+    var d = $(prefix + '-date').value, t = $(prefix + '-time').value;
     if (!d || !t) return null;
     var parts = d.split('-'), hm = t.split(':');
     var res = new Date(+parts[0], +parts[1] - 1, +parts[2], +hm[0], +hm[1], 0, 0);
     return isNaN(res.getTime()) ? null : res;
   }
 
+  function setSeg(id, v) {
+    var btns = $(id).querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) {
+      var on = btns[i].getAttribute('data-v') === v;
+      btns[i].classList.toggle('on', on);
+      btns[i].setAttribute('aria-checked', on);
+    }
+  }
+
+  /** Losgehen: 'now' | 'from' (kann ab …) | 'at' (will um …) */
+  function setDep(v) {
+    S.dep = v;
+    setSeg('dep-type', v);
+    $('dep-inputs').hidden = v === 'now';
+    $('dep-time-label').textContent = v === 'from' ? 'Frühestens ab' : 'Möglichst um';
+    if (v !== 'now' && !$('dep-time').value) fillDateTime('dep', roundedNow());
+    updateWhenHint();
+  }
+
+  /** Da sein: 'any' | 'by' (muss spätestens …) | 'around' (will gegen …) */
+  function setArr(v) {
+    S.arr = v;
+    setSeg('arr-type', v);
+    $('arr-inputs').hidden = v === 'any';
+    $('arr-time-label').textContent = v === 'by' ? 'Spätestens um' : 'Möglichst gegen';
+    if (v !== 'any' && !$('arr-time').value) {
+      var base = S.dep !== 'now' && readDateTime('dep') ? readDateTime('dep') : new Date();
+      var d = new Date(base.getTime() + 60 * 60000);
+      d.setSeconds(0, 0);
+      d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5);
+      fillDateTime('arr', d);
+    }
+    updateWhenHint();
+  }
+
+  function rawSpec() {
+    return {
+      dep: S.dep,
+      arr: S.arr,
+      depTime: S.dep === 'now' ? null : readDateTime('dep'),
+      arrTime: S.arr === 'any' ? null : readDateTime('arr')
+    };
+  }
+
+  function updateWhenHint() {
+    var raw = rawSpec();
+    var problem = core.checkSpec(raw, new Date());
+    var el = $('when-hint');
+    el.textContent = problem || core.explainSpec(raw, new Date());
+    el.classList.toggle('bad', !!problem);
+  }
+
   function whenText(q) {
-    if (q.now) return 'Jetzt, ' + core.fmtTime(q.time);
-    return (q.arriveBy ? 'Ankunft bis ' : 'Abfahrt ') + core.fmtDay(q.time) + ', ' + core.fmtTime(q.time);
+    return core.describeSpec(q.spec, q.created);
   }
 
   // ---------------------------------------------------------------- Suche starten
@@ -378,8 +417,9 @@
     if (searching) return;
     hideSuggest();
     if (!core.hasTransit(S.sel) && !core.streetChoices(S.sel).length) { toast('Bitte wähle mindestens ein Verkehrsmittel.'); return; }
-    var time = chosenTime();
-    if (!time) { toast('Bitte Datum und Uhrzeit angeben.'); return; }
+    var raw = rawSpec();
+    var problem = core.checkSpec(raw, new Date());
+    if (problem) { toast(problem); updateWhenHint(); return; }
     var btn = $('btn-search');
     searching = true;
     btn.classList.add('busy');
@@ -391,16 +431,23 @@
       var sel = {};
       for (var k in S.sel) if (S.sel[k]) sel[k] = true;
       remember(from, to, sel);
-      startSearch({
-        from: from, to: to, time: time, arriveBy: S.when === 'arr', now: S.when === 'now',
-        sel: sel, settings: core.withDefaults(S.settings)
-      });
+      startSearch(makeQuery(from, to, sel, core.normSpec(raw)));
     }).catch(function (err) {
       toast('Suche fehlgeschlagen: ' + errorText(err));
     }).then(function () {
       searching = false;
       btn.classList.remove('busy');
     });
+  }
+
+  function makeQuery(from, to, sel, spec) {
+    var now = new Date();
+    var qt = core.specQuery(spec, now);
+    return {
+      from: from, to: to, sel: sel, spec: spec, created: now,
+      time: qt.time, arriveBy: qt.arriveBy,
+      settings: core.withDefaults(S.settings)
+    };
   }
 
   function startSearch(q) {
@@ -433,10 +480,43 @@
       tr.motisDirect = res.direct || [];
       patchWalk(s);
       renderResults();
+      maybeFallback(s);
     }, function (err) {
       if (!current(s)) return;
       tr.status = 'error';
       tr.error = err;
+      renderResults();
+    });
+  }
+
+  /**
+   * Muss man bis zu einer Uhrzeit da sein und keine Verbindung schafft das,
+   * zusätzlich ab dem frühesten Losgehen suchen – dann sieht man, wann man frühestens ankäme.
+   */
+  function maybeFallback(s) {
+    var tr = s.transit, q = s.q;
+    if (!tr || tr.fallback || q.spec.arr !== 'by') return;
+    var now = new Date();
+    if (tr.list.some(function (r) { return core.judgeRoute(r, q.spec, now).ok; })) return;
+    tr.fallback = 'loading';
+    renderResults();
+    var fq = {};
+    for (var k in q) fq[k] = q[k];
+    var t = core.specFallbackQuery(q.spec, now);
+    fq.time = t.time;
+    fq.arriveBy = false;
+    api.planTransit(fq).then(function (res) {
+      if (!current(s)) return;
+      var ids = {};
+      tr.raw.forEach(function (r) { ids[r.id] = 1; });
+      tr.raw = tr.raw.concat(res.itineraries.filter(function (r) { return !ids[r.id]; }));
+      tr.raw.sort(function (a, b) { return a.start - b.start; });
+      alignList(s);
+      tr.fallback = 'done';
+      renderResults();
+    }, function () {
+      if (!current(s)) return;
+      tr.fallback = 'failed';
       renderResults();
     });
   }
@@ -462,7 +542,7 @@
     renderResults();
     api.planDirect(q.from, q.to, mode, q.settings).then(function (route) {
       if (!current(s)) return;
-      core.timeDirectRoute(route, q.time, q.arriveBy);
+      core.timeDirectSpec(route, q.spec, new Date());
       d.status = 'ok';
       d.route = route;
       renderResults();
@@ -485,7 +565,7 @@
     walk.distance = walk.legs[0].distance;
     walk.legs[0].from.name = s.q.from.name;
     walk.legs[0].to.name = s.q.to.name;
-    core.timeDirectRoute(walk, s.q.time, s.q.arriveBy);
+    core.timeDirectSpec(walk, s.q.spec, new Date());
     d.status = 'ok';
     d.route = walk;
   }
@@ -568,16 +648,27 @@
     return html;
   }
 
-  function transitCard(route, idx, s, tags) {
+  /** Hinweise zum Zeitwunsch an einer Karte: "Beste Wahl", "5 Min. zu spät", "8 Min. vor 09:00" … */
+  function judgeTags(route, s, isBest, extra) {
+    var j = core.judgeRoute(route, s.q.spec, new Date());
+    var html = '';
+    if (isBest) html += '<span class="tag best">' + ic('check') + 'Beste Wahl</span>';
+    if (!j.ok) html += '<span class="tag bad">' + esc(j.text) + '</span>';
+    else if (j.spareMin !== null) html += '<span class="tag ok">' + (j.spareMin <= 0 ? 'genau pünktlich' : j.spareMin + ' Min. vor ' + core.fmtTime(s.q.spec.arrTime)) + '</span>';
+    (extra || []).forEach(function (t) { html += '<span class="tag">' + esc(t) + '</span>'; });
+    return { html: html, j: j };
+  }
+
+  function transitCard(route, idx, s, tags, isBest) {
     var settings = s.q.settings;
     var a = core.analyzeRoute(route, settings);
-    var now = Date.now();
-    var missed = a.leaveAt && a.leaveAt.getTime() < now - 60000 && Math.abs(s.q.time - now) < 6 * 3600000;
     var cancelled = route.legs.some(function (l) { return l.cancelled; });
     var meta = [transfersText(route.transfers)];
     if (a.walk.distance > 0) meta.push(core.fmtDistance(a.walk.distance) + ' zu Fuß');
-    var tagHtml = (tags || []).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('');
-    return '<div class="rcard' + (missed ? ' missed' : '') + (cancelled ? ' cancelled' : '') + '" role="button" tabindex="0" data-open="t' + idx + '">' +
+    var jt = judgeTags(route, s, isBest, tags);
+    var tagHtml = jt.html;
+    var missed = !jt.j.ok;
+    return '<div class="rcard' + (missed ? ' missed' : '') + (isBest ? ' best' : '') + (cancelled ? ' cancelled' : '') + '" role="button" tabindex="0" data-open="t' + idx + '">' +
       '<div class="rc-top"><span class="rc-times">' + core.fmtTime(route.start) + ' – ' + core.fmtTime(route.end) + '</span>' +
       '<span class="rc-dur">' + core.fmtDuration(route.duration) + '</span></div>' +
       '<div class="rc-meta">' + esc(meta.join(' · ')) + tagHtml + '</div>' +
@@ -587,7 +678,7 @@
       '</div>';
   }
 
-  function directCard(mode, d, s) {
+  function directCard(mode, d, s, isBest) {
     var title = streetTitle(mode);
     if (d.status === 'loading') {
       return '<div class="rcard direct loading"><div class="rc-top"><span class="rc-mode c-' + mode + '">' + ic(mode) + title + '</span><span class="spinner"></span></div>' +
@@ -602,13 +693,17 @@
         '<div class="rc-meta">Konnte nicht berechnet werden: ' + esc(errorText(d.error)) + '</div></div>';
     }
     var r = d.route;
+    var spec = s.q.spec;
     var meta = [core.fmtDistance(r.distance)];
     if (mode === 'walk') meta.push(core.fmtSteps(core.stepsFor(r.distance, s.q.settings.strideCm)));
-    meta.push(s.q.arriveBy ? 'los ' + core.fmtTime(r.start) : 'an ' + core.fmtTime(r.end));
+    meta.push(spec.dep === 'now' && spec.arr === 'any' ? 'an ' + core.fmtTime(r.end) : 'los ' + core.fmtTime(r.start) + ', an ' + core.fmtTime(r.end));
     if (mode === 'car') meta.push('ohne Verkehr');
-    return '<div class="rcard direct" role="button" tabindex="0" data-open="d-' + mode + '">' +
+    var jt = judgeTags(r, s, isBest);
+    return '<div class="rcard direct' + (jt.j.ok ? '' : ' missed') + (isBest ? ' best' : '') + '" role="button" tabindex="0" data-open="d-' + mode + '">' +
       '<div class="rc-top"><span class="rc-mode c-' + mode + '">' + ic(mode) + title + '</span><span class="rc-dur">' + core.fmtDuration(r.duration) + '</span></div>' +
-      '<div class="rc-meta">' + esc(meta.join(' · ')) + '</div></div>';
+      '<div class="rc-meta">' + esc(meta.join(' · ')) + jt.html + '</div>' +
+      (mode === 'car' ? '<button type="button" class="gm-inline" data-gmaps="car">' + ic('map') + 'Mit aktuellem Verkehr in Google Maps</button>' : '') +
+      '</div>';
   }
 
   function skeleton(n) {
@@ -617,17 +712,93 @@
     return h;
   }
 
+  /** Alle fertig berechneten Routen mit ihrem Schlüssel für die Detailansicht. */
+  function allRoutes(s) {
+    var out = [];
+    if (s.transit && s.transit.status === 'ok') s.transit.list.forEach(function (r, i) { out.push({ route: r, key: 't' + i }); });
+    core.streetChoices(s.q.sel).forEach(function (m) {
+      var d = s.direct[m];
+      if (d && d.status === 'ok') out.push({ route: d.route, key: 'd-' + m });
+    });
+    return out;
+  }
+
+  function stillLoading(s) {
+    if (s.transit && (s.transit.status === 'loading' || s.transit.fallback === 'loading')) return true;
+    return core.streetChoices(s.q.sel).some(function (m) { return s.direct[m] && s.direct[m].status === 'loading'; });
+  }
+
+  function howText(route) {
+    if (route.kind === 'direct') return streetWord(route.mode);
+    var ft = core.analyzeRoute(route).firstTransit;
+    return ft ? 'mit ' + ft.name + (ft.headsign ? ' Richtung ' + ft.headsign : '') : '';
+  }
+
+  /** Oben auf der Ergebnisseite: die Antwort auf "Wann muss ich los?" */
+  function bannerHtml(s, items, best) {
+    var spec = s.q.spec, now = new Date();
+    if (!items.length) return '';
+    if (best) {
+      var a = core.analyzeRoute(best.route, s.q.settings);
+      var leave = a.leaveAt || best.route.start;
+      var title = spec.arr === 'by' ? 'Spätestens losgehen um' : spec.arr === 'around' || spec.dep === 'at' ? 'Passt am besten: losgehen um' : 'Am schnellsten da – losgehen um';
+      if (best.route.kind === 'direct' && best.route.mode !== 'walk') title = title.replace('losgehen', 'losfahren');
+      var j = core.judgeRoute(best.route, spec, now);
+      var sub = [howText(best.route), 'an ' + core.fmtTime(best.route.end)];
+      if (j.spareMin !== null) sub.push(j.spareMin <= 0 ? 'genau pünktlich' : j.spareMin + ' Min. vor ' + core.fmtTime(spec.arrTime));
+      if (a.access && a.access.type === 'walk') sub.push(core.fmtSteps(a.access.steps) + ' bis ' + a.firstTransit.from.name);
+      return '<div class="banner ok" role="button" tabindex="0" data-open="' + best.key + '">' +
+        '<span class="banner-icon">' + ic('check') + '</span>' +
+        '<div class="banner-text"><div class="banner-title">' + esc(title) + '</div>' +
+        '<div class="banner-time"><b>' + core.fmtTime(leave) + '</b>' + cdSpan(leave, true) + '</div>' +
+        '<div class="banner-sub">' + esc(sub.filter(Boolean).join(' · ')) + '</div></div></div>';
+    }
+    if (stillLoading(s)) return '';
+    var routes = items.map(function (x) { return x.route; });
+    if (spec.arr === 'by') {
+      var ea = core.earliestArrival(routes, spec, now);
+      var key = ea ? items.filter(function (x) { return x.route === ea; })[0].key : null;
+      return '<div class="banner bad"' + (key ? ' role="button" tabindex="0" data-open="' + key + '"' : '') + '>' +
+        '<span class="banner-icon">' + ic('warn') + '</span>' +
+        '<div class="banner-text"><div class="banner-title">Bis ' + esc(core.fmtTime(spec.arrTime)) + ' nicht zu schaffen</div>' +
+        (ea ? '<div class="banner-time">Frühestens da um <b>' + core.fmtTime(ea.end) + '</b></div><div class="banner-sub">' +
+          esc(core.judgeRoute(ea, spec, now).text + ' · losgehen ' + core.fmtTime(ea.start) + ' ' + howText(ea)) + '</div>'
+          : '<div class="banner-sub">Mit den gewählten Verkehrsmitteln wurde nichts Passendes gefunden.</div>') +
+        '</div></div>';
+    }
+    return '<div class="banner bad"><span class="banner-icon">' + ic('warn') + '</span><div class="banner-text">' +
+      '<div class="banner-title">Keine passende Verbindung</div><div class="banner-sub">Alle gefundenen Verbindungen liegen außerhalb deiner Zeit. Lade spätere Verbindungen oder ändere die Zeit.</div></div></div>';
+  }
+
+  function gmapsChips(s) {
+    var q = s.q, chips = [];
+    if (core.hasTransit(q.sel)) chips.push(['transit', 'bahn', 'Bus & Bahn']);
+    core.streetChoices(q.sel).forEach(function (m) { chips.push([m, m, streetTitle(m)]); });
+    return '<div class="gm-box"><div class="gm-title">' + ic('map') + 'Auch in Google Maps ansehen</div><div class="gm-chips">' +
+      chips.map(function (c) { return '<button type="button" class="gm-chip c-' + c[1] + '" data-gmaps="' + c[0] + '">' + ic(c[1]) + esc(c[2]) + '</button>'; }).join('') +
+      '</div>' + (q.spec.dep === 'now' && q.spec.arr === 'any' ? '' : '<div class="set-help">Google Maps startet mit „jetzt“ – die Uhrzeit dort bei Bedarf anpassen.</div>') + '</div>';
+  }
+
   function renderResults() {
     var s = S.search;
     if (!s) return;
-    var q = s.q;
+    var q = s.q, now = new Date();
     $('res-title').textContent = shortName(q.from) + ' → ' + shortName(q.to);
     var modes = [];
     core.streetChoices(q.sel).forEach(function (m) { modes.push(streetTitle(m)); });
     if (core.hasTransit(q.sel)) modes.push(transitWords(q.sel));
     $('res-sub').textContent = whenText(q) + ' · ' + modes.join(', ');
 
-    var html = '';
+    // Direkte Wege immer zur aktuellen Uhrzeit einplanen ("jetzt los" bleibt jetzt)
+    core.streetChoices(q.sel).forEach(function (m) {
+      var d = s.direct[m];
+      if (d && d.status === 'ok') core.timeDirectSpec(d.route, q.spec, now);
+    });
+    var items = allRoutes(s);
+    var bestRoute = core.bestRoute(items.map(function (x) { return x.route; }), q.spec, now);
+    var best = bestRoute ? items.filter(function (x) { return x.route === bestRoute; })[0] : null;
+
+    var html = bannerHtml(s, items, best);
     var tr = s.transit;
     if (tr) {
       html += '<h2 class="section-title">Mit ' + esc(transitWords(q.sel)) + '</h2>';
@@ -643,25 +814,28 @@
           (tr.next ? '<button type="button" class="secondary" data-more="next">Spätere Verbindungen suchen</button>' : '') + '</div>';
       } else {
         if (tr.prev) html += '<button type="button" class="more" data-more="prev">' + (tr.paging === 'prev' ? '<span class="spinner"></span>' : '') + 'Frühere Verbindungen</button>';
-        var fastest = null, fewest = null;
+        var fastest = null;
         tr.list.forEach(function (r) {
-          if (!fastest || r.duration < fastest.duration) fastest = r;
-          if (!fewest || r.transfers < fewest.transfers) fewest = r;
+          if (core.judgeRoute(r, q.spec, now).ok && (!fastest || r.duration < fastest.duration)) fastest = r;
         });
         tr.list.forEach(function (r, i) {
           var tags = [];
-          if (tr.list.length > 1 && r === fastest) tags.push('Schnellste');
-          if (tr.list.length > 1 && r === fewest && r !== fastest && r.transfers < fastest.transfers) tags.push('Wenigste Umstiege');
-          html += transitCard(r, i, s, tags);
+          if (tr.list.length > 1 && r === fastest && r !== bestRoute) tags.push('Schnellste');
+          html += transitCard(r, i, s, tags, r === bestRoute);
         });
+        if (tr.fallback === 'loading') html += '<div class="loading-line"><span class="spinner"></span>Prüfe, wann du frühestens da sein kannst …</div>';
         if (tr.next) html += '<button type="button" class="more" data-more="next">' + (tr.paging === 'next' ? '<span class="spinner"></span>' : '') + 'Spätere Verbindungen</button>';
       }
     }
     var streets = core.streetChoices(q.sel);
     if (streets.length) {
       html += '<h2 class="section-title">' + (tr ? 'Ohne Bus &amp; Bahn' : streets.length > 1 ? 'Deine Routen' : 'Deine Route') + '</h2>';
-      streets.forEach(function (m) { html += directCard(m, s.direct[m], s); });
+      streets.forEach(function (m) {
+        var d = s.direct[m];
+        html += directCard(m, d, s, !!(d && d.route && d.route === bestRoute));
+      });
     }
+    html += gmapsChips(s);
     $('res-body').innerHTML = html;
   }
 
@@ -733,6 +907,9 @@
       if (l.type === 'walk' && l.distance) body += '<div class="leg-steps">' + ic('walk') + '<b>' + core.fmtSteps(core.stepsFor(l.distance, settings.strideCm)) + '</b></div>';
       if (waitAfter >= 60) body += '<div class="muted">Danach ' + core.fmtDuration(waitAfter) + ' Zeit bis zur Abfahrt</div>';
       body += stepsList(l);
+      if (l.to.lat !== null && l.to.lon !== null) {
+        body += '<button type="button" class="link nav-link" data-nav="' + l.to.lat + ',' + l.to.lon + ',' + l.cat + '">' + ic('nav') + 'Mit Google Maps navigieren</button>';
+      }
     } else {
       body += '<div class="leg-head">' + badge(l) + (l.headsign ? '<span>Richtung <b>' + esc(l.headsign) + '</b></span>' : '') + '</div>';
       var info = [l.label, core.fmtDuration(l.duration)];
@@ -792,6 +969,43 @@
     return html + '</div>';
   }
 
+  /** Passt die Route zum Zeitwunsch? Als Zeile für die Detailansicht. */
+  function judgeLine(route, s) {
+    var spec = s.q.spec, j = core.judgeRoute(route, spec, new Date());
+    var good = function (t) { return '<li class="judge ok">' + ic('check') + '<span>' + t + '</span></li>'; };
+    var bad = function (t) { return '<li class="judge bad">' + ic('warn') + '<span>' + t + '</span></li>'; };
+    if (j.code === 'missed') return bad('Diese Verbindung ist schon weg.');
+    if (j.code === 'early') return bad('Geht los, bevor du kannst (' + esc(j.text) + ').');
+    if (j.code === 'late') return bad('Du kommst <b>' + core.fmtDuration(j.lateMin * 60) + ' zu spät</b> – du wolltest bis ' + core.fmtTime(spec.arrTime) + ' da sein.');
+    if (spec.arr === 'by') return good('Du bist um <b>' + core.fmtTime(route.end) + '</b> da – ' + (j.spareMin <= 0 ? 'genau pünktlich' : j.spareMin + ' Min. vor ' + core.fmtTime(spec.arrTime)) + '.');
+    if (spec.arr === 'around') {
+      var d = Math.round((route.end - spec.arrTime) / 60000);
+      return good('Ankunft ' + core.fmtTime(route.end) + (d === 0 ? ' – genau zu deiner Wunschzeit.' : ' – ' + Math.abs(d) + ' Min. ' + (d < 0 ? 'vor' : 'nach') + ' deiner Wunschzeit ' + core.fmtTime(spec.arrTime) + '.'));
+    }
+    if (spec.dep === 'at') {
+      var e = Math.round((route.start - spec.depTime) / 60000);
+      return good('Los ' + (e === 0 ? 'genau zu deiner Wunschzeit.' : Math.abs(e) + ' Min. ' + (e < 0 ? 'vor' : 'nach') + ' deiner Wunschzeit ' + core.fmtTime(spec.depTime) + '.'));
+    }
+    return '';
+  }
+
+  /** Knöpfe für Google Maps unter der Zusammenfassung. */
+  function heroActions(route, s) {
+    var to = s.q.to;
+    if (route.kind === 'direct') {
+      return '<div class="hero-actions">' +
+        '<button type="button" class="action primary-action" data-nav="' + to.lat + ',' + to.lon + ',' + route.mode + '">' + ic('nav') + 'Navigation starten</button>' +
+        '<button type="button" class="action" data-gmaps="' + route.mode + '">' + ic('map') + 'In Google Maps</button></div>';
+    }
+    var a = core.analyzeRoute(route, s.q.settings);
+    var ft = a.firstTransit, html = '<div class="hero-actions">';
+    if (a.access && ft.from.lat !== null) {
+      html += '<button type="button" class="action primary-action" data-nav="' + ft.from.lat + ',' + ft.from.lon + ',' + a.access.type + '">' + ic('nav') +
+        (a.access.type === 'walk' ? 'Zur Haltestelle navigieren' : 'Zur Haltestelle fahren') + '</button>';
+    }
+    return html + '<button type="button" class="action" data-gmaps="transit">' + ic('map') + 'In Google Maps</button></div>';
+  }
+
   function heroHtml(route, s) {
     var settings = s.q.settings;
     if (route.kind === 'direct') {
@@ -804,8 +1018,9 @@
         '<ul class="hero-facts">' +
         '<li>' + ic('route') + '<span>' + esc(facts.join(' · ')) + '</span></li>' +
         '<li>' + ic('clock') + '<span>Los um <b>' + core.fmtTime(route.start) + '</b>, an um <b>' + core.fmtTime(route.end) + '</b></span></li>' +
-        (route.mode === 'car' ? '<li>' + ic('info') + '<span>Fahrzeit ohne aktuellen Verkehr und Parkplatzsuche</span></li>' : '') +
-        '</ul></div>';
+        (route.mode === 'car' ? '<li>' + ic('info') + '<span>Fahrzeit ohne aktuellen Verkehr und Parkplatzsuche – mit Verkehr: „In Google Maps“</span></li>' : '') +
+        judgeLine(route, s) +
+        '</ul>' + heroActions(route, s) + '</div>';
     }
     var a = core.analyzeRoute(route, settings);
     var ft = a.firstTransit;
@@ -824,7 +1039,8 @@
     if (acc && spare >= 1) html += '<li>' + ic('clock') + '<span>Du bist ' + spare + ' Min. vor der Abfahrt an der Haltestelle</span></li>';
     html += '<li>' + ic('pin') + '<span>Ankunft am Ziel um <b>' + core.fmtTime(route.end) + '</b> · ' + transfersText(route.transfers) + '</span></li>';
     if (a.walk.distance > 0) html += '<li>' + ic('walk') + '<span>Insgesamt ' + core.fmtDistance(a.walk.distance) + ' zu Fuß · ' + core.fmtSteps(a.walk.steps) + '</span></li>';
-    return html + '</ul></div>';
+    html += judgeLine(route, s);
+    return html + '</ul>' + heroActions(route, s) + '</div>';
   }
 
   function renderDetail(route, s) {
@@ -838,6 +1054,30 @@
       : route.source === 'valhalla' ? 'Route: Valhalla (FOSSGIS) auf OpenStreetMap-Daten.'
         : 'Route: OSRM (FOSSGIS) auf OpenStreetMap-Daten.';
     $('det-body').innerHTML = heroHtml(route, s) + timeline(route, s) + '<p class="credits">' + esc(src) + '</p>';
+  }
+
+  // ---------------------------------------------------------------- Google Maps
+
+  /** In der Google-Maps-App öffnen (sonst im Browser). */
+  function openMaps(primary, fallback) {
+    if (root.Android && root.Android.openMaps) { root.Android.openMaps(primary, fallback); return; }
+    root.open(fallback, '_blank');
+  }
+
+  /** Ganze Strecke Start → Ziel in Google Maps. Bei "Mein Standort" nimmt Google den aktuellen Standort. */
+  function openGmaps(mode) {
+    var s = S.search;
+    if (!s) return;
+    var from = s.q.from.kind === 'here' ? null : s.q.from;
+    var url = core.gmapsDirUrl(from, s.q.to, mode);
+    openMaps(url, url);
+  }
+
+  /** Navigation vom aktuellen Standort zu einem Punkt starten. */
+  function openNav(lat, lon, mode) {
+    var to = { lat: lat, lon: lon };
+    if (mode !== 'bike' && mode !== 'car') mode = 'walk';
+    openMaps(core.gmapsNavUri(to, mode), core.gmapsDirUrl(null, to, mode, true));
   }
 
   function shareRoute() {
@@ -871,7 +1111,8 @@
     var r = load('recentRoutes', [])[i];
     if (!r) return;
     if (r.sel) { S.sel = r.sel; save('modes', S.sel); renderModes(); }
-    setWhen('now');
+    setDep('now');
+    setArr('any');
     if (r.from) setPlace('from', r.from); else { setPlace('from', null); locate('from'); }
     if (r.to) setPlace('to', r.to); else { setPlace('to', null); locate('to'); }
     if (r.from && r.to) onSearch();
@@ -988,9 +1229,17 @@
       renderModes();
     });
 
-    $('when-type').addEventListener('click', function (e) {
+    $('dep-type').addEventListener('click', function (e) {
       var b = e.target.closest('[data-v]');
-      if (b) setWhen(b.getAttribute('data-v'));
+      if (b) setDep(b.getAttribute('data-v'));
+    });
+    $('arr-type').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-v]');
+      if (b) setArr(b.getAttribute('data-v'));
+    });
+    ['dep-date', 'dep-time', 'arr-date', 'arr-time'].forEach(function (id) {
+      $(id).addEventListener('change', updateWhenHint);
+      $(id).addEventListener('input', updateWhenHint);
     });
 
     $('btn-search').addEventListener('click', onSearch);
@@ -1007,11 +1256,11 @@
     $('res-refresh').addEventListener('click', function () {
       if (!S.search) return;
       var q = S.search.q;
-      if (q.now) q.time = new Date();
-      startSearch(q);
+      startSearch(makeQuery(q.from, q.to, q.sel, q.spec));
     });
 
     function openFrom(e) {
+      if (e.target.closest('[data-gmaps],[data-nav]')) return;
       var more = e.target.closest('[data-more]');
       if (more) { loadMore(more.getAttribute('data-more')); return; }
       var retry = e.target.closest('[data-retry]');
@@ -1027,6 +1276,17 @@
     $('res-body').addEventListener('keydown', function (e) { if (e.key === 'Enter') openFrom(e); });
 
     $('det-share').addEventListener('click', shareRoute);
+
+    doc.addEventListener('click', function (e) {
+      var nav = e.target.closest('[data-nav]');
+      if (nav) {
+        var p = nav.getAttribute('data-nav').split(',');
+        openNav(+p[0], +p[1], p[2]);
+        return;
+      }
+      var gm = e.target.closest('[data-gmaps]');
+      if (gm) openGmaps(gm.getAttribute('data-gmaps'));
+    });
 
     $('sheet').addEventListener('click', function (e) {
       if (e.target.closest('[data-close-sheet]')) { closeSheet(); return; }
@@ -1057,8 +1317,10 @@
 
   function init() {
     renderModes();
-    fillDateTime(roundedNow());
-    setWhen('now');
+    fillDateTime('dep', roundedNow());
+    fillDateTime('arr', roundedNow(60));
+    setDep('now');
+    setArr('any');
     renderRecent();
     bind();
     doc.documentElement.classList.toggle('android', !!root.Android);

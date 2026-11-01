@@ -814,6 +814,196 @@
     return route;
   }
 
+  // ---------------------------------------------------------------- Zeitwunsch
+
+  /*
+   * Zeitwunsch = wann man losgehen kann/will und wann man da sein muss/will:
+   *   dep: 'now'  – jetzt los
+   *        'from' – kann frühestens ab depTime los
+   *        'at'   – will möglichst um depTime los
+   *   arr: 'any'    – egal
+   *        'by'     – muss spätestens um arrTime da sein
+   *        'around' – will möglichst gegen arrTime da sein
+   */
+  var AROUND_MS = 10 * 60000;
+
+  function normSpec(spec) {
+    spec = spec || {};
+    var s = {
+      dep: spec.dep === 'from' || spec.dep === 'at' ? spec.dep : 'now',
+      arr: spec.arr === 'by' || spec.arr === 'around' ? spec.arr : 'any',
+      depTime: toDate(spec.depTime),
+      arrTime: toDate(spec.arrTime)
+    };
+    if (s.dep !== 'now' && !s.depTime) s.dep = 'now';
+    if (s.arr !== 'any' && !s.arrTime) s.arr = 'any';
+    return s;
+  }
+
+  /** Prüft einen Zeitwunsch; Rückgabe: Fehlertext oder ''. */
+  function checkSpec(spec, now) {
+    var s = normSpec(spec);
+    now = toDate(now) || new Date();
+    if (spec && spec.dep && spec.dep !== 'now' && !s.depTime) return 'Bitte gib an, wann du losgehen willst.';
+    if (spec && spec.arr && spec.arr !== 'any' && !s.arrTime) return 'Bitte gib an, wann du da sein willst.';
+    if (s.arr !== 'any' && s.arrTime < now - 60000) return 'Die Ankunftszeit liegt in der Vergangenheit.';
+    if (s.arr !== 'any' && s.dep !== 'now' && s.arrTime <= s.depTime) return '„Da sein“ muss nach „Losgehen“ liegen.';
+    return '';
+  }
+
+  /** Frühester Zeitpunkt, zu dem man los kann (nie in der Vergangenheit). */
+  function earliestLeave(spec, now) {
+    var s = normSpec(spec);
+    now = toDate(now) || new Date();
+    if (s.dep === 'from' && s.depTime > now) return s.depTime;
+    return now;
+  }
+
+  /** Abfragezeit für die Fahrplanauskunft. */
+  function specQuery(spec, now) {
+    var s = normSpec(spec);
+    now = toDate(now) || new Date();
+    if (s.arr === 'by') return { time: s.arrTime, arriveBy: true };
+    if (s.arr === 'around') return { time: new Date(s.arrTime.getTime() + AROUND_MS), arriveBy: true };
+    if (s.dep === 'from') return { time: s.depTime, arriveBy: false };
+    if (s.dep === 'at') return { time: new Date(Math.max(now.getTime(), s.depTime.getTime() - AROUND_MS)), arriveBy: false };
+    return { time: now, arriveBy: false };
+  }
+
+  /** Zweite Abfrage, falls bis zur Frist nichts passt: ab frühestmöglichem Losgehen. */
+  function specFallbackQuery(spec, now) {
+    return { time: earliestLeave(spec, now), arriveBy: false };
+  }
+
+  /** Direkten Weg (zu Fuß/Rad/Auto) passend zum Zeitwunsch einplanen. */
+  function timeDirectSpec(route, spec, now) {
+    var s = normSpec(spec);
+    var earliest = earliestLeave(s, now);
+    var dur = (route.duration || 0) * 1000;
+    var start;
+    if (s.arr !== 'any') {
+      start = new Date(s.arrTime.getTime() - dur);
+      if (start < earliest) start = earliest;
+    } else if (s.dep === 'now') {
+      start = toDate(now) || new Date();
+    } else {
+      start = s.depTime < earliest ? earliest : s.depTime;
+    }
+    return timeDirectRoute(route, start, false);
+  }
+
+  /**
+   * Passt eine Route zum Zeitwunsch?
+   * { ok, code: 'ok'|'missed'|'early'|'late', text, lateMin, spareMin }
+   */
+  function judgeRoute(route, spec, now) {
+    var s = normSpec(spec);
+    now = toDate(now) || new Date();
+    var res = { ok: true, code: 'ok', text: '', lateMin: 0, spareMin: null };
+    if (!route || !route.start || !route.end) return res;
+    if (s.arr === 'by') res.spareMin = Math.floor((s.arrTime - route.end) / 60000);
+    if (route.start < now.getTime() - 60000) {
+      res.ok = false; res.code = 'missed'; res.text = 'schon vorbei';
+    } else if (s.dep === 'from' && route.start < s.depTime.getTime() - 60000) {
+      res.ok = false; res.code = 'early'; res.text = 'vor ' + fmtTime(s.depTime);
+    } else if (s.arr === 'by' && route.end > s.arrTime.getTime() + 30000) {
+      res.ok = false; res.code = 'late';
+      res.lateMin = Math.ceil((route.end - s.arrTime) / 60000);
+      res.text = fmtDuration(res.lateMin * 60) + ' zu spät';
+    }
+    return res;
+  }
+
+  /**
+   * Die Route, die am besten zum Zeitwunsch passt:
+   * Frist → so spät wie möglich los; "gegen" → am nächsten an der Wunschzeit;
+   * sonst → am frühesten da.
+   */
+  function bestRoute(routes, spec, now) {
+    var s = normSpec(spec);
+    var fits = (routes || []).filter(function (r) { return r && r.start && judgeRoute(r, s, now).ok; });
+    if (!fits.length) return null;
+    function score(r) {
+      if (s.arr === 'by') return -r.start.getTime() / 60000 + (r.end.getTime() / 60000) * 1e-3;
+      if (s.arr === 'around') {
+        var d = (r.end - s.arrTime) / 60000;
+        return d > 0 ? d * 1.5 : -d;
+      }
+      if (s.dep === 'at') return Math.abs(r.start - s.depTime) / 60000 + (r.end.getTime() / 60000) * 1e-4;
+      return r.end.getTime() / 60000 - (r.start.getTime() / 60000) * 1e-3;
+    }
+    var best = fits[0], bestScore = score(best);
+    for (var i = 1; i < fits.length; i++) {
+      var sc = score(fits[i]);
+      if (sc < bestScore) { best = fits[i]; bestScore = sc; }
+    }
+    return best;
+  }
+
+  /** Früheste mögliche Ankunft (für "nicht zu schaffen"). */
+  function earliestArrival(routes, spec, now) {
+    var earliest = earliestLeave(spec, now);
+    var cand = (routes || []).filter(function (r) { return r && r.start && r.start >= earliest.getTime() - 60000; });
+    if (!cand.length) return null;
+    return cand.reduce(function (a, b) { return b.end < a.end ? b : a; });
+  }
+
+  function dayTime(d, now) {
+    var day = fmtDay(d, now);
+    return (day === 'heute' ? '' : day + ' ') + fmtTime(d);
+  }
+
+  /** Kurzbeschreibung des Zeitwunschs, z. B. "Los ab 08:00 · da bis 09:00". */
+  function describeSpec(spec, now) {
+    var s = normSpec(spec);
+    now = toDate(now) || new Date();
+    var parts = [];
+    if (s.dep === 'now') parts.push(s.arr === 'any' ? 'Jetzt, ' + fmtTime(now) : 'Los ab jetzt');
+    else parts.push((s.dep === 'from' ? 'Los ab ' : 'Los um ') + dayTime(s.depTime, now));
+    if (s.arr === 'by') parts.push('da bis ' + dayTime(s.arrTime, now));
+    if (s.arr === 'around') parts.push('da gegen ' + dayTime(s.arrTime, now));
+    return parts.join(' · ');
+  }
+
+  /** Erklärsatz unter der Zeitauswahl. */
+  function explainSpec(spec, now) {
+    var s = normSpec(spec);
+    now = toDate(now) || new Date();
+    var dep = s.dep === 'now' ? '' : dayTime(s.depTime, now);
+    var arr = s.arr === 'any' ? '' : dayTime(s.arrTime, now);
+    if (s.arr === 'any') {
+      if (s.dep === 'now') return 'Du willst jetzt los – du siehst die nächsten Verbindungen.';
+      if (s.dep === 'from') return 'Du kannst frühestens um ' + dep + ' los – du siehst die Verbindungen ab dann.';
+      return 'Du willst um ' + dep + ' los – die Verbindung, die am besten dazu passt, wird markiert.';
+    }
+    var head = s.dep === 'now' ? 'Du kannst ab jetzt los' : s.dep === 'from' ? 'Du kannst ab ' + dep + ' los' : 'Du willst um ' + dep + ' los';
+    if (s.arr === 'by') return head + ' und musst spätestens um ' + arr + ' da sein. Die App zeigt dir, wann du spätestens losgehen musst.';
+    return head + ' und willst gegen ' + arr + ' da sein. Die App markiert die Verbindung, die am besten passt.';
+  }
+
+  // ---------------------------------------------------------------- Google Maps
+
+  var GMAPS_MODE = { walk: 'walking', bike: 'bicycling', car: 'driving', transit: 'transit' };
+  var GMAPS_NAV = { walk: 'w', bike: 'b', car: 'd' };
+  var GMAPS_PACKAGE = 'com.google.android.apps.maps';
+
+  function coord(p) { return Number(p.lat).toFixed(6) + ',' + Number(p.lon).toFixed(6); }
+
+  /** Route in Google Maps (App oder Web) anzeigen – Maps-URLs mit api=1. */
+  function gmapsDirUrl(from, to, mode, navigate) {
+    var params = [['api', 1]];
+    if (from) params.push(['origin', coord(from)]);
+    params.push(['destination', coord(to)]);
+    params.push(['travelmode', GMAPS_MODE[mode] || 'transit']);
+    if (navigate) params.push(['dir_action', 'navigate']);
+    return 'https://www.google.com/maps/dir/?' + qs(params);
+  }
+
+  /** Navigation in der Google-Maps-App direkt starten (vom aktuellen Standort aus). */
+  function gmapsNavUri(to, mode) {
+    return 'google.navigation:q=' + coord(to) + '&mode=' + (GMAPS_NAV[mode] || 'w');
+  }
+
   /**
    * Das, was man vor dem Losgehen wissen will:
    * Wann muss ich los? Wie weit/wie viele Schritte bis zur Haltestelle? Wann kommt die Bahn?
@@ -963,7 +1153,11 @@
     lineName: lineName, motisLeg: motisLeg, motisItinerary: motisItinerary, parseMotisPlan: parseMotisPlan,
     parseValhalla: parseValhalla, parseOsrm: parseOsrm, directRoute: directRoute, timeDirectRoute: timeDirectRoute,
     isTrivialStreetLeg: isTrivialStreetLeg, analyzeRoute: analyzeRoute, alignRoute: alignRoute, transferTimes: transferTimes,
-    leaveSentence: leaveSentence, routeText: routeText
+    leaveSentence: leaveSentence, routeText: routeText,
+    normSpec: normSpec, checkSpec: checkSpec, earliestLeave: earliestLeave, specQuery: specQuery,
+    specFallbackQuery: specFallbackQuery, timeDirectSpec: timeDirectSpec, judgeRoute: judgeRoute,
+    bestRoute: bestRoute, earliestArrival: earliestArrival, describeSpec: describeSpec, explainSpec: explainSpec,
+    gmapsDirUrl: gmapsDirUrl, gmapsNavUri: gmapsNavUri, GMAPS_PACKAGE: GMAPS_PACKAGE
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = core;

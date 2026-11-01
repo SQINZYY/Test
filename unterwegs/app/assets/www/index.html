@@ -50,15 +50,31 @@
 
       <h2 class="section-title">Wann?</h2>
       <div class="card when">
-        <div class="segmented" id="when-type" role="radiogroup" aria-label="Zeit">
-          <button type="button" data-v="now" class="on" role="radio" aria-checked="true">Jetzt</button>
-          <button type="button" data-v="dep" role="radio" aria-checked="false">Abfahrt</button>
-          <button type="button" data-v="arr" role="radio" aria-checked="false">Ankunft</button>
+        <div class="when-row">
+          <div class="when-label"><span data-icon="walk"></span>Losgehen</div>
+          <div class="segmented" id="dep-type" role="radiogroup" aria-label="Losgehen">
+            <button type="button" data-v="now" class="on" role="radio" aria-checked="true">Jetzt</button>
+            <button type="button" data-v="from" role="radio" aria-checked="false">Ab …</button>
+            <button type="button" data-v="at" role="radio" aria-checked="false">Um …</button>
+          </div>
+          <div id="dep-inputs" class="when-inputs" hidden>
+            <label><span>Tag</span><input type="date" id="dep-date"></label>
+            <label><span id="dep-time-label">Uhrzeit</span><input type="time" id="dep-time"></label>
+          </div>
         </div>
-        <div id="when-inputs" class="when-inputs" hidden>
-          <label><span>Datum</span><input type="date" id="in-date"></label>
-          <label><span>Uhrzeit</span><input type="time" id="in-time"></label>
+        <div class="when-row">
+          <div class="when-label"><span data-icon="pin"></span>Da sein</div>
+          <div class="segmented" id="arr-type" role="radiogroup" aria-label="Da sein">
+            <button type="button" data-v="any" class="on" role="radio" aria-checked="true">Egal</button>
+            <button type="button" data-v="by" role="radio" aria-checked="false">Spätestens</button>
+            <button type="button" data-v="around" role="radio" aria-checked="false">Gegen …</button>
+          </div>
+          <div id="arr-inputs" class="when-inputs" hidden>
+            <label><span>Tag</span><input type="date" id="arr-date"></label>
+            <label><span id="arr-time-label">Uhrzeit</span><input type="time" id="arr-time"></label>
+          </div>
         </div>
+        <p id="when-hint" class="hint when-hint"></p>
       </div>
 
       <button id="btn-search" class="primary big" type="button"><span data-icon="route"></span>Route berechnen</button>

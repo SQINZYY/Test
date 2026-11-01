@@ -52,6 +52,7 @@ public class MainActivity extends Activity {
     private static final String USER_AGENT = "Unterwegs/1.0 (Android-Routenplaner; +https://github.com/sqinzyy/test)";
     private static final int REQ_LOCATION = 7;
     private static final int MAX_BODY = 12 * 1024 * 1024;
+    private static final String GMAPS_PACKAGE = "com.google.android.apps.maps";
 
     /** Nur diese Dienste darf die Oberfläche über die Brücke abfragen. */
     private static final Set<String> ALLOWED_HOSTS = new HashSet<>(Arrays.asList(
@@ -169,6 +170,25 @@ public class MainActivity extends Activity {
         return "application/octet-stream";
     }
 
+    /**
+     * Öffnet einen Link in der Google-Maps-App (Route oder "google.navigation:" für die Navigation).
+     * Ist Google Maps nicht installiert, kommt der Web-Link (Browser oder andere Karten-App) dran.
+     */
+    private void openMaps(String primary, String fallback) {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(primary));
+            i.setPackage(GMAPS_PACKAGE);
+            startActivity(i);
+            return;
+        } catch (ActivityNotFoundException e) {
+            // Google Maps fehlt – weiter mit dem Web-Link
+        } catch (RuntimeException e) {
+            // ungültiger Link – weiter mit dem Web-Link
+        }
+        if (fallback != null && fallback.startsWith("https://")) openExternal(fallback);
+        else Toast.makeText(this, "Google Maps ist nicht installiert", Toast.LENGTH_SHORT).show();
+    }
+
     private void openExternal(String url) {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
@@ -278,6 +298,16 @@ public class MainActivity extends Activity {
                     } catch (ActivityNotFoundException e) {
                         Toast.makeText(MainActivity.this, "Keine App zum Teilen gefunden", Toast.LENGTH_SHORT).show();
                     }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openMaps(final String primary, final String fallback) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    MainActivity.this.openMaps(primary, fallback);
                 }
             });
         }

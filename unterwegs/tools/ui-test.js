@@ -87,9 +87,15 @@ async function run(scheme) {
   await page.click('[data-mode="bike"]');
   await page.click('[data-mode="car"]');
   await page.click('[data-mode="car"]');
-  await page.click('#when-type [data-v="dep"]');
-  assert.ok(await page.isVisible('#in-time'));
-  await page.click('#when-type [data-v="now"]');
+  await page.click('#dep-type [data-v="from"]');
+  assert.ok(await page.isVisible('#dep-time'));
+  await page.click('#arr-type [data-v="by"]');
+  assert.ok(await page.isVisible('#arr-time'));
+  assert.ok(/Du kannst ab .* los und musst spätestens um .* da sein/.test(await page.textContent('#when-hint')), await page.textContent('#when-hint'));
+  await shot('3a-zeitfenster');
+  await page.click('#dep-type [data-v="now"]');
+  await page.click('#arr-type [data-v="any"]');
+  assert.ok(await page.isHidden('#dep-inputs') && await page.isHidden('#arr-inputs'));
   await shot('3-auswahl');
 
   // Suchen
@@ -154,6 +160,81 @@ async function run(scheme) {
   await page.click('.sheet-head [data-close-sheet]');
   assert.ok(await page.isHidden('#sheet'));
   assert.ok(/ca\. 1\.550 Schritte bis Köln Hbf/.test(await page.textContent('#res-body')), 'Schrittlänge 60 cm');
+
+  // Google Maps aus der Detailansicht (im Browser: window.open)
+  await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); }; });
+  await page.click('#view-plan #btn-search');
+  await page.waitForSelector('#view-results.active .rcard[data-open="t0"]');
+  await page.click('.rcard[data-open="t0"]');
+  await page.waitForSelector('#view-detail.active .hero-actions');
+  await page.click('.hero-actions [data-nav]');
+  await page.click('.hero-actions [data-gmaps="transit"]');
+  await page.click('.tl-leg .nav-link >> nth=-1');
+  await page.click('#view-detail [data-back]');
+  await page.click('.rcard[data-open="d-car"] [data-gmaps="car"]');
+  assert.ok(await page.isVisible('#view-results.active'), 'Klick auf Google-Maps-Knopf öffnet keine Details');
+  await page.click('.gm-chip[data-gmaps="walk"]');
+  const opened = await page.evaluate(() => window.__opened);
+  const nav = new URL(opened[0]);
+  assert.strictEqual(nav.searchParams.get('destination'), '50.942950,6.958590', 'Navigation zur Haltestelle Köln Hbf');
+  assert.strictEqual(nav.searchParams.get('travelmode'), 'walking');
+  assert.strictEqual(nav.searchParams.get('dir_action'), 'navigate');
+  const whole = new URL(opened[1]);
+  assert.strictEqual(whole.searchParams.get('travelmode'), 'transit');
+  assert.strictEqual(whole.searchParams.get('origin'), null, 'Mein Standort → Google nimmt den aktuellen Standort');
+  assert.strictEqual(new URL(opened[2]).searchParams.get('destination'), '50.727440,7.094530', 'letzter Fußweg zum Ziel');
+  assert.strictEqual(new URL(opened[3]).searchParams.get('travelmode'), 'driving');
+  assert.strictEqual(new URL(opened[4]).searchParams.get('travelmode'), 'walking');
+  await page.click('#view-results [data-back]');
+
+  // Zeitfenster: ab jetzt los, spätestens in 75 Min. da (ohne Auto)
+  async function setArrival(minutes) {
+    await page.click('#arr-type [data-v="by"]');
+    await page.evaluate((m) => {
+      const d = new Date(Date.now() + m * 60000);
+      const p = (n) => String(n).padStart(2, '0');
+      document.getElementById('arr-date').value = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+      document.getElementById('arr-time').value = p(d.getHours()) + ':' + p(d.getMinutes());
+      document.getElementById('arr-time').dispatchEvent(new Event('change'));
+    }, minutes);
+  }
+  await page.click('[data-mode="car"]');
+  await setArrival(75);
+  await page.click('#btn-search');
+  await page.waitForSelector('#view-results.active .banner');
+  await page.waitForSelector('.rcard[data-open="d-walk"]:not(.loading)');
+  const banner = await page.textContent('.banner');
+  assert.ok(/Spätestens losgehen um/.test(banner), banner);
+  const leave0 = (await page.textContent('.rcard[data-open="t0"] .leave-head b')).replace('Losgehen ', '');
+  assert.ok(banner.indexOf(leave0) >= 0, 'Banner nennt die Losgeh-Zeit der besten Verbindung: ' + banner + ' / ' + leave0);
+  assert.ok(await page.isVisible('.rcard.best[data-open="t0"]'));
+  assert.ok(/Min\. zu spät/.test(await page.textContent('.rcard[data-open="t1"]')));
+  assert.ok(/Min\. zu spät/.test(await page.textContent('.rcard[data-open="d-walk"]')));
+  const planCall = log.filter((u) => u.indexOf('/plan') > 0).pop();
+  assert.strictEqual(new URL(planCall).searchParams.get('arriveBy'), 'true');
+  await shot('11-zeitfenster-ergebnis');
+  await page.click('.banner');
+  await page.waitForSelector('#view-detail.active .judge.ok');
+  assert.ok(/Min\. vor/.test(await page.textContent('.judge.ok')));
+  await shot('12-zeitfenster-details');
+  await page.click('#view-detail [data-back]');
+  await page.click('#view-results [data-back]');
+
+  // Nicht zu schaffen: spätestens in 30 Min. da → zweite Suche ab jetzt
+  const before = log.filter((u) => u.indexOf('/plan') > 0).length;
+  await setArrival(30);
+  await page.click('#btn-search');
+  await page.waitForSelector('.banner.bad');
+  await page.waitForFunction(() => !document.querySelector('#res-body .loading-line'));
+  const plans = log.filter((u) => u.indexOf('/plan') > 0).slice(before);
+  assert.strictEqual(plans.length, 2, 'Fristsuche + Suche ab jetzt');
+  assert.strictEqual(new URL(plans[1]).searchParams.get('arriveBy'), 'false');
+  assert.ok(/nicht zu schaffen/.test(await page.textContent('.banner.bad')));
+  assert.ok(/Frühestens da um \d\d:\d\d/.test(await page.textContent('.banner.bad')));
+  await shot('13-nicht-zu-schaffen');
+  await page.click('#view-results [data-back]');
+  await page.click('#arr-type [data-v="any"]');
+  await page.click('[data-mode="car"]');
 
   // Zuletzt gesucht
   assert.ok(await page.isVisible('#recent-box'));

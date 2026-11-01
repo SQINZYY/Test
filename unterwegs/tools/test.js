@@ -281,6 +281,97 @@ test('Text zum Teilen', () => {
   assert.ok(/bis Poppelsdorfer Allee 49/.test(t), t);
 });
 
+// ------------------------------------------------------------ Zeitwunsch
+
+function at(h, m, dayOffset) { return new Date(2026, 10, 2 + (dayOffset || 0), h, m); }
+function fakeRoute(sh, sm, eh, em) { return { kind: 'transit', start: at(sh, sm), end: at(eh, em), legs: [] }; }
+const NOW = at(7, 30);
+
+test('Zeitwunsch: Abfragezeit für die Fahrplanauskunft', () => {
+  assert.deepStrictEqual(core.specQuery({ dep: 'now', arr: 'any' }, NOW), { time: NOW, arriveBy: false });
+  assert.deepStrictEqual(core.specQuery({ dep: 'from', depTime: at(8, 0) }, NOW), { time: at(8, 0), arriveBy: false });
+  assert.deepStrictEqual(core.specQuery({ dep: 'at', depTime: at(8, 0) }, NOW), { time: at(7, 50), arriveBy: false });
+  assert.deepStrictEqual(core.specQuery({ dep: 'at', depTime: at(7, 35) }, NOW), { time: NOW, arriveBy: false }, 'nicht in der Vergangenheit');
+  assert.deepStrictEqual(core.specQuery({ dep: 'now', arr: 'by', arrTime: at(9, 0) }, NOW), { time: at(9, 0), arriveBy: true });
+  assert.deepStrictEqual(core.specQuery({ dep: 'from', depTime: at(8, 0), arr: 'around', arrTime: at(9, 0) }, NOW), { time: at(9, 10), arriveBy: true });
+  assert.deepStrictEqual(core.specFallbackQuery({ dep: 'from', depTime: at(8, 0), arr: 'by', arrTime: at(9, 0) }, NOW), { time: at(8, 0), arriveBy: false });
+  assert.deepStrictEqual(core.specFallbackQuery({ dep: 'now', arr: 'by', arrTime: at(9, 0) }, NOW), { time: NOW, arriveBy: false });
+});
+
+test('Zeitwunsch: Eingaben prüfen', () => {
+  assert.strictEqual(core.checkSpec({ dep: 'now', arr: 'any' }, NOW), '');
+  assert.ok(/Vergangenheit/.test(core.checkSpec({ dep: 'now', arr: 'by', arrTime: at(7, 0) }, NOW)));
+  assert.ok(/nach „Losgehen“/.test(core.checkSpec({ dep: 'from', depTime: at(9, 0), arr: 'by', arrTime: at(8, 0) }, NOW)));
+  assert.ok(/wann du losgehen/.test(core.checkSpec({ dep: 'from', depTime: null }, NOW)));
+});
+
+test('Zeitwunsch: passt / zu spät / zu früh / verpasst', () => {
+  const spec = { dep: 'from', depTime: at(8, 0), arr: 'by', arrTime: at(9, 0) };
+  assert.deepStrictEqual(core.judgeRoute(fakeRoute(8, 10, 8, 52), spec, NOW), { ok: true, code: 'ok', text: '', lateMin: 0, spareMin: 8 });
+  const late = core.judgeRoute(fakeRoute(8, 30, 9, 5), spec, NOW);
+  assert.strictEqual(late.code, 'late');
+  assert.strictEqual(late.text, '5 Min. zu spät');
+  assert.strictEqual(core.judgeRoute(fakeRoute(7, 50, 8, 40), spec, NOW).code, 'early');
+  assert.strictEqual(core.judgeRoute(fakeRoute(7, 20, 8, 0), { dep: 'now' }, NOW).code, 'missed');
+});
+
+test('Zeitwunsch: beste Verbindung', () => {
+  const r1 = fakeRoute(8, 5, 8, 40), r2 = fakeRoute(8, 20, 8, 55), r3 = fakeRoute(8, 35, 9, 10), r4 = fakeRoute(7, 55, 8, 30);
+  const all = [r1, r2, r3, r4];
+  // muss bis 9 da sein → so spät wie möglich los
+  assert.strictEqual(core.bestRoute(all, { dep: 'now', arr: 'by', arrTime: at(9, 0) }, NOW), r2);
+  // kann ab 8 los + muss bis 9 → r4 fährt zu früh, r3 kommt zu spät
+  assert.strictEqual(core.bestRoute(all, { dep: 'from', depTime: at(8, 0), arr: 'by', arrTime: at(9, 0) }, NOW), r2);
+  // will gegen 8:45 da sein → r1 (5 Min. früher) schlägt r2 (10 Min. später)
+  assert.strictEqual(core.bestRoute(all, { dep: 'now', arr: 'around', arrTime: at(8, 45) }, NOW), r1);
+  // will um 8:30 los → r3 (8:35) am nächsten
+  assert.strictEqual(core.bestRoute(all, { dep: 'at', depTime: at(8, 30) }, NOW), r3);
+  // jetzt los → am frühesten da
+  assert.strictEqual(core.bestRoute(all, { dep: 'now' }, NOW), r4);
+  // nichts schafft 8:20
+  assert.strictEqual(core.bestRoute(all, { dep: 'now', arr: 'by', arrTime: at(8, 20) }, NOW), null);
+  assert.strictEqual(core.earliestArrival(all, { dep: 'now', arr: 'by', arrTime: at(8, 20) }, NOW), r4);
+});
+
+test('Zeitwunsch: direkte Wege einplanen', () => {
+  const walk = () => core.parseValhalla(fx.makeValhalla('car'), 'car', from, to); // 36 Min.
+  let r = core.timeDirectSpec(walk(), { dep: 'now', arr: 'by', arrTime: at(9, 0) }, NOW);
+  assert.strictEqual(core.fmtTime(r.start), '08:24');
+  assert.strictEqual(core.fmtTime(r.end), '09:00');
+  r = core.timeDirectSpec(walk(), { dep: 'from', depTime: at(8, 40), arr: 'by', arrTime: at(9, 0) }, NOW);
+  assert.strictEqual(core.fmtTime(r.start), '08:40', 'nicht vor dem frühesten Losgehen');
+  assert.strictEqual(core.judgeRoute(r, { dep: 'from', depTime: at(8, 40), arr: 'by', arrTime: at(9, 0) }, NOW).lateMin, 16);
+  r = core.timeDirectSpec(walk(), { dep: 'at', depTime: at(8, 0) }, NOW);
+  assert.strictEqual(core.fmtTime(r.start) + '-' + core.fmtTime(r.end), '08:00-08:36');
+  r = core.timeDirectSpec(walk(), { dep: 'now' }, NOW);
+  assert.strictEqual(r.start.getTime(), NOW.getTime());
+});
+
+test('Zeitwunsch: Texte', () => {
+  assert.strictEqual(core.describeSpec({ dep: 'from', depTime: at(8, 0), arr: 'by', arrTime: at(9, 0) }, NOW), 'Los ab 08:00 · da bis 09:00');
+  assert.strictEqual(core.describeSpec({ dep: 'now', arr: 'around', arrTime: at(9, 0, 1) }, NOW), 'Los ab jetzt · da gegen morgen 09:00');
+  assert.strictEqual(core.describeSpec({ dep: 'now' }, NOW), 'Jetzt, 07:30');
+  assert.ok(/spätestens losgehen musst/.test(core.explainSpec({ dep: 'now', arr: 'by', arrTime: at(9, 0) }, NOW)));
+  assert.ok(/um 08:00 los/.test(core.explainSpec({ dep: 'at', depTime: at(8, 0) }, NOW)));
+});
+
+// ------------------------------------------------------------ Google Maps
+
+test('Google Maps: Route und Navigation', () => {
+  const u = new URL(core.gmapsDirUrl(from, to, 'transit'));
+  assert.strictEqual(u.origin + u.pathname, 'https://www.google.com/maps/dir/');
+  assert.strictEqual(u.searchParams.get('api'), '1');
+  assert.strictEqual(u.searchParams.get('origin'), '50.951050,6.957120');
+  assert.strictEqual(u.searchParams.get('destination'), '50.727440,7.094530');
+  assert.strictEqual(u.searchParams.get('travelmode'), 'transit');
+  const n = new URL(core.gmapsDirUrl(null, to, 'bike', true));
+  assert.strictEqual(n.searchParams.get('origin'), null, 'ohne Start nimmt Google den aktuellen Standort');
+  assert.strictEqual(n.searchParams.get('travelmode'), 'bicycling');
+  assert.strictEqual(n.searchParams.get('dir_action'), 'navigate');
+  assert.strictEqual(core.gmapsNavUri(to, 'walk'), 'google.navigation:q=50.727440,7.094530&mode=w');
+  assert.strictEqual(core.gmapsNavUri(to, 'car'), 'google.navigation:q=50.727440,7.094530&mode=d');
+});
+
 // ------------------------------------------------------------ api.js mit nachgebautem Netz
 
 function loadApi(handler) {
