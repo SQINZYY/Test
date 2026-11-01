@@ -9,8 +9,8 @@ APP="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(cd "$APP/.." && pwd)"
 TOOLS="$REPO/.build-tools"
 OUT="$REPO/build/unterwegs"
-VERSION_CODE="${VERSION_CODE:-3}"
-VERSION_NAME="${VERSION_NAME:-1.2}"
+VERSION_CODE="${VERSION_CODE:-4}"
+VERSION_NAME="${VERSION_NAME:-1.3}"
 MAVEN="https://repo1.maven.org/maven2"
 
 fetch() { # url ziel
@@ -30,19 +30,19 @@ if [ ! -x "$TOOLS/aapt2" ]; then
 fi
 
 rm -rf "$OUT"
-mkdir -p "$OUT/classes" "$REPO/release"
+mkdir -p "$OUT/classes" "$OUT/gen" "$REPO/release"
 
 echo "Ressourcen …"
 "$TOOLS/aapt2" compile --dir "$APP/app/res" -o "$OUT/res.zip"
 "$TOOLS/aapt2" link -o "$OUT/base.apk" -I "$TOOLS/android-framework.jar" \
   --manifest "$APP/app/AndroidManifest.xml" -A "$APP/app/assets" \
   --min-sdk-version 24 --target-sdk-version 34 \
-  --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" "$OUT/res.zip"
+  --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" --java "$OUT/gen" "$OUT/res.zip"
 
 echo "Java …"
 javac -nowarn -Xlint:-options --release 8 -encoding UTF-8 \
   -classpath "$TOOLS/android-all.jar" -d "$OUT/classes" \
-  $(find "$APP/app/java" -name '*.java')
+  $(find "$APP/app/java" "$OUT/gen" -name '*.java')
 java -cp "$TOOLS/dx.jar" com.android.dx.command.Main --dex --min-sdk-version=24 \
   --output="$OUT/classes.dex" "$OUT/classes"
 

@@ -3,7 +3,7 @@
 Android-App, die eine Route von einer Adresse zu einer anderen berechnet – mit genau den Verkehrsmitteln, die du auswählst:
 **zu Fuß, Fahrrad, Auto, Bus, Bahn (S-/U-Bahn, Tram) und Zug (Regional- und Fernverkehr)**, auch kombiniert.
 
-**APK:** [`release/Unterwegs.apk`](../release/Unterwegs.apk) – Version 1.2 (ab Android 7, ca. 150 KB, braucht Internet).
+**APK:** [`release/Unterwegs.apk`](../release/Unterwegs.apk) – Version 1.3 (ab Android 7, ca. 150 KB, braucht Internet).
 
 ## Installieren
 
@@ -50,6 +50,13 @@ Android-App, die eine Route von einer Adresse zu einer anderen berechnet – mit
    Verkehr fürs Auto). Jeder Fußweg in der Zeitleiste hat „Mit Google Maps navigieren“, und unter den Ergebnissen gibt es
    „Auch in Google Maps ansehen“. Ohne Google-Maps-App öffnet sich Google Maps im Browser. Google Maps startet immer mit
    „jetzt“ – bei einer anderen Uhrzeit diese dort anpassen.
+6. **Erinnern:** In den Details stellt **„Erinnern“** eine Benachrichtigung – *beim Losgehen* oder *5, 10 oder 15 Min. vorher*
+   (dann kommen zwei: „In 10 Min. losgehen“ und zur Losgeh-Zeit „Jetzt losgehen!“). Die Meldung enthält Schritte, Haltestelle,
+   Gleis und Abfahrt, dazu einen Knopf **„Navigation starten“** (Google Maps zur Haltestelle). Ein Tipp auf die Meldung öffnet die
+   App mit den aktuellen Verbindungen (Verspätungen nach dem Stellen werden nicht automatisch nachgeführt).
+   Gestellte Erinnerungen stehen auf der Startseite unter „Erinnerungen“ und lassen sich dort löschen. Sie funktionieren auch,
+   wenn die App geschlossen ist, und überstehen einen Neustart des Handys. Beim ersten Mal fragt Android ab Version 13, ob die App
+   Benachrichtigungen schicken darf – bitte erlauben.
 
 **Einstellungen** (Regler-Symbol oben rechts): Gehtempo, Schrittlänge (für die Schrittzahl), Puffer an der Haltestelle
 (so viel früher zeigt die App die Losgeh-Zeit), längster Fußweg zur Haltestelle, maximale Umstiege, stufenfreie Wege.
@@ -82,6 +89,8 @@ Dienste geschickt; der Standort wird nur abgefragt, wenn du „Mein Standort“ 
   - `js/map.js` – Karte (Leaflet), `js/icons.js` – Symbole (Material Icons, Apache-2.0)
 - `app/java/de/unterwegs/app/MainActivity.java` – WebView-Hülle: Internet-Anfragen (nur an die oben genannten Dienste,
   mit eigenem User-Agent), Standortfreigabe, Google Maps öffnen, Teilen, Links im Browser öffnen, Zurück-Taste
+- `app/java/de/unterwegs/app/Reminders.java` + `ReminderReceiver.java` – Losgeh-Erinnerungen: Wecker (AlarmManager, genau auf
+  die Minute), Benachrichtigung mit „Navigation starten“, Neuplanung nach Neustart/Update
 - `tools/build.sh` – baut die APK ohne Android SDK (nutzt `tools/sign_apk.py` und den Schlüssel von SetupBuilder)
 - `tools/make_icons.py` – App-Icons
 - `tools/test.js` – Tests für Logik und Ausweichlösungen: `node unterwegs/tools/test.js`

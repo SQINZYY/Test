@@ -83,7 +83,8 @@
     bufferMin: 0,       // Puffer an der Haltestelle
     maxWalkMin: 15,     // längster Fußweg zur/von der Haltestelle
     maxTransfers: -1,   // -1 = beliebig
-    wheelchair: false   // stufenfreie Wege
+    wheelchair: false,  // stufenfreie Wege
+    remindLead: 10      // Erinnerung so viele Minuten vor dem Losgehen
   };
 
   function withDefaults(settings) {
@@ -1081,6 +1082,74 @@
     return p;
   }
 
+  // ---------------------------------------------------------------- Losgeh-Erinnerung
+
+  var REMIND_LEADS = [0, 5, 10, 15];
+
+  /** Kennung einer Route, um eine gestellte Erinnerung wiederzufinden. */
+  function routeKey(route) {
+    if (!route) return '';
+    var ft = null;
+    (route.legs || []).some(function (l) { if (l.type === 'transit') { ft = l; return true; } return false; });
+    if (ft) return 't|' + ft.name + '|' + (ft.scheduledStart ? ft.scheduledStart.getTime() : '') + '|' + ft.from.name;
+    return 'd|' + (route.mode || '') + '|' + (route.start ? Math.floor(route.start.getTime() / 60000) : '');
+  }
+
+  /** Welche "x Min. vorher" gehen noch? (Zeitpunkt muss in der Zukunft liegen) */
+  function remindLeads(leaveAt, now) {
+    leaveAt = toDate(leaveAt); now = toDate(now) || new Date();
+    if (!leaveAt) return [];
+    return REMIND_LEADS.filter(function (m) { return leaveAt.getTime() - m * 60000 > now.getTime() + 30000; });
+  }
+
+  /**
+   * Texte für die Benachrichtigung.
+   * Rückgabe: { leaveAt, titleBefore, titleNow, text, nav: {lat, lon, mode} | null, key }
+   */
+  function reminderTexts(route, settings, toName, lead) {
+    var s = withDefaults(settings);
+    var a = analyzeRoute(route, s);
+    var leave = a.leaveAt || route.start;
+    var res = { leaveAt: leave, titleBefore: '', titleNow: '', text: '', nav: null, key: routeKey(route) };
+    var ft = a.firstTransit;
+    if (ft) {
+      if (a.access) {
+        var verb = a.access.type === 'walk' ? 'losgehen' : 'losfahren';
+        res.titleBefore = 'In ' + lead + ' Min. ' + verb;
+        res.titleNow = 'Jetzt ' + verb + '!';
+        res.text = leaveSentence(route, a);
+        if (ft.from.lat !== null) res.nav = { lat: ft.from.lat, lon: ft.from.lon, mode: a.access.type };
+      } else {
+        res.titleBefore = 'In ' + lead + ' Min. fährt ' + ft.name;
+        res.titleNow = ft.name + ' fährt jetzt';
+        res.text = ft.name + ' fährt um ' + fmtTime(ft.start) + ' ab ' + ft.from.name +
+          (ft.from.track ? ', Gleis/Steig ' + ft.from.track : '') + (ft.headsign ? ' Richtung ' + ft.headsign : '') + '.';
+      }
+      res.text += ' Ankunft am Ziel um ' + fmtTime(route.end) + '.';
+    } else {
+      var mode = route.mode || 'walk';
+      var v = mode === 'walk' ? 'losgehen' : 'losfahren';
+      var how = { walk: 'zu Fuß', bike: 'mit dem Fahrrad', car: 'mit dem Auto' }[mode];
+      res.titleBefore = 'In ' + lead + ' Min. ' + v;
+      res.titleNow = 'Jetzt ' + v + '!';
+      res.text = 'Um ' + fmtTime(leave) + ' ' + v + ': ' + fmtDuration(route.duration) + ' ' + how +
+        (mode === 'walk' && route.distance ? ' (' + fmtSteps(stepsFor(route.distance, s.strideCm)) + ')' : '') +
+        ' bis ' + (toName || 'zum Ziel') + ', an ' + fmtTime(route.end) + '.';
+      var last = route.legs[route.legs.length - 1];
+      if (last && last.to.lat !== null) res.nav = { lat: last.to.lat, lon: last.to.lon, mode: mode };
+    }
+    return res;
+  }
+
+  /** "Du bekommst um 22:33 eine Erinnerung und um 22:43 „Jetzt losgehen!“" */
+  function reminderPlan(leaveAt, lead, titleNow) {
+    leaveAt = toDate(leaveAt);
+    if (!leaveAt) return '';
+    var now = '„' + (titleNow || 'Jetzt losgehen!') + '“';
+    if (!lead) return 'Du bekommst um ' + fmtTime(leaveAt) + ' die Meldung ' + now + '.';
+    return 'Du bekommst um ' + fmtTime(new Date(leaveAt.getTime() - lead * 60000)) + ' eine Erinnerung und um ' + fmtTime(leaveAt) + ' die Meldung ' + now + '.';
+  }
+
   // ---------------------------------------------------------------- Google Maps
 
   var GMAPS_MODE = { walk: 'walking', bike: 'bicycling', car: 'driving', transit: 'transit' };
@@ -1259,7 +1328,8 @@
     bestRoute: bestRoute, earliestArrival: earliestArrival, describeSpec: describeSpec, explainSpec: explainSpec,
     gmapsDirUrl: gmapsDirUrl, gmapsNavUri: gmapsNavUri, GMAPS_PACKAGE: GMAPS_PACKAGE,
     FAV_KIND: FAV_KIND, favLabel: favLabel, normFavs: normFavs, upsertFav: upsertFav, removeFav: removeFav,
-    findFav: findFav, matchFavs: matchFavs, favPlace: favPlace
+    findFav: findFav, matchFavs: matchFavs, favPlace: favPlace,
+    REMIND_LEADS: REMIND_LEADS, routeKey: routeKey, remindLeads: remindLeads, reminderTexts: reminderTexts, reminderPlan: reminderPlan
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = core;

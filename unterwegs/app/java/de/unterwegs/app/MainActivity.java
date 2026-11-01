@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.ViewGroup;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
@@ -21,6 +22,7 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
@@ -51,6 +53,7 @@ public class MainActivity extends Activity {
     private static final String START = "https://" + HOST + "/www/index.html";
     private static final String USER_AGENT = "Unterwegs/1.0 (Android-Routenplaner; +https://github.com/sqinzyy/test)";
     private static final int REQ_LOCATION = 7;
+    private static final int REQ_NOTIFY = 8;
     private static final int MAX_BODY = 12 * 1024 * 1024;
     private static final String GMAPS_PACKAGE = "com.google.android.apps.maps";
 
@@ -68,6 +71,8 @@ public class MainActivity extends Activity {
     private final Map<String, String> bodies = new ConcurrentHashMap<>();
     private String geoOrigin;
     private GeolocationPermissions.Callback geoCallback;
+    private boolean pageReady;
+    private String pendingReminder;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -99,6 +104,12 @@ public class MainActivity extends Activity {
                 if (!HOST.equals(url.getHost())) return null;
                 return assetResponse(url.getPath());
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                pageReady = true;
+                deliverReminder();
+            }
         });
 
         web.setWebChromeClient(new WebChromeClient() {
@@ -123,7 +134,34 @@ public class MainActivity extends Activity {
         FrameLayout root = new FrameLayout(this);
         root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(root);
+        Reminders.ensureChannel(this);
+        handleIntent(getIntent());
         web.loadUrl(START);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIntent(intent);
+        deliverReminder();
+    }
+
+    /** Tipp auf eine Erinnerung: die Oberfläche zeigt die aktuellen Verbindungen dazu. */
+    private void handleIntent(Intent intent) {
+        if (intent != null && intent.hasExtra(Reminders.EXTRA_ID)) pendingReminder = intent.getStringExtra(Reminders.EXTRA_ID);
+    }
+
+    private void deliverReminder() {
+        if (!pageReady || pendingReminder == null || web == null) return;
+        JSONObject r = Reminders.find(this, pendingReminder);
+        String js = "window.U && U.app && U.app.onReminderTap(" + JSONObject.quote(pendingReminder) + "," + (r == null ? "null" : r.toString()) + ")";
+        pendingReminder = null;
+        web.evaluateJavascript(js, null);
+    }
+
+    private void callJs(String js) {
+        if (web != null) web.evaluateJavascript(js, null);
     }
 
     private boolean hasLocationPermission() {
@@ -134,6 +172,11 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == REQ_NOTIFY) {
+            boolean ok = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            callJs("window.U && U.app && U.app.onNotifyPermission(" + ok + ")");
+            return;
+        }
         if (requestCode != REQ_LOCATION || geoCallback == null) return;
         boolean granted = false;
         for (int r : grantResults) if (r == PackageManager.PERMISSION_GRANTED) granted = true;
@@ -308,6 +351,63 @@ public class MainActivity extends Activity {
                 @Override
                 public void run() {
                     MainActivity.this.openMaps(primary, fallback);
+                }
+            });
+        }
+
+        /** Erinnerung stellen. Rückgabe: {"alarm":"exact|inexact","notify":"granted|asking|blocked"} */
+        @JavascriptInterface
+        public String scheduleReminder(String json) {
+            try {
+                JSONObject r = new JSONObject(json);
+                String alarm = Reminders.add(MainActivity.this, r);
+                String notify = "granted";
+                if (!Reminders.notificationsAllowed(MainActivity.this)) {
+                    if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                        notify = "asking";
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, REQ_NOTIFY);
+                            }
+                        });
+                    } else {
+                        notify = "blocked";
+                    }
+                }
+                return "{\"alarm\":\"" + alarm + "\",\"notify\":\"" + notify + "\"}";
+            } catch (JSONException e) {
+                return "{\"error\":\"ungültig\"}";
+            }
+        }
+
+        @JavascriptInterface
+        public void cancelReminder(String id) {
+            Reminders.cancel(MainActivity.this, id);
+        }
+
+        @JavascriptInterface
+        public String listReminders() {
+            return Reminders.active(MainActivity.this).toString();
+        }
+
+        @JavascriptInterface
+        public void openNotifySettings() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Intent i;
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                        i.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+                    } else {
+                        i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()));
+                    }
+                    try {
+                        startActivity(i);
+                    } catch (ActivityNotFoundException e) {
+                        Toast.makeText(MainActivity.this, "Einstellungen nicht gefunden", Toast.LENGTH_SHORT).show();
+                    }
                 }
             });
         }

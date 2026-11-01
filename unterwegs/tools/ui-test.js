@@ -334,10 +334,111 @@ async function run(scheme) {
   await browser.close();
 }
 
+/** Wie in der Android-App: window.Android als Brücke (Netz über fetch, damit die Testantworten greifen). */
+async function runAndroid() {
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'de-DE', timezoneId: 'Europe/Berlin',
+    geolocation: { latitude: fx.P.start[0], longitude: fx.P.start[1] }, permissions: ['geolocation']
+  });
+  const page = await ctx.newPage();
+  const errors = [], log = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await mockNetwork(page, log);
+  await page.addInitScript(() => {
+    const bodies = {};
+    // wie SharedPreferences: übersteht das Neuladen der Seite
+    const javaList = () => JSON.parse(sessionStorage.getItem('javaList') || '[]');
+    const setJavaList = (l) => sessionStorage.setItem('javaList', JSON.stringify(l));
+    window.__sched = []; window.__cancel = []; window.__maps = [];
+    window.Android = {
+      httpGet(id, url) {
+        fetch(url).then((r) => r.text().then((t) => { bodies[id] = t; window.U.api._done(id, r.status); }),
+          () => { bodies[id] = 'Keine Verbindung'; window.U.api._done(id, 0); });
+      },
+      httpBody(id) { const b = bodies[id]; delete bodies[id]; return b || ''; },
+      scheduleReminder(json) { const r = JSON.parse(json); window.__sched.push(r); setJavaList(javaList().concat([r])); return '{"alarm":"exact","notify":"asking"}'; },
+      cancelReminder(id) { window.__cancel.push(id); setJavaList(javaList().filter((r) => r.id !== id)); },
+      listReminders() { return JSON.stringify(javaList()); },
+      openMaps(p, f) { window.__maps.push([p, f]); },
+      openNotifySettings() { window.__notifySettings = true; },
+      share() {}
+    };
+  });
+  await page.goto('http://127.0.0.1:' + server.address().port + '/index.html');
+  const shot = (name, full) => page.screenshot({ path: path.join(OUT, 'android-' + name + '.png'), fullPage: full !== false });
+
+  await page.click('#btn-locate');
+  await page.waitForFunction(() => document.getElementById('in-from').value.indexOf('Mein Standort ·') === 0);
+  await page.fill('#in-to', 'Poppelsdorfer');
+  await page.waitForSelector('.sg-item:has-text("Poppelsdorfer Allee 49")');
+  await page.click('.sg-item:has-text("Poppelsdorfer Allee 49")');
+  await page.click('#btn-search');
+  await page.waitForSelector('#view-results.active .rcard[data-open="t0"]');
+  await page.click('.rcard[data-open="t0"]');
+  await page.waitForSelector('#view-detail.active [data-remind]');
+
+  // Google Maps über die Brücke: App-Link + Ersatz-Link
+  await page.click('.hero-actions [data-nav]');
+  const maps = await page.evaluate(() => window.__maps);
+  assert.strictEqual(maps[0][0], 'google.navigation:q=50.942950,6.958590&mode=w');
+  assert.ok(maps[0][1].indexOf('dir_action=navigate') > 0);
+
+  // Erinnerung stellen: Losgehen ist in ca. 12 Min. → 15 Min. vorher geht nicht mehr
+  await page.click('[data-remind]');
+  await page.waitForSelector('#sheet:not([hidden]) .remind-leads');
+  assert.ok(await page.isDisabled('[data-lead="15"]'), '15 Min. vorher liegt in der Vergangenheit');
+  assert.ok(!(await page.isDisabled('[data-lead="5"]')));
+  await page.click('[data-lead="5"]');
+  assert.ok(/Du bekommst um \d\d:\d\d eine Erinnerung und um \d\d:\d\d die Meldung „Jetzt losgehen!“/.test(await page.textContent('#sheet-body')));
+  await page.waitForTimeout(300);
+  await shot('1-erinnern', false);
+  await page.click('[data-remind-set]');
+  const sched = await page.evaluate(() => window.__sched);
+  assert.strictEqual(sched.length, 1);
+  const r = sched[0];
+  assert.strictEqual(r.lead, 5);
+  assert.strictEqual(r.titleBefore, 'In 5 Min. losgehen');
+  assert.strictEqual(r.titleNow, 'Jetzt losgehen!');
+  assert.ok(/Köln Hbf/.test(r.text) && /Schritte/.test(r.text), r.text);
+  assert.ok(r.navUrl.indexOf('destination=50.942950%2C6.958590') > 0 || r.navUrl.indexOf('destination=50.942950,6.958590') > 0, r.navUrl);
+  assert.strictEqual(r.label, 'Mein Standort → Poppelsdorfer Allee 49');
+  assert.ok(r.leaveAt > Date.now());
+  assert.ok(await page.isVisible('.action.remind.on'));
+  await shot('2-erinnerung-aktiv');
+
+  // Benachrichtigungen abgelehnt → Hinweis mit Einstellungen
+  await page.evaluate(() => window.U.app.onNotifyPermission(false));
+  await page.click('#view-detail [data-back]');
+  await page.click('#view-results [data-back]');
+  assert.ok(await page.isVisible('#remind-box'));
+  assert.ok(/Benachrichtigungen sind ausgeschaltet/.test(await page.textContent('#reminders')));
+  await page.click('[data-notify-settings]');
+  assert.strictEqual(await page.evaluate(() => window.__notifySettings), true);
+  await shot('3-erinnerungen-liste');
+
+  // Tipp auf die Benachrichtigung → aktuelle Verbindungen
+  await page.evaluate((rem) => window.U.app.onReminderTap(rem.id, rem), r);
+  await page.waitForSelector('#view-results.active .rcard[data-open="t0"]');
+  assert.strictEqual(await page.textContent('#res-title'), 'Mein Standort → Poppelsdorfer Allee 49');
+  await page.click('#view-results [data-back]');
+
+  // Nach Neustart der Seite: Liste kommt aus Android
+  await page.reload();
+  await page.waitForSelector('#remind-box:not([hidden]) .remind-item');
+  await page.click('[data-remind-cancel]');
+  assert.deepStrictEqual(await page.evaluate(() => window.__cancel), [r.id]);
+  assert.ok(await page.isHidden('#remind-box'));
+
+  assert.deepStrictEqual(errors, [], 'JS-Fehler: ' + errors.join('\n'));
+  await browser.close();
+}
+
 server.listen(0, '127.0.0.1', async () => {
   try {
     await run('light');
     await run('dark');
+    await runAndroid();
     console.log('UI-Test bestanden. Screenshots: ' + OUT);
     server.close();
   } catch (e) {

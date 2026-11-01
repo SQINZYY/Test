@@ -476,3 +476,22 @@ details.alert p { margin: 6px 0 2px; font-size: 13px; white-space: pre-line; }
 @media (prefers-color-scheme: dark) {
   .toast { background: #e2e8f0; color: #0f172a; }
 }
+
+/* ------------------------------------------------ Erinnerungen (1.3) */
+.remind-head { display: flex; gap: 12px; align-items: flex-start; padding: 12px; margin: 6px 0 4px; border-radius: 14px; background: color-mix(in srgb, var(--primary-2) 9%, var(--card)); }
+.remind-head > .ic { width: 28px; height: 28px; color: var(--primary-2); margin-top: 2px; }
+.remind-head b { font-size: 17px; }
+.remind-head p { margin: 4px 0 0; font-size: 13.5px; color: var(--muted); }
+.remind-leads { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lead { padding: 11px 8px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--card-2); font-weight: 600; }
+.lead.on { border-color: var(--primary-2); background: color-mix(in srgb, var(--primary-2) 12%, var(--card)); color: var(--primary-2); }
+.lead:disabled { opacity: .4; text-decoration: line-through; cursor: default; }
+.action.remind.on { border-color: #ca8a04; color: #a16207; background: color-mix(in srgb, #ca8a04 10%, var(--card)); }
+@media (prefers-color-scheme: dark) { .action.remind.on { color: #fcd34d; } }
+.remind-item { cursor: default; }
+.remind-item > .ic { color: #ca8a04; }
+.remind-item small { color: var(--muted); font-size: 12.5px; }
+.remind-item .cd { margin-left: 6px; }
+.remind-item .icon-btn { margin-left: auto; }
+.note.ok-note { background: color-mix(in srgb, var(--ok) 12%, var(--card)); color: var(--ok); }
+.primary:disabled { opacity: .5; }

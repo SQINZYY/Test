@@ -1019,12 +1019,18 @@
   }
 
   /** Knöpfe für Google Maps unter der Zusammenfassung. */
+  function remindButton(route) {
+    var r = reminderFor(route);
+    return '<button type="button" class="action remind' + (r ? ' on' : '') + '" data-remind>' + ic(r ? 'bell-on' : 'bell') +
+      (r ? 'Erinnerung ' + core.fmtTime(new Date(r.leaveAt - r.lead * 60000)) : 'Erinnern') + '</button>';
+  }
+
   function heroActions(route, s) {
     var to = s.q.to;
     if (route.kind === 'direct') {
       return '<div class="hero-actions">' +
         '<button type="button" class="action primary-action" data-nav="' + to.lat + ',' + to.lon + ',' + route.mode + '">' + ic('nav') + 'Navigation starten</button>' +
-        '<button type="button" class="action" data-gmaps="' + route.mode + '">' + ic('map') + 'In Google Maps</button></div>';
+        '<button type="button" class="action" data-gmaps="' + route.mode + '">' + ic('map') + 'In Google Maps</button>' + remindButton(route) + '</div>';
     }
     var a = core.analyzeRoute(route, s.q.settings);
     var ft = a.firstTransit, html = '<div class="hero-actions">';
@@ -1032,7 +1038,7 @@
       html += '<button type="button" class="action primary-action" data-nav="' + ft.from.lat + ',' + ft.from.lon + ',' + a.access.type + '">' + ic('nav') +
         (a.access.type === 'walk' ? 'Zur Haltestelle navigieren' : 'Zur Haltestelle fahren') + '</button>';
     }
-    return html + '<button type="button" class="action" data-gmaps="transit">' + ic('map') + 'In Google Maps</button></div>';
+    return html + '<button type="button" class="action" data-gmaps="transit">' + ic('map') + 'In Google Maps</button>' + remindButton(route) + '</div>';
   }
 
   function heroHtml(route, s) {
@@ -1145,6 +1151,190 @@
     if (r.from) setPlace('from', r.from); else { setPlace('from', null); locate('from'); }
     if (r.to) setPlace('to', r.to); else { setPlace('to', null); locate('to'); }
     if (r.from && r.to) onSearch();
+  }
+
+  // ---------------------------------------------------------------- Losgeh-Erinnerungen
+
+  var browserTimers = {};
+
+  function nativeReminders() { return !!(root.Android && root.Android.scheduleReminder); }
+
+  function reminders() {
+    var now = Date.now();
+    return load('reminders', []).filter(function (r) { return r.leaveAt + 60000 > now; })
+      .sort(function (a, b) { return a.leaveAt - b.leaveAt; });
+  }
+
+  function saveReminders(list) {
+    save('reminders', list);
+    renderReminders();
+  }
+
+  function reminderFor(route) {
+    var key = core.routeKey(route);
+    return reminders().filter(function (r) { return r.key === key; })[0] || null;
+  }
+
+  /** In Android über den Wecker der App, im Browser solange die Seite offen ist. */
+  function armBrowser(r) {
+    disarmBrowser(r.id);
+    if (!('Notification' in root)) return;
+    var now = Date.now(), timers = [];
+    [[r.leaveAt - r.lead * 60000, r.titleBefore, r.lead > 0], [r.leaveAt, r.titleNow, true]].forEach(function (x) {
+      if (!x[2] || x[0] < now - 30000 || x[0] - now > 2147483000) return;
+      timers.push(setTimeout(function () {
+        try { new root.Notification(x[1], { body: r.text, tag: r.id }); } catch (e) { toast(x[1] + ' ' + r.text); }
+      }, Math.max(0, x[0] - now)));
+    });
+    browserTimers[r.id] = timers;
+  }
+
+  function disarmBrowser(id) {
+    (browserTimers[id] || []).forEach(clearTimeout);
+    delete browserTimers[id];
+  }
+
+  function setReminder(route, lead) {
+    var s = S.search;
+    if (!s) return;
+    var t = core.reminderTexts(route, s.q.settings, shortName(s.q.to), lead);
+    var old = reminderFor(route);
+    if (old) cancelReminder(old.id, true);
+    var r = {
+      id: 'r' + Date.now(), leaveAt: t.leaveAt.getTime(), lead: lead, key: t.key,
+      titleBefore: t.titleBefore, titleNow: t.titleNow, text: t.text,
+      label: shortName(s.q.from) + ' → ' + shortName(s.q.to),
+      navUrl: t.nav ? core.gmapsDirUrl(null, t.nav, t.nav.mode, true) : '',
+      from: s.q.from, to: s.q.to, sel: s.q.sel
+    };
+    var list = reminders();
+    list.push(r);
+    saveReminders(list);
+    S.settings.remindLead = lead;
+    save('settings', S.settings);
+    var msg = 'Erinnerung gestellt: ' + (lead ? core.fmtTime(new Date(r.leaveAt - lead * 60000)) + ' und ' : '') + core.fmtTime(new Date(r.leaveAt));
+    if (nativeReminders()) {
+      var res = {};
+      try { res = JSON.parse(root.Android.scheduleReminder(JSON.stringify(r)) || '{}'); } catch (e) { res = {}; }
+      if (res.notify === 'blocked') { S.notifyBlocked = true; renderReminders(); msg = 'Benachrichtigungen für Unterwegs sind ausgeschaltet – bitte in den Einstellungen erlauben.'; }
+      else if (res.alarm === 'inexact') msg += ' (kann sich etwas verzögern)';
+    } else if ('Notification' in root) {
+      if (root.Notification.permission === 'default') {
+        root.Notification.requestPermission().then(function (p) { if (p !== 'granted') onNotifyPermission(false); });
+      } else if (root.Notification.permission === 'denied') {
+        onNotifyPermission(false);
+      }
+      armBrowser(r);
+      msg += ' (im Browser nur, solange die Seite offen ist)';
+    }
+    toast(msg);
+    if (S.view === 'detail' && S.detail) renderDetail(S.detail, s);
+  }
+
+  function cancelReminder(id, quiet) {
+    if (nativeReminders()) root.Android.cancelReminder(id);
+    disarmBrowser(id);
+    saveReminders(load('reminders', []).filter(function (r) { return r.id !== id; }));
+    if (!quiet) {
+      toast('Erinnerung gelöscht.');
+      if (S.view === 'detail' && S.detail && S.search) renderDetail(S.detail, S.search);
+    }
+  }
+
+  function renderReminders() {
+    var list = reminders();
+    $('remind-box').hidden = !list.length;
+    var html = '';
+    if (S.notifyBlocked) {
+      html += '<div class="note">' + ic('warn') + '<span>Benachrichtigungen sind ausgeschaltet – Erinnerungen kommen so nicht an. ' +
+        (nativeReminders() ? '<button type="button" class="link" data-notify-settings>Einstellungen öffnen</button>' : '') + '</span></div>';
+    }
+    html += list.map(function (r) {
+      var leave = new Date(r.leaveAt);
+      return '<div class="recent-item remind-item">' + ic('bell-on') +
+        '<span class="ri-text"><b>' + esc(remindHead(r.titleNow)) + ' ' + core.fmtTime(leave) + ' ' + cdSpan(leave, true) + '</b>' +
+        '<small>' + esc(r.label) + (r.lead ? ' · Erinnerung ' + r.lead + ' Min. vorher' : '') + '</small></span>' +
+        '<button type="button" class="icon-btn small" data-remind-cancel="' + esc(r.id) + '" aria-label="Erinnerung löschen">' + ic('close') + '</button></div>';
+    }).join('');
+    $('reminders').innerHTML = html;
+  }
+
+  /** "Jetzt losgehen!" → "Losgehen", "RE 5 fährt jetzt" → "RE 5 fährt" */
+  function remindHead(titleNow) {
+    var t = titleNow.replace('!', '');
+    if (t.indexOf('Jetzt ') === 0) { t = t.slice(6); return t.charAt(0).toUpperCase() + t.slice(1); }
+    return t.replace(' jetzt', '');
+  }
+
+  /** Fenster "Ans Losgehen erinnern". */
+  function openRemind() {
+    if (!S.detail || !S.search) return;
+    var t = core.reminderTexts(S.detail, S.search.q.settings, shortName(S.search.q.to), 0);
+    if (!core.remindLeads(t.leaveAt, new Date()).length && !reminderFor(S.detail)) {
+      toast('Die Losgeh-Zeit ist schon vorbei.');
+      return;
+    }
+    var leads = core.remindLeads(t.leaveAt, new Date());
+    var pref = S.settings.remindLead;
+    S.remindLead = leads.indexOf(pref) >= 0 ? pref : leads[leads.length - 1];
+    openSheet('remind');
+  }
+
+  function renderRemindSheet() {
+    var route = S.detail, s = S.search;
+    $('sheet-title').textContent = 'Ans Losgehen erinnern';
+    var lead = S.remindLead || 0;
+    var t = core.reminderTexts(route, s.q.settings, shortName(s.q.to), lead);
+    var leads = core.remindLeads(t.leaveAt, new Date());
+    var existing = reminderFor(route);
+    var labels = { 0: 'Beim Losgehen', 5: '5 Min. vorher', 10: '10 Min. vorher', 15: '15 Min. vorher' };
+    var html = '<div class="remind-head">' + ic('bell') + '<div><b>' + esc(remindHead(t.titleNow)) + ' um ' + core.fmtTime(t.leaveAt) + '</b> ' + cdSpan(t.leaveAt, true) +
+      '<p>' + esc(t.text) + '</p></div></div>';
+    if (existing) html += '<div class="note ok-note">' + ic('check') + '<span>Erinnerung ist gestellt' + (existing.lead ? ' (' + existing.lead + ' Min. vorher)' : '') + '.</span></div>';
+    html += '<div class="set"><div class="set-label">Wann erinnern?</div><div class="remind-leads">' +
+      core.REMIND_LEADS.map(function (m) {
+        var ok = leads.indexOf(m) >= 0;
+        return '<button type="button" class="lead' + (m === lead ? ' on' : '') + '" data-lead="' + m + '"' + (ok ? '' : ' disabled') + '>' + labels[m] + '</button>';
+      }).join('') + '</div>' +
+      '<p class="set-help">' + esc(core.reminderPlan(t.leaveAt, lead, t.titleNow)) + '</p></div>' +
+      '<p class="set-help">Verspätungen nach dem Stellen werden nicht nachgeführt. Tippe auf die Benachrichtigung, dann zeigt die App die aktuellen Abfahrten.' +
+      (nativeReminders() ? '' : ' Im Browser kommt die Erinnerung nur, solange die Seite offen ist.') + '</p>' +
+      '<div class="sheet-actions"><button type="button" class="primary" data-remind-set' + (leads.length ? '' : ' disabled') + '>' + ic('bell') + (existing ? 'Erinnerung ändern' : 'Erinnerung stellen') + '</button>' +
+      (existing ? '<button type="button" class="danger" data-remind-cancel="' + esc(existing.id) + '">' + ic('trash') + 'Löschen</button>' : '') + '</div>';
+    $('sheet-body').innerHTML = html;
+  }
+
+  /** Android meldet, ob Benachrichtigungen erlaubt wurden. */
+  function onNotifyPermission(ok) {
+    S.notifyBlocked = !ok;
+    renderReminders();
+    if (!ok) toast('Ohne Erlaubnis für Benachrichtigungen kommt die Erinnerung nicht an.');
+  }
+
+  /** Tipp auf die Benachrichtigung: aktuelle Verbindungen für dieselbe Strecke zeigen. */
+  function onReminderTap(id, r) {
+    r = r || load('reminders', []).filter(function (x) { return x.id === id; })[0];
+    if (!r || !r.from || !r.to) return;
+    if (r.sel) { S.sel = r.sel; renderModes(); }
+    setDep('now');
+    setArr('any');
+    setPlace('from', r.from);
+    setPlace('to', r.to);
+    closeSheet();
+    startSearch(makeQuery(r.from, r.to, r.sel || S.sel, core.normSpec({ dep: 'now' })));
+    toast('Aktuelle Verbindungen – geplant war: ' + remindHead(r.titleNow) + ' um ' + core.fmtTime(new Date(r.leaveAt)));
+  }
+
+  function syncReminders() {
+    if (nativeReminders() && root.Android.listReminders) {
+      try {
+        var list = JSON.parse(root.Android.listReminders() || '[]');
+        if (Array.isArray(list)) save('reminders', list);
+      } catch (e) { /* lokale Liste behalten */ }
+    } else {
+      reminders().forEach(armBrowser);
+    }
+    renderReminders();
   }
 
   // ---------------------------------------------------------------- Favoriten
@@ -1359,6 +1549,7 @@
   function renderSheet() {
     if (S.sheet === 'favs') { renderFavManager(); return; }
     if (S.sheet === 'fav') { renderFavEditor(); return; }
+    if (S.sheet === 'remind') { renderRemindSheet(); return; }
     var s = S.settings;
     var n = favList().length;
     $('sheet-title').textContent = 'Einstellungen';
@@ -1530,6 +1721,14 @@
     $('res-body').addEventListener('keydown', function (e) { if (e.key === 'Enter') openFrom(e); });
 
     $('det-share').addEventListener('click', shareRoute);
+    $('det-body').addEventListener('click', function (e) {
+      if (e.target.closest('[data-remind]')) openRemind();
+    });
+    $('reminders').addEventListener('click', function (e) {
+      var c = e.target.closest('[data-remind-cancel]');
+      if (c) { cancelReminder(c.getAttribute('data-remind-cancel')); return; }
+      if (e.target.closest('[data-notify-settings]') && root.Android && root.Android.openNotifySettings) root.Android.openNotifySettings();
+    });
 
     doc.addEventListener('click', function (e) {
       var nav = e.target.closest('[data-nav]');
@@ -1544,6 +1743,12 @@
 
     $('sheet').addEventListener('click', function (e) {
       if (e.target.closest('[data-close-sheet]')) { closeSheet(); return; }
+      // Erinnerung
+      var ld = e.target.closest('[data-lead]');
+      if (ld && !ld.disabled) { S.remindLead = +ld.getAttribute('data-lead'); renderRemindSheet(); return; }
+      if (e.target.closest('[data-remind-set]')) { setReminder(S.detail, S.remindLead || 0); closeSheet(); return; }
+      var rc = e.target.closest('[data-remind-cancel]');
+      if (rc) { cancelReminder(rc.getAttribute('data-remind-cancel')); closeSheet(); return; }
       // Favoriten
       if (e.target.closest('[data-fav-manage]')) { openSheet('favs'); return; }
       var fe = e.target.closest('[data-fav-edit]');
@@ -1606,11 +1811,15 @@
     setArr('any');
     renderRecent();
     renderFavs();
+    syncReminders();
     bind();
     updateStars();
     doc.documentElement.classList.toggle('android', !!root.Android);
   }
 
-  U.app = { back: back, state: S, startSearch: startSearch, openDetail: openDetail, setPlace: setPlace };
+  U.app = {
+    back: back, state: S, startSearch: startSearch, openDetail: openDetail, setPlace: setPlace,
+    onReminderTap: onReminderTap, onNotifyPermission: onNotifyPermission
+  };
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init); else init();
 })(window);

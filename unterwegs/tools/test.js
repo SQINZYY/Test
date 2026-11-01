@@ -403,6 +403,34 @@ test('Favoriten: finden, Suche, Standort speichern', () => {
   assert.strictEqual(h[0].place.kind, 'address');
 });
 
+// ------------------------------------------------------------ Losgeh-Erinnerung
+
+test('Erinnerung: Texte für ÖPNV und direkten Weg', () => {
+  const it = core.alignRoute(plan.itineraries[0], {});
+  const re = it.legs[1];
+  const t = core.reminderTexts(it, { strideCm: 75 }, 'Poppelsdorfer Allee 49', 10);
+  assert.strictEqual(t.leaveAt.getTime(), re.start.getTime() - 11 * 60000);
+  assert.strictEqual(t.titleBefore, 'In 10 Min. losgehen');
+  assert.strictEqual(t.titleNow, 'Jetzt losgehen!');
+  assert.ok(/^Um \d\d:\d\d losgehen: 11 Min\. zu Fuß \(ca\. 1\.250 Schritte\) bis Köln Hbf, Gleis\/Steig 5\. RE 5 fährt um \d\d:\d\d\. Ankunft am Ziel um \d\d:\d\d\.$/.test(t.text), t.text);
+  assert.deepStrictEqual(t.nav, { lat: fx.P.hbf[0], lon: fx.P.hbf[1], mode: 'walk' });
+  assert.ok(/^t\|RE 5\|\d+\|Köln Hbf$/.test(t.key), t.key);
+  const w = core.timeDirectSpec(core.parseValhalla(fx.makeValhalla('walk'), 'walk', from, to), { dep: 'at', depTime: at(8, 0) }, NOW);
+  const tw = core.reminderTexts(w, {}, 'Oma', 0);
+  assert.strictEqual(tw.text, 'Um 08:00 losgehen: 6 Std. 25 Min. zu Fuß (ca. 37.100 Schritte) bis Oma, an 14:25.');
+  assert.strictEqual(tw.nav.mode, 'walk');
+  const c = core.timeDirectSpec(core.parseValhalla(fx.makeValhalla('car'), 'car', from, to), { dep: 'at', depTime: at(8, 0) }, NOW);
+  assert.strictEqual(core.reminderTexts(c, {}, 'Oma', 5).titleBefore, 'In 5 Min. losfahren');
+});
+
+test('Erinnerung: mögliche Vorlaufzeiten und Ankündigung', () => {
+  assert.deepStrictEqual(core.remindLeads(at(8, 0), at(7, 30)), [0, 5, 10, 15]);
+  assert.deepStrictEqual(core.remindLeads(at(8, 0), at(7, 52)), [0, 5]);
+  assert.deepStrictEqual(core.remindLeads(at(8, 0), at(8, 1)), []);
+  assert.strictEqual(core.reminderPlan(at(8, 0), 10, 'Jetzt losgehen!'), 'Du bekommst um 07:50 eine Erinnerung und um 08:00 die Meldung „Jetzt losgehen!“.');
+  assert.strictEqual(core.reminderPlan(at(8, 0), 0, 'Jetzt losgehen!'), 'Du bekommst um 08:00 die Meldung „Jetzt losgehen!“.');
+});
+
 // ------------------------------------------------------------ Google Maps
 
 test('Google Maps: Route und Navigation', () => {
