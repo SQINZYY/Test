@@ -89,3 +89,8 @@ VERSION_CODE=8 VERSION_NAME=1.7 ./tools/build.sh
 Signiert wird mit dem Debug-Schlüssel `tools/debug-signing.p12` (Passwort `android`), damit Updates sich über die alte Version installieren lassen. Für eine Veröffentlichung im Play Store einen eigenen, geheimen Schlüssel verwenden.
 
 Neue Teile kommen in `app/assets/www/data.js` (mit Suchbegriffen `k` für den Import); danach `node tools/test-engine.js` laufen lassen.
+
+## Weitere App in diesem Repo
+
+- [`arbeitszeit/`](arbeitszeit/) – **Arbeitszeit**: Arbeitszeiten planen und tatsächliche Zeiten erfassen, 30 min Pause automatisch,
+  39-Stunden-Woche, Überstundenkonto. APK: [`arbeitszeit/release/Arbeitszeit.apk`](arbeitszeit/release/Arbeitszeit.apk)
