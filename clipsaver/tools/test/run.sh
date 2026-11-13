@@ -8,5 +8,5 @@ mkdir -p "$OUT" "$(dirname "$JSON")"
 [ -s "$JSON" ] || curl -sSfL -o "$JSON" https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar
 SRC="$ROOT/app/java/de/clipsaver/app"
 javac -nowarn -encoding UTF-8 -cp "$JSON" -d "$OUT" \
-  "$SRC"/{Links,Http,Json,TikTok,YouTubePosts,Formats,MediaSniffer,Cookies}.java "$ROOT/tools/test/Tests.java"
+  "$SRC"/{Links,Http,Json,TikTok,YouTubePosts,Formats,MediaSniffer,Cookies,Twitter,Instagram,PageMedia,GalleryList,Results}.java "$ROOT/tools/test/Tests.java"
 java -Dstdout.encoding=UTF-8 -cp "$OUT:$JSON" de.clipsaver.app.Tests "$ROOT/tools/test/fixtures"

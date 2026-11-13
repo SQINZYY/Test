@@ -129,6 +129,11 @@ public class MainActivity extends Activity implements DownloadService.Listener, 
             public void run() {
                 try {
                     Engine.init(MainActivity.this);
+                    try {
+                        Gallery.site(MainActivity.this);
+                    } catch (Exception ignored) {
+                        // wird beim ersten Gebrauch erneut versucht
+                    }
                     engineState = "ready";
                 } catch (Throwable e) {
                     engineState = "error";
@@ -148,6 +153,11 @@ public class MainActivity extends Activity implements DownloadService.Listener, 
         JSONObject r = new JSONObject();
         try {
             boolean updated = Engine.update(this, nightly);
+            try {
+                updated |= Gallery.update(this);
+            } catch (Exception ignored) {
+                // gallery-dl bleibt in der bisherigen Version; yt-dlp ist wichtiger
+            }
             prefs.edit().putLong("lastUpdateCheck", System.currentTimeMillis()).apply();
             r.put("ok", true);
             r.put("updated", updated);
@@ -162,6 +172,7 @@ public class MainActivity extends Activity implements DownloadService.Listener, 
         try {
             r.put("auto", auto);
             r.put("version", Engine.version(this));
+            r.put("galleryVersion", Gallery.version(this));
         } catch (Exception ignored) {
             // nur bei ungültigem JSON
         }
@@ -177,7 +188,10 @@ public class MainActivity extends Activity implements DownloadService.Listener, 
         try {
             o.put("state", engineState);
             if (engineError != null) o.put("error", engineError);
-            if ("ready".equals(engineState)) o.put("version", Engine.version(this));
+            if ("ready".equals(engineState)) {
+                o.put("version", Engine.version(this));
+                o.put("galleryVersion", Gallery.version(this));
+            }
             o.put("autoUpdate", prefs.getBoolean("autoUpdate", true));
             o.put("nightly", prefs.getBoolean("nightly", false));
             o.put("lastCheck", prefs.getLong("lastUpdateCheck", 0));
@@ -531,6 +545,7 @@ public class MainActivity extends Activity implements DownloadService.Listener, 
             AtomicBoolean c = analyses.get(reqId);
             if (c != null) c.set(true);
             Engine.cancel("an-" + reqId);
+            Gallery.cancel("an-" + reqId + "-g");
         }
 
         @JavascriptInterface

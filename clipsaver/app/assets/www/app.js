@@ -69,9 +69,28 @@
   }
   function resLabel(target) { return target >= 2160 ? '4K' : target + 'p'; }
   function resName(target) { return { 1080: 'Full HD', 1440: '2K', 2160: 'Ultra HD' }[target] || ''; }
+  var PLATFORMS = {
+    tiktok: 'TikTok', youtube: 'YouTube', ads: 'Werbung', instagram: 'Instagram', twitter: 'X', facebook: 'Facebook',
+    reddit: 'Reddit', pinterest: 'Pinterest', snapchat: 'Snapchat', threads: 'Threads', bluesky: 'Bluesky', vimeo: 'Vimeo',
+    twitch: 'Twitch', tumblr: 'Tumblr', linkedin: 'LinkedIn', dailymotion: 'Dailymotion', soundcloud: 'SoundCloud',
+    imgur: 'Imgur', flickr: 'Flickr', vk: 'VK', bilibili: 'Bilibili', kick: 'Kick', '9gag': '9GAG', likee: 'Likee', other: ''
+  };
   function platformName(p) {
-    return { tiktok: 'TikTok', youtube: 'YouTube', ads: 'Werbung' }[p] || (p ? p.charAt(0).toUpperCase() + p.slice(1) : '');
+    if (Object.prototype.hasOwnProperty.call(PLATFORMS, p)) return PLATFORMS[p];
+    return p ? p.charAt(0).toUpperCase() + p.slice(1) : '';
   }
+  // Anmeldung im eingebauten Browser je Plattform (Cookies landen in cookies.txt für yt-dlp und gallery-dl)
+  var LOGINS = {
+    tiktok: { domain: 'tiktok.com', url: 'https://www.tiktok.com/login' },
+    youtube: { domain: 'youtube.com', url: 'https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F' },
+    instagram: { domain: 'instagram.com', url: 'https://www.instagram.com/accounts/login/' },
+    twitter: { domain: 'x.com', url: 'https://x.com/i/flow/login' },
+    facebook: { domain: 'facebook.com', url: 'https://m.facebook.com/login/' },
+    threads: { domain: 'threads.net', url: 'https://www.threads.net/login' },
+    reddit: { domain: 'reddit.com', url: 'https://www.reddit.com/login/' },
+    pinterest: { domain: 'pinterest.com', url: 'https://www.pinterest.com/login/' },
+    snapchat: { domain: 'snapchat.com', url: 'https://accounts.snapchat.com/accounts/login' }
+  };
   var toastTimer;
   function toast(msg) {
     var t = $('#toast');
@@ -88,7 +107,9 @@
     'tt-top': { url: 'https://ads.tiktok.com/business/creativecenter/inspiration/topads/pc/de', name: 'TikTok Top Ads', cls: 'top', icon: 'trend',
       desc: 'Die erfolgreichsten Werbevideos auf TikTok (Creative Center).' },
     'google': { url: 'https://adstransparency.google.com/?region=DE', name: 'Google Anzeigen-Transparenzcenter', cls: 'google', icon: 'search',
-      desc: 'YouTube-Videowerbung und Bild-Anzeigen von Google – nach Werbetreibendem suchen.' }
+      desc: 'YouTube-Videowerbung und Bild-Anzeigen von Google – nach Werbetreibendem suchen.' },
+    'meta': { url: 'https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=DE&media_type=all', name: 'Meta Werbebibliothek', cls: 'meta', icon: 'ad',
+      desc: 'Anzeigen auf Instagram und Facebook – Videos und Bild-Anzeigen.' }
   };
   var S = {
     tab: 'home',
@@ -151,8 +172,8 @@
     var st = S.slots.home;
     var h = '<section class="card hero">'
       + '<h1>Video oder Bild speichern</h1>'
-      + '<p class="muted">TikTok- oder YouTube-Link einfügen – Videos in 1080p, 1440p oder 4K, dazu Fotos, Vorschaubilder und Musik.</p>'
-      + inputRow('home', 'Link einfügen, z. B. https://vm.tiktok.com/…')
+      + '<p class="muted">Link von jeder Plattform einfügen – TikTok, YouTube, Instagram, X, Facebook, Reddit, Pinterest … Videos in 1080p, 1440p oder 4K, Bilder und Galerien in voller Größe.</p>'
+      + inputRow('home', 'Link einfügen – von jeder Seite')
       + '<button class="btn primary big" data-a="analyze" data-slot="home">' + icon('search') + 'Link prüfen</button>'
       + '</section>';
     h += engineBanner();
@@ -160,11 +181,14 @@
     if (!st.result && !st.loading && !st.error) {
       h += '<div class="section-title">Was geht?</div><section class="card">'
         + '<div class="features">'
-        + '<span class="chip"><b>TikTok</b> Videos</span><span class="chip"><b>TikTok</b> Foto-Slideshows</span>'
-        + '<span class="chip"><b>YouTube</b> Videos &amp; Shorts</span><span class="chip"><b>YouTube</b> Community-Bilder</span>'
-        + '<span class="chip"><b>Werbung</b> Video &amp; Bild</span><span class="chip">Vorschaubilder</span>'
-        + '<span class="chip">MP3</span><span class="chip">+ 1000 weitere Seiten</span></div>'
-        + '<p class="muted small" style="margin:14px 0 0">' + icon('info', 'sm') + ' Am schnellsten: In TikTok oder YouTube auf <b>Teilen</b> tippen und <b>ClipSaver</b> wählen.</p>'
+        + '<span class="chip"><b>TikTok</b> Videos &amp; Fotos</span><span class="chip"><b>YouTube</b> Videos, Shorts, Bilder</span>'
+        + '<span class="chip"><b>Instagram</b> Reels, Fotos, Karussells</span><span class="chip"><b>X</b> Videos &amp; Bilder</span>'
+        + '<span class="chip"><b>Facebook</b></span><span class="chip"><b>Reddit</b></span><span class="chip"><b>Pinterest</b></span>'
+        + '<span class="chip"><b>Snapchat</b></span><span class="chip"><b>Threads</b></span><span class="chip"><b>Bluesky</b></span>'
+        + '<span class="chip"><b>Vimeo</b></span><span class="chip"><b>Twitch</b></span><span class="chip"><b>Tumblr</b></span>'
+        + '<span class="chip"><b>Werbung</b> Video &amp; Bild</span><span class="chip">MP3</span><span class="chip">+ 2000 weitere Seiten</span></div>'
+        + '<p class="muted small" style="margin:14px 0 0">' + icon('info', 'sm') + ' Am schnellsten: In jeder App auf <b>Teilen</b> tippen und <b>ClipSaver</b> wählen. '
+        + 'Findet die App auf einer Seite nichts, sammelt „Im Browser suchen“ alle Videos und Bilder, die dort geladen werden.</p>'
         + '</section>';
     }
     return h;
@@ -209,9 +233,13 @@
         + '<div class="skeleton" style="height:170px;margin-top:16px"></div><div class="skeleton" style="height:18px;margin-top:12px;width:70%"></div></section>';
     }
     if (st.error) {
+      var login = st.errorLogin && LOGINS[st.errorLogin];
       return '<section class="card error-card"><div class="error-head">' + icon('alert') + '<span>' + esc(st.error) + '</span></div>'
         + '<div class="row"><button class="btn ghost small" data-a="analyze" data-slot="' + slot + '">' + icon('refresh', 'sm') + 'Nochmal</button>'
         + '<button class="btn ghost small" data-a="browseInput" data-slot="' + slot + '">' + icon('globe', 'sm') + 'Im Browser suchen</button></div>'
+        + (login ? '<div class="row"><button class="btn primary small" data-a="login" data-platform="' + esc(st.errorLogin) + '">' + icon('user', 'sm')
+          + 'Bei ' + esc(platformName(st.errorLogin)) + ' anmelden</button></div>'
+          + '<p class="muted small" style="margin:10px 0 0">Viele Beiträge zeigt ' + esc(platformName(st.errorLogin)) + ' nur angemeldet. Danach den Link einfach nochmal prüfen.</p>' : '')
         + '<p class="muted small" style="margin:12px 0 0">„Im Browser suchen“ öffnet die Seite und sammelt alle Videos und Bilder, die dort geladen werden.</p></section>';
     }
     var r = st.result;
@@ -237,12 +265,18 @@
     return h + '</div>';
   }
 
+  /** Video mit direkten Adressen (eigene Auslese: TikTok, X, Instagram, Webseite) statt yt-dlp-Formaten. */
+  function isDirect(r) {
+    return !r.qualities && r.videos && r.videos.length > 0;
+  }
+
   /** Auswahl 1080p / 1440p / 4K / MP3 für ein Ergebnis. */
   function qualityOptions(r) {
     var opts = [];
-    if (r.source === 'tiktok-web') {
+    if (isDirect(r)) {
       var vids = r.videos || [];
       var max = vids.length ? vids[0].res : 0;
+      if (!max) return [{ key: '1080', label: 'Original', available: true, sub: 'wie auf der Seite' }];
       [1080, 1440, 2160].forEach(function (t) {
         var v = pickDirect(vids, t);
         opts.push({ key: String(t), label: resLabel(t), available: max >= t, sub: max >= t ? (fmtSize(v && v.size) || resName(t)) : 'nicht verfügbar' });
@@ -259,7 +293,7 @@
   }
 
   function maxRes(r) {
-    if (r.source === 'tiktok-web') return (r.videos && r.videos.length) ? r.videos[0].res : 0;
+    if (isDirect(r)) return r.videos[0].res || 0;
     return r.maxRes || 0;
   }
 
@@ -293,47 +327,81 @@
       return '<button class="q' + (st.q === o.key && o.available ? ' sel' : '') + (o.available ? '' : ' off') + '" data-a="quality" data-slot="' + slot + '" data-q="' + o.key + '"'
         + (o.available ? '' : ' aria-disabled="true"') + '><b>' + esc(o.label) + '</b><small>' + esc(o.sub) + '</small></button>';
     }).join('') + '</div>';
+    if (r.note) h += '<p class="note">' + icon('info') + '<span>' + esc(r.note) + '</span></p>';
     if (r.kind === 'video' && mr > 0 && mr < 1080) {
       h += '<p class="note">' + icon('info') + '<span>Dieses Video gibt es nur bis ' + mr + 'p – es wird in der besten verfügbaren Qualität geladen.</span></p>';
     } else if (r.kind === 'video' && mr >= 1080 && mr < 2160) {
       h += '<p class="note info">' + icon('info') + '<span>Höher als ' + (mr >= 1440 ? '1440p' : '1080p') + ' hat ' + esc(platformName(r.platform) || 'die Seite') + ' dieses Video nicht – ausgegraute Stufen gibt es nicht.</span></p>';
     }
-    var label = st.q === 'audio' ? (r.source === 'tiktok-web' ? 'Ton herunterladen' : 'MP3 herunterladen')
-      : 'Herunterladen · ' + (mr > 0 && mr < 1080 ? mr + 'p' : resLabel(parseInt(st.q, 10)));
+    var label = st.q === 'audio' ? (isDirect(r) ? 'Ton herunterladen' : 'MP3 herunterladen')
+      : isDirect(r) && !mr ? 'Herunterladen' : 'Herunterladen · ' + (mr > 0 && mr < 1080 ? mr + 'p' : resLabel(parseInt(st.q, 10)));
     h += '<button class="btn primary big" data-a="downloadVideo" data-slot="' + slot + '">' + icon('download') + esc(label) + '</button>';
     if (r.thumbnail) {
       h += '<div class="row"><button class="btn ghost small" data-a="downloadThumb" data-slot="' + slot + '">' + icon('image', 'sm')
         + (r.platform === 'tiktok' ? 'Titelbild speichern' : 'Vorschaubild speichern') + '</button></div>';
     }
+    if (r.images && r.images.length) {
+      h += '<div class="section-title" style="margin:20px 0 0">' + (r.images.length === 1 ? 'Bild' : r.images.length + ' Bilder') + ' im Beitrag</div>';
+      h += mediaGrid(slot, r) + saveSelectedButton(slot, r);
+    }
     return h + '</section>';
   }
 
-  function resultImages(slot, r) {
+  /** Raster mit Bildern und Videos eines Beitrags zum Auswählen. */
+  function mediaGrid(slot, r) {
     var st = S.slots[slot];
-    var imgs = r.images || [];
+    var items = r.images || [];
     var n = st.sel.filter(Boolean).length;
-    var h = '<section class="card">';
-    h += '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px"><span class="badge ' + esc(r.platform) + '" style="position:static">' + esc(platformName(r.platform)) + '</span>'
-      + '<span class="muted small">' + imgs.length + (imgs.length === 1 ? ' Bild' : ' Bilder') + (r.source === 'youtube-post' ? ' · Community-Beitrag' : ' · Foto-Post') + '</span></div>';
-    h += '<div class="result-title" style="margin-top:8px">' + esc(r.title) + '</div>';
-    if (r.uploader) h += '<div class="meta">' + esc(r.uploader) + '</div>';
-    h += '<div class="grid">' + imgs.map(function (img, i) {
-      var dim = img.width && img.height ? img.width + '×' + img.height : '';
-      return '<button class="tile' + (st.sel[i] ? ' sel' : '') + '" data-a="toggleImg" data-slot="' + slot + '" data-i="' + i + '">'
-        + '<img src="' + esc(img.url) + '" referrerpolicy="no-referrer" loading="lazy" alt="" data-alt="' + esc((img.fallback || [])[0] || '') + '">'
-        + '<span class="check">' + icon('check') + '</span>' + (dim ? '<span class="dim">' + dim + '</span>' : '') + '</button>';
+    var h = '<div class="grid">' + items.map(function (it, i) {
+      var dim = it.width && it.height ? it.width + '×' + it.height : '';
+      var video = it.type === 'video';
+      var inner;
+      if (!video) inner = '<img src="' + esc(it.url) + '" referrerpolicy="no-referrer" loading="lazy" alt="" data-alt="' + esc((it.fallback || [])[0] || '') + '">';
+      else if (it.thumb) inner = '<img src="' + esc(it.thumb) + '" referrerpolicy="no-referrer" loading="lazy" alt="">';
+      else if (it.via === 'files') inner = '<video src="' + esc(it.url) + '" muted playsinline preload="metadata"></video>';
+      else inner = '<div class="ph">' + icon('film') + '</div>';
+      return '<button class="tile' + (st.sel[i] ? ' sel' : '') + '" data-a="toggleImg" data-slot="' + slot + '" data-i="' + i + '">' + inner
+        + (video ? '<span class="kind">Video</span>' : '') + '<span class="check">' + icon('check') + '</span>'
+        + (dim ? '<span class="dim">' + dim + '</span>' : '') + '</button>';
     }).join('') + '</div>';
-    if (imgs.length > 1) {
-      h += '<div class="grid-tools"><button class="link" data-a="selectAll" data-slot="' + slot + '">' + (n === imgs.length ? 'Keine auswählen' : 'Alle auswählen') + '</button>'
+    if (items.length > 1) {
+      h += '<div class="grid-tools"><button class="link" data-a="selectAll" data-slot="' + slot + '">' + (n === items.length ? 'Keine auswählen' : 'Alle auswählen') + '</button>'
         + '<span class="muted small">' + n + ' ausgewählt</span></div>';
     }
-    h += '<button class="btn primary big" data-a="downloadImages" data-slot="' + slot + '"' + (n ? '' : ' disabled') + '>' + icon('download')
-      + (n === 1 ? '1 Bild speichern' : n + ' Bilder speichern') + '</button>';
+    return h;
+  }
+
+  function saveSelectedButton(slot, r) {
+    var st = S.slots[slot];
+    var picked = (r.images || []).filter(function (it, i) { return st.sel[i]; });
+    var videos = picked.filter(function (it) { return it.type === 'video'; }).length;
+    var n = picked.length;
+    var what = videos === 0 ? (n === 1 ? 'Bild' : 'Bilder') : videos === n ? (n === 1 ? 'Video' : 'Videos') : (n === 1 ? 'Datei' : 'Dateien');
+    return '<button class="btn primary big" data-a="downloadImages" data-slot="' + slot + '"' + (n ? '' : ' disabled') + '>' + icon('download')
+      + n + ' ' + what + ' speichern</button>';
+  }
+
+  function resultImages(slot, r) {
+    var imgs = r.images || [];
+    var videos = imgs.filter(function (it) { return it.type === 'video'; }).length;
+    var pics = imgs.length - videos;
+    var counts = [];
+    if (pics) counts.push(pics + (pics === 1 ? ' Bild' : ' Bilder'));
+    if (videos) counts.push(videos + (videos === 1 ? ' Video' : ' Videos'));
+    var what = { 'youtube-post': 'Community-Beitrag', 'tiktok-web': 'Foto-Post' }[r.source];
+    var h = '<section class="card">';
+    h += '<div style="display:flex;gap:10px;align-items:center;margin-bottom:4px">'
+      + (platformName(r.platform) ? '<span class="badge ' + esc(r.platform) + '" style="position:static">' + esc(platformName(r.platform)) + '</span>' : '')
+      + '<span class="muted small">' + counts.join(' · ') + (what ? ' · ' + what : '') + '</span></div>';
+    h += '<div class="result-title" style="margin-top:8px">' + esc(r.title) + '</div>';
+    if (r.uploader) h += '<div class="meta">' + esc(r.uploader) + '</div>';
+    if (r.note) h += '<p class="note">' + icon('info') + '<span>' + esc(r.note) + '</span></p>';
+    h += mediaGrid(slot, r) + saveSelectedButton(slot, r);
     var extra = '';
     if (r.audioUrl) extra += '<button class="btn ghost small" data-a="downloadAudio" data-slot="' + slot + '">' + icon('music', 'sm') + 'Musik speichern</button>';
     if (r.videoId) extra += '<button class="btn ghost small" data-a="openVideo" data-slot="' + slot + '">' + icon('film', 'sm') + 'Video im Beitrag laden</button>';
     if (extra) h += '<div class="row">' + extra + '</div>';
-    h += '<p class="muted small" style="margin:12px 0 0">Bilder werden in voller Auflösung gespeichert (Galerie → Bilder/ClipSaver).</p>';
+    h += '<p class="muted small" style="margin:12px 0 0">Gespeichert wird in voller Auflösung (Galerie → Bilder bzw. Filme/ClipSaver).</p>';
     return h + '</section>';
   }
 
@@ -364,7 +432,7 @@
   // ---------- Werbung ----------
   function viewAds() {
     var h = '<section class="card hero"><h1>Werbung speichern</h1>'
-      + '<p class="muted">Video- und Bild-Anzeigen von TikTok und YouTube: Link der Anzeige einfügen oder unten in einer Werbebibliothek suchen.</p>'
+      + '<p class="muted">Video- und Bild-Anzeigen von TikTok, YouTube, Instagram, Facebook und anderen: Link der Anzeige einfügen oder unten in einer Werbebibliothek suchen.</p>'
       + inputRow('ads', 'Link der Anzeige einfügen')
       + '<button class="btn primary big" data-a="analyze" data-slot="ads">' + icon('search') + 'Werbung laden</button></section>';
     h += slotResult('ads');
@@ -377,6 +445,7 @@
     h += '<details class="card help"><summary>So kommst du an den Link einer Anzeige ' + icon('chevron') + '</summary><ol>'
       + '<li><b>TikTok:</b> Bei der Anzeige auf <b>Teilen</b> → <b>Link kopieren</b> (oder direkt <b>ClipSaver</b> wählen). Viele TikTok-Anzeigen sind normale Beiträge des Werbetreibenden.</li>'
       + '<li><b>YouTube:</b> Viele Werbespots sind (oft nicht gelistete) YouTube-Videos – deren Link funktioniert wie jedes Video. Sonst bei der Werbung auf <b>ⓘ</b> tippen, den Werbetreibenden merken und ihn im <b>Google Anzeigen-Transparenzcenter</b> suchen.</li>'
+      + '<li><b>Instagram/Facebook:</b> Bei der Anzeige auf <b>⋯</b> bzw. <b>Teilen</b> → <b>Link kopieren</b>; sonst den Werbetreibenden in der <b>Meta Werbebibliothek</b> suchen.</li>'
       + '<li><b>Bild-Werbung:</b> In der Werbebibliothek die Anzeige öffnen – der Browser sammelt alle Bilder und Videos; unten auf „… gefunden – anzeigen“ tippen und auswählen.</li>'
       + '</ol></details>';
     return h;
@@ -454,10 +523,11 @@
       }).join('') + '</div></section>';
 
     h += '<div class="section-title">Download-Engine</div><section class="card">'
-      + '<div class="kv"><span>yt-dlp</span><span>' + esc(e.version || (e.state === 'init' ? 'wird eingerichtet …' : '–')) + '</span>'
+      + '<div class="kv"><span>yt-dlp</span><span>' + esc(e.version || (e.state === 'init' ? 'wird eingerichtet …' : '–')) + ' <span class="muted">(Videos)</span></span>'
+      + (e.galleryVersion ? '<span>gallery-dl</span><span>' + esc(e.galleryVersion) + ' <span class="muted">(Bilder &amp; Galerien)</span></span>' : '')
       + '<span>Status</span><span>' + (e.state === 'ready' ? 'bereit' : e.state === 'error' ? 'Fehler: ' + esc(e.error || '') : 'startet …') + '</span>'
       + (e.lastCheck ? '<span>Geprüft</span><span>' + fmtDate(e.lastCheck) + '</span>' : '') + '</div>'
-      + '<p class="muted small" style="margin:10px 0 0">YouTube und TikTok ändern ihre Seiten oft. Wenn etwas nicht mehr klappt, hilft fast immer ein Update.</p>'
+      + '<p class="muted small" style="margin:10px 0 0">Plattformen ändern ihre Seiten oft. Wenn etwas nicht mehr klappt, hilft fast immer ein Update (holt yt-dlp und gallery-dl neu).</p>'
       + '<button class="btn ghost big" data-a="updateEngine" id="updBtn">' + icon('refresh') + 'Jetzt aktualisieren</button>'
       + '<div class="set-row" style="margin-top:6px"><span>Automatisch aktualisieren<small>einmal täglich beim Start</small></span>'
       + '<button class="switch' + (e.autoUpdate !== false ? ' on' : '') + '" data-a="toggleAuto" aria-label="Automatisch aktualisieren"></button></div>'
@@ -466,14 +536,15 @@
 
     var d = (S.cookies.domains || []);
     h += '<div class="section-title">Anmeldung (optional)</div><section class="card">'
-      + '<p class="muted small" style="margin:0 0 10px">Nur nötig für private oder altersbeschränkte Inhalte oder wenn YouTube fragt „Bist du ein Bot?“. '
-      + 'Gespeichert werden nur Anmelde-Cookies, nur auf diesem Handy.</p>'
+      + '<p class="muted small" style="margin:0 0 10px">Nötig, wenn eine Plattform Beiträge nur angemeldet zeigt (oft bei Instagram und Facebook), für private oder '
+      + 'altersbeschränkte Inhalte oder wenn YouTube fragt „Bist du ein Bot?“. Gespeichert werden nur Anmelde-Cookies, nur auf diesem Handy.</p>'
       + '<div class="kv"><span>Angemeldet</span><span>' + (d.length ? esc(d.join(', ')) : 'nirgends') + '</span></div>'
-      + '<div class="row"><button class="btn ghost small" data-a="login" data-domain="tiktok.com">' + icon('user', 'sm') + 'Bei TikTok anmelden</button>'
-      + '<button class="btn ghost small" data-a="login" data-domain="youtube.com">' + icon('user', 'sm') + 'Bei YouTube anmelden</button></div>'
+      + '<div class="row">' + ['instagram', 'tiktok', 'twitter', 'youtube', 'facebook', 'reddit'].map(function (p) {
+        return '<button class="btn ghost small" data-a="login" data-platform="' + p + '">' + icon('user', 'sm') + esc(platformName(p)) + '</button>';
+      }).join('') + '</div>'
       + '<div class="row"><button class="btn ghost small" data-a="importCookies">' + icon('folder', 'sm') + 'cookies.txt importieren</button>'
       + (d.length ? '<button class="btn ghost small" data-a="clearCookies">' + icon('trash', 'sm') + 'Abmelden</button>' : '') + '</div>'
-      + '<p class="muted small" style="margin:10px 0 0">Google blockiert die Anmeldung manchmal in eingebauten Browsern. Dann am PC mit einer Browser-Erweiterung eine <b>cookies.txt</b> von youtube.com exportieren und hier importieren.</p></section>';
+      + '<p class="muted small" style="margin:10px 0 0">Für andere Seiten oder wenn Google die Anmeldung im eingebauten Browser blockiert: am PC mit einer Browser-Erweiterung eine <b>cookies.txt</b> exportieren und hier importieren.</p></section>';
 
     h += '<div class="section-title">Speicherorte</div><section class="card"><div class="kv">'
       + '<span>' + icon('film', 'sm') + '</span><span>Videos → <b>Filme/ClipSaver</b></span>'
@@ -513,6 +584,7 @@
     st.loading = true;
     st.result = null;
     st.error = null;
+    st.errorLogin = null;
     render();
     scrollToResult(slot);
     A.analyze(st.req, text);
@@ -533,12 +605,12 @@
 
   function downloadVideo(slot) {
     var st = S.slots[slot], r = st.result, q = st.q || '1080';
-    if (r.source === 'tiktok-web') {
+    if (isDirect(r)) {
       if (q === 'audio') return downloadAudio(slot);
       var v = pickDirect(r.videos || [], parseInt(q, 10));
       if (!v) return toast('Kein Video gefunden');
       enqueue({ kind: 'files', title: r.title, thumb: r.thumbnail, platform: r.platform, pageUrl: r.pageUrl, headers: r.headers,
-        items: [{ urls: [v.url].concat(v.fallback || []), type: 'video', name: r.title + ' (' + (v.res >= 2160 ? '4K' : v.res + 'p') + ')' }] });
+        items: [{ urls: [v.url].concat(v.fallback || []), type: 'video', name: r.title + (v.res ? ' (' + (v.res >= 2160 ? '4K' : v.res + 'p') + ')' : '') }] });
       return;
     }
     // Exakte Format-IDs aus der Prüfung; bei Videos unter 1080p die beste vorhandene Fassung
@@ -564,14 +636,33 @@
       items: [{ urls: [r.thumbnail].concat(r.thumbnailFallback || []), type: 'image', name: r.title + ' (Vorschaubild)' }] });
   }
 
+  /**
+   * Ausgewählte Bilder/Videos laden – je nach Herkunft direkt ("files"), über gallery-dl ("gdl", kennt die
+   * nötigen Header der Seite) oder über yt-dlp (Videos, die gallery-dl an yt-dlp weiterreicht).
+   */
   function downloadImages(slot) {
     var st = S.slots[slot], r = st.result;
-    var picked = (r.images || []).map(function (img, i) { return { img: img, i: i }; }).filter(function (x) { return st.sel[x.i]; });
+    var all = r.images || [];
+    var picked = all.map(function (it, i) { return { it: it, i: i }; }).filter(function (x) { return st.sel[x.i]; });
     if (!picked.length) return;
-    enqueue({ kind: 'files', title: r.title, thumb: r.thumbnail, platform: r.platform, pageUrl: r.pageUrl, headers: r.headers,
-      items: picked.map(function (x) {
-        return { urls: [x.img.url].concat(x.img.fallback || []), type: 'image', name: r.title + (r.images.length > 1 ? ' (' + (x.i + 1) + ')' : '') };
-      }) });
+    var name = function (x) { return r.title + (all.length > 1 ? ' (' + (x.i + 1) + ')' : ''); };
+    var base = { title: r.title, thumb: r.thumbnail, platform: r.platform, pageUrl: r.pageUrl };
+    var files = picked.filter(function (x) { return (x.it.via || 'files') === 'files'; });
+    var gdl = picked.filter(function (x) { return x.it.via === 'gdl'; });
+    var ytdl = picked.filter(function (x) { return x.it.via === 'ytdlp'; });
+    var n = 0;
+    if (files.length && enqueue(Object.assign({ kind: 'files', headers: r.headers, items: files.map(function (x) {
+      return { urls: [x.it.url].concat(x.it.fallback || []), type: x.it.type || 'image', name: name(x) };
+    }) }, base), true)) n++;
+    if (gdl.length) {
+      var allGdl = all.filter(function (it) { return it.via === 'gdl'; }).length;
+      var range = r.gdlRange && gdl.length < allGdl ? gdl.map(function (x) { return x.it.index; }).join(',') : null;
+      if (enqueue(Object.assign({ kind: 'gdl', url: r.gdlUrl, range: range, count: range ? gdl.length : allGdl }, base), true)) n++;
+    }
+    ytdl.forEach(function (x) {
+      if (enqueue(Object.assign({}, base, { kind: 'ytdlp', url: x.it.url, quality: S.quality, title: name(x) }), true)) n++;
+    });
+    if (n) toast('Download gestartet – siehe „Downloads“');
   }
 
   function downloadPlaylist(slot) {
@@ -775,7 +866,7 @@
       var j = S.jobs[el.dataset.id];
       if (!j) return;
       var copy = {};
-      ['kind', 'url', 'infoFile', 'quality', 'title', 'thumb', 'platform', 'pageUrl', 'headers', 'items'].forEach(function (k) { if (j[k] != null) copy[k] = j[k]; });
+      ['kind', 'url', 'infoFile', 'quality', 'format', 'title', 'thumb', 'platform', 'pageUrl', 'headers', 'items', 'range', 'count'].forEach(function (k) { if (j[k] != null) copy[k] = j[k]; });
       delete S.jobs[j.id];
       enqueue(copy);
       render();
@@ -824,9 +915,8 @@
       if (S.engine.nightly) toast('Beim nächsten Update wird die Nightly-Version geladen');
     },
     login: function (el) {
-      var d = el.dataset.domain;
-      var url = d === 'youtube.com' ? 'https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F' : 'https://www.tiktok.com/login';
-      if (A) A.browse(url, 'login', d);
+      var l = LOGINS[el.dataset.platform];
+      if (l && A) A.browse(l.url, 'login', l.domain);
     },
     importCookies: function () { if (A) A.importCookies(); },
     clearCookies: function () { if (A) { A.clearCookies(); S.cookies = { domains: [] }; render(); toast('Abgemeldet'); } },
@@ -879,6 +969,7 @@
         st.loading = false;
         if (!r || !r.ok) {
           st.error = (r && r.error) || 'Unbekannter Fehler';
+          st.errorLogin = r && r.login;
         } else {
           st.result = r;
           st.q = r.kind === 'playlist' ? S.quality : defaultQuality(r);
@@ -947,6 +1038,7 @@
     },
     onEngineUpdate: function (r) {
       if (r.version) S.engine.version = r.version;
+      if (r.galleryVersion) S.engine.galleryVersion = r.galleryVersion;
       if (r.ok) S.engine.lastCheck = Date.now();
       if (!r.auto || r.updated) {
         toast(r.ok ? (r.updated ? 'Engine aktualisiert auf ' + r.version : 'Engine ist aktuell (' + r.version + ')') : 'Update fehlgeschlagen: ' + r.error);

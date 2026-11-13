@@ -12,10 +12,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TOOLS="$ROOT/.build-tools"
 OUT="$ROOT/build"
-VERSION_CODE="${VERSION_CODE:-1}"
-VERSION_NAME="${VERSION_NAME:-1.0}"
+VERSION_CODE="${VERSION_CODE:-2}"
+VERSION_NAME="${VERSION_NAME:-1.1}"
 ABIS="${ABIS:-arm64-v8a armeabi-v7a}"
 YTDL_VERSION="0.18.1"  # youtubedl-android: yt-dlp + Python + QuickJS + FFmpeg fürs Handy
+# gallery-dl (Bilder/Galerien von 300+ Seiten) mit Abhängigkeiten; läuft mit dem Python aus youtubedl-android
+WHEELS="gallery-dl==1.32.19 requests==2.34.2 urllib3==2.8.0 idna==3.20 charset-normalizer==3.5.2 certifi==2026.10.23"
 MIRRORS="https://maven-central.storage-download.googleapis.com/maven2 https://repo1.maven.org/maven2"
 
 fetch() { # pfad-im-repo ziel
@@ -54,8 +56,13 @@ fetch com/fasterxml/jackson/core/jackson-annotations/2.11.4/jackson-annotations-
 fetch commons-io/commons-io/2.5/commons-io-2.5.jar "$LIBS/commons-io.jar"
 fetch org/apache/commons/commons-compress/1.12/commons-compress-1.12.jar "$LIBS/commons-compress.jar"
 
+python3 "$ROOT/tools/fetch_wheels.py" "$TOOLS/wheels" $WHEELS
+
 rm -rf "$OUT"
 mkdir -p "$OUT/classes" "$OUT/gen" "$OUT/aar" "$OUT/ytdl-res/raw" "$ROOT/release"
+cp -r "$ROOT/app/assets" "$OUT/assets"
+mkdir -p "$OUT/assets/gdl"
+cp "$TOOLS"/wheels/*.whl "$OUT/assets/gdl/"
 
 echo "Bibliotheken entpacken …"
 for a in library common ffmpeg; do
@@ -71,7 +78,7 @@ echo "Ressourcen …"
 "$TOOLS/aapt2" compile --dir "$ROOT/app/res" -o "$OUT/res.zip"
 "$TOOLS/aapt2" compile --dir "$OUT/ytdl-res" -o "$OUT/ytdl-res.zip"
 "$TOOLS/aapt2" link -o "$OUT/base.apk" -I "$TOOLS/android-framework.jar" \
-  --manifest "$ROOT/app/AndroidManifest.xml" -A "$ROOT/app/assets" \
+  --manifest "$ROOT/app/AndroidManifest.xml" -A "$OUT/assets" \
   --min-sdk-version 24 --target-sdk-version 34 \
   --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" \
   --java "$OUT/gen" --extra-packages com.yausername.youtubedl_android \

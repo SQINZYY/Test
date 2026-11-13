@@ -104,6 +104,16 @@ main { padding: 16px; max-width: 680px; margin: 0 auto; }
 .badge.br { bottom: 10px; right: 10px; }
 .badge.tiktok { background: linear-gradient(90deg, rgba(34, 211, 238, .85), rgba(255, 61, 110, .85)); }
 .badge.youtube { background: rgba(230, 33, 23, .9); }
+.badge.instagram { background: linear-gradient(45deg, #f58529, #dd2a7b 50%, #8134af); }
+.badge.twitter, .badge.threads { background: #000; border: 1px solid rgba(255, 255, 255, .25); }
+.badge.facebook { background: #1877f2; }
+.badge.reddit { background: #ff4500; }
+.badge.pinterest { background: #e60023; }
+.badge.snapchat { background: #fffc00; color: #111; }
+.badge.bluesky { background: #0085ff; }
+.badge.vimeo { background: #1ab7ea; }
+.badge.twitch { background: #9146ff; }
+.badge.tumblr { background: #34526f; }
 .result-title { font-size: 17px; font-weight: 600; line-height: 1.3; word-break: break-word; }
 .meta { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
 
@@ -151,6 +161,7 @@ main { padding: 16px; max-width: 680px; margin: 0 auto; }
 .libicon.tt { background: linear-gradient(135deg, #22d3ee, #ff3d6e); }
 .libicon.top { background: linear-gradient(135deg, #f59e0b, #ff3d6e); }
 .libicon.google { background: linear-gradient(135deg, #4f8cff, #34d399); }
+.libicon.meta { background: linear-gradient(135deg, #1877f2, #dd2a7b); }
 .libcard b { display: block; font-size: 15.5px; }
 .libcard small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; line-height: 1.35; }
 .libcard .go { margin-left: auto; color: var(--muted); }

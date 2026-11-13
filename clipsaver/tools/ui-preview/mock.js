@@ -45,6 +45,25 @@
       qualities: [{ target: 1080, available: false, res: 480 }, { target: 1440, available: false, res: 480 }, { target: 2160, available: false, res: 480 }]
     },
     error: { ok: false, error: 'Das Video ist privat.' },
+    login: { ok: false, error: 'Diese Seite zeigt den Beitrag nur angemeldet. Melde dich unter „Mehr → Anmeldung“ an.', login: 'instagram', url: 'https://www.instagram.com/p/X/' },
+    tweet: {
+      ok: true, source: 'ytdlp', platform: 'twitter', kind: 'video', title: 'Max - Konzert gestern, Video und zwei Fotos 🎸', uploader: 'Max', duration: 42,
+      pageUrl: 'https://x.com/max/status/1932498346298290497', url: 'https://x.com/max/status/1932498346298290497',
+      thumbnail: svg(1280, 720, '#111', '#334155', 'X-Video'), maxRes: 1080, infoFile: '/t.json', audioSize: 700000,
+      qualities: [{ target: 1080, available: true, res: 1080, size: 21000000, format: 'http-2176+0' }, { target: 1440, available: false, res: 1080 }, { target: 2160, available: false, res: 1080 }],
+      headers: {}, images: [
+        { type: 'image', url: svg(2048, 1365, '#f97316', '#be123c', 'Foto 1'), width: 2048, height: 1365, via: 'files', fallback: [] },
+        { type: 'image', url: svg(1200, 1600, '#0ea5e9', '#4338ca', 'Foto 2'), width: 1200, height: 1600, via: 'files', fallback: [] }]
+    },
+    carousel: {
+      ok: true, source: 'gallery-dl', platform: 'instagram', kind: 'images', title: 'Sommer am Meer 🌊 Teil 1', uploader: '@reise.tagebuch',
+      pageUrl: 'https://www.instagram.com/p/CxAbC123/', gdlUrl: 'https://www.instagram.com/p/CxAbC123/', gdlRange: true,
+      images: [
+        { type: 'image', url: svg(1080, 1350, '#f58529', '#dd2a7b', '1'), width: 1080, height: 1350, via: 'gdl', index: 1 },
+        { type: 'video', url: 'https://example.com/reel.mp4', thumb: svg(1080, 1920, '#8134af', '#dd2a7b', 'Reel'), width: 1080, height: 1920, via: 'gdl', index: 2 },
+        { type: 'image', url: svg(1080, 1350, '#22d3ee', '#0f766e', '3'), width: 1080, height: 1350, via: 'gdl', index: 3 }],
+      thumbnail: svg(1080, 1350, '#f58529', '#dd2a7b', '1')
+    },
     ads: { ok: true, kind: 'browse', why: 'ads', url: 'https://library.tiktok.com/ads', message: 'Werbebibliothek erkannt – die Seite öffnet sich im Browser.' }
   };
   var FOUND = {
@@ -71,6 +90,9 @@
   window.__mock = { results: RESULTS, setClipboard: function (t) { clipboard = t; } };
 
   function pick(text) {
+    if (/x\.com/.test(text)) return RESULTS.tweet;
+    if (/instagram\.com\/p\/X/.test(text)) return RESULTS.login;
+    if (/instagram/.test(text)) return RESULTS.carousel;
     if (/photo/.test(text)) return RESULTS.photo;
     if (/post/.test(text)) return RESULTS.post;
     if (/playlist|list=/.test(text)) return RESULTS.playlist;
@@ -86,7 +108,7 @@
     save: function (k, v) { localStorage.setItem(k, v); },
     getClipboard: function () { return clipboard; },
     appVersion: function () { return '1.0'; },
-    engineInfo: function () { return JSON.stringify({ state: 'ready', version: '2026.10.20', autoUpdate: true, nightly: false, lastCheck: Date.now() - 3600e3 }); },
+    engineInfo: function () { return JSON.stringify({ state: 'ready', version: '2026.10.20', galleryVersion: '1.32.19', autoUpdate: true, nightly: false, lastCheck: Date.now() - 3600e3 }); },
     analyze: function (req, text) { setTimeout(function () { CS.onAnalyzed(req, pick(text)); }, 400); },
     cancelAnalyze: function () {},
     enqueue: function (json) {

@@ -40,8 +40,9 @@ import java.util.regex.Pattern;
  * Arbeitet die Download-Warteschlange nacheinander ab – als Vordergrund-Dienst mit Benachrichtigung,
  * damit große 4K-Downloads auch weiterlaufen, wenn die App im Hintergrund ist.
  *
- * Auftrag (JSON): kind "ytdlp" (Video/Ton über yt-dlp: url, quality, infoFile, headers) oder
- * kind "files" (direkte Dateien, z. B. TikTok-Fotos oder Medien aus dem Browser: items[{urls[], type, name}], headers).
+ * Auftrag (JSON): kind "ytdlp" (Video/Ton über yt-dlp: url, quality, infoFile, headers),
+ * kind "files" (direkte Dateien, z. B. TikTok-Fotos oder Medien aus dem Browser: items[{urls[], type, name}], headers) oder
+ * kind "gdl" (Bilder/Galerien über gallery-dl: url, range "1,3,5" oder null für alle, count).
  */
 public class DownloadService extends Service {
 
@@ -103,6 +104,7 @@ public class DownloadService extends Service {
         if (id.equals(runningId)) {
             cancelRunning = true;
             Engine.cancel(id);
+            Gallery.cancel(id);
             HttpURLConnection c = currentConnection;
             if (c != null) c.disconnect();
         }
@@ -268,6 +270,7 @@ public class DownloadService extends Service {
         String error = null;
         try {
             if ("ytdlp".equals(job.optString("kind"))) runYtDlp(job, dir, results);
+            else if ("gdl".equals(job.optString("kind"))) runGallery(job, dir, results);
             else error = runFiles(job, dir, results);
         } catch (Throwable e) {
             error = cancelRunning ? null : Engine.friendlyError(e);
@@ -341,6 +344,33 @@ public class DownloadService extends Service {
         update(job, "Wird gespeichert …", 1, true);
         Uri uri = Saver.save(this, r.file, name, mime);
         results.add(saved(job, uri, mime, name, label));
+    }
+
+    // ---- gallery-dl ----
+
+    private void runGallery(final JSONObject job, File dir, List<JSONObject> results) throws Exception {
+        final int count = Math.max(1, job.optInt("count", 1));
+        final int[] done = {0};
+        update(job, "Wird geladen …", -1, true);
+        String range = job.isNull("range") ? null : job.optString("range", null);
+        List<File> files = Gallery.download(this, job.optString("url"), range, dir, job.optString("id"), new Gallery.FileDone() {
+            @Override
+            public void onFile(File f) {
+                done[0]++;
+                update(job, (count > 1 ? "Datei " + done[0] + " von " + count : "Datei geladen"), Math.min(1.0, (double) done[0] / count), true);
+            }
+        });
+        if (cancelRunning) return;
+        String title = job.optString("title", "ClipSaver");
+        int i = 0;
+        for (File f : files) {
+            String mime = Saver.mimeOf(f.getName());
+            if (mime.equals("application/octet-stream")) continue; // z. B. Metadaten, keine Medien
+            i++;
+            String name = title + (files.size() > 1 ? " (" + i + ")" : "");
+            Uri uri = Saver.save(this, f, name, mime);
+            results.add(saved(job, uri, mime, name, null));
+        }
     }
 
     // ---- direkte Dateien ----

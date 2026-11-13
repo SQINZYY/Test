@@ -59,6 +59,14 @@ const server = http.createServer((req, res) => {
   await shot('07-playlist');
   await analyze('https://www.youtube.com/watch?v=privat');
   await shot('08-error');
+  await analyze('https://x.com/max/status/1932498346298290497');
+  await tap('[data-a="toggleImg"][data-i="0"]');
+  await shot('08b-x-video-und-bilder');
+  await analyze('https://www.instagram.com/p/CxAbC123/');
+  await tap('[data-a="downloadImages"]');
+  await shot('08c-instagram-galerie');
+  await analyze('https://www.instagram.com/p/X/');
+  await shot('08d-anmelden');
   await page.click('[data-tab="ads"]');
   await shot('09-ads');
   await tap('[data-a="lib"][data-lib="google"]');

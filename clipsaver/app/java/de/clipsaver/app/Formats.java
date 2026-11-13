@@ -131,10 +131,9 @@ final class Formats {
         String key = Json.str(info, "extractor_key", Json.str(info, "ie_key", "")).toLowerCase(Locale.ROOT);
         if (key.startsWith("youtube")) return "youtube";
         if (key.startsWith("tiktok")) return "tiktok";
-        String url = Json.str(info, "webpage_url", "");
-        if (Links.isYouTube(url)) return "youtube";
-        if (Links.isTikTok(url)) return "tiktok";
-        return key.length() > 0 ? key : "other";
+        String byUrl = Links.platform(Json.str(info, "webpage_url", Json.str(info, "original_url", "")));
+        if (!"other".equals(byUrl) && !"ads".equals(byUrl)) return byUrl;
+        return key.length() > 0 && !key.equals("generic") ? key : "other";
     }
 
     static boolean hasVideo(JSONObject f) {

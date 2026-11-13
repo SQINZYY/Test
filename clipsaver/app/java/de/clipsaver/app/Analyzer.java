@@ -4,22 +4,30 @@ import android.content.Context;
 
 import com.yausername.youtubedl_android.YoutubeDL;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Prüft einen eingefügten Link und liefert, was sich daraus laden lässt (Video mit Qualitätsstufen,
- * Bilder, Playlist oder "im Browser öffnen"). Reihenfolge je Plattform:
+ * Bilder, Galerie, Playlist oder "im Browser öffnen"). Reihenfolge je Plattform:
  * <ul>
- *   <li>TikTok-Video: yt-dlp → eigene Auslese der Seite → unsichtbarer Browser</li>
- *   <li>TikTok-Foto-Post: eigene Auslese → unsichtbarer Browser</li>
+ *   <li>TikTok-Video: yt-dlp → eigene Auslese der Seite → gallery-dl → unsichtbarer Browser</li>
+ *   <li>TikTok-Foto-Post: eigene Auslese → gallery-dl → unsichtbarer Browser</li>
  *   <li>YouTube-Video/Short: yt-dlp</li>
  *   <li>YouTube-Community-Beitrag: eigene Auslese → unsichtbarer Browser</li>
  *   <li>Werbebibliotheken: eingebauter Browser mit Medien-Erkennung</li>
- *   <li>alle anderen Seiten: yt-dlp (über 1000 Seiten), sonst Browser</li>
+ *   <li>alle anderen Seiten (Instagram, X, Facebook, Reddit, Pinterest …): gleichzeitig yt-dlp (Videos, über 1800
+ *       Seiten), gallery-dl (Bilder und Galerien, über 300 Seiten) und bei X/Instagram die eigene Auslese ohne
+ *       Anmeldung; danach Bilder/Video aus den Meta-Angaben der Seite; zuletzt der Browser</li>
  * </ul>
  */
 final class Analyzer {
@@ -35,6 +43,10 @@ final class Analyzer {
             + "if(!e)return null;var d=JSON.parse(e.textContent).__DEFAULT_SCOPE__['webapp.video-detail'];"
             + "return d&&d.itemInfo&&d.itemInfo.itemStruct?JSON.stringify(d.itemInfo.itemStruct):null}catch(x){return null}})()";
     static final String YT_JS = "(function(){try{return window.ytInitialData?JSON.stringify(window.ytInitialData):null}catch(x){return null}})()";
+
+    private static final ExecutorService POOL = Executors.newCachedThreadPool();
+    /** Plattformen, die Beiträge oft nur angemeldet zeigen: Fehlermeldung bekommt einen Anmelde-Knopf */
+    private static final String[] LOGIN_PLATFORMS = {"instagram", "facebook", "twitter", "threads", "tiktok", "reddit", "snapchat", "pinterest"};
 
     static final class Canceled extends Exception {
         Canceled() {
@@ -58,15 +70,102 @@ final class Analyzer {
                 if (Links.youTubePostId(url) != null) return youTubePost(c, url, processId, cancel, grabber);
                 return ytDlp(c, url, processId);
             default:
-                try {
-                    return ytDlp(c, url, processId);
-                } catch (YoutubeDL.CanceledException e) {
-                    throw e;
-                } catch (Exception e) {
-                    check(cancel);
-                    return browse(url, "other", "Hier wurde kein Video erkannt (" + Engine.friendlyError(e)
-                            + "). Im Browser öffnen, um Videos und Bilder der Seite zu finden?");
+                return universal(c, url, processId, cancel);
+        }
+    }
+
+    /** Jede andere Plattform: alle Ausleser gleichzeitig, dann zusammenführen. */
+    private static JSONObject universal(final Context c, String input, final String processId, AtomicBoolean cancel) throws Exception {
+        String url = input;
+        if (Links.isShortener(url)) {
+            try {
+                url = new Http().get(url, null).url;
+            } catch (Exception ignored) {
+                // yt-dlp und gallery-dl folgen Kurzlinks auch selbst
+            }
+        }
+        check(cancel);
+        final String target = url;
+        final String platform = Links.platform(target);
+        Future<JSONObject> video = POOL.submit(new Callable<JSONObject>() {
+            @Override
+            public JSONObject call() throws Exception {
+                return ytDlp(c, target, processId);
+            }
+        });
+        Future<JSONObject> gallery = POOL.submit(new Callable<JSONObject>() {
+            @Override
+            public JSONObject call() throws Exception {
+                return Gallery.list(c, target, processId + "-g");
+            }
+        });
+        Future<JSONObject> own = null;
+        final String tweet = Links.tweetId(target);
+        final String insta = Links.instagramCode(target);
+        if (tweet != null) {
+            own = POOL.submit(new Callable<JSONObject>() {
+                @Override
+                public JSONObject call() throws Exception {
+                    return Twitter.extract(tweet, new Http());
                 }
+            });
+        } else if (insta != null) {
+            own = POOL.submit(new Callable<JSONObject>() {
+                @Override
+                public JSONObject call() throws Exception {
+                    return Instagram.extract(insta, http(c, "instagram.com", "https://www.instagram.com/"));
+                }
+            });
+        }
+        String[] errors = new String[4];
+        JSONObject v = await(video, cancel, processId, errors, 0);
+        JSONObject g = await(gallery, cancel, processId, errors, 1);
+        JSONObject o = own == null ? null : await(own, cancel, processId, errors, 2);
+        JSONObject merged = Results.merge(v, Results.richer(o, g));
+        if (merged != null) return ok(merged);
+
+        // Letzter Versuch ohne Ausleser: Bild/Video aus den Meta-Angaben der Seite
+        try {
+            JSONObject page = PageMedia.extract(target, http(c, Links.host(target), target));
+            JSONArray embeds = page.optJSONArray("embeds");
+            if (Results.count(page) == 0 && embeds != null && embeds.length() > 0) {
+                // eingebetteter Player (YouTube, Vimeo …): den Player-Link mit yt-dlp versuchen
+                return ytDlp(c, embeds.getString(0), processId);
+            }
+            if (Results.count(page) > 0) return ok(page);
+        } catch (YoutubeDL.CanceledException e) {
+            throw e;
+        } catch (Exception e) {
+            errors[3] = e.getMessage();
+        }
+        check(cancel);
+        String message = Results.pickError(errors[2], errors[0], errors[1]);
+        JSONObject err = error(message == null || message.equals("Dieser Link wird nicht unterstützt.")
+                ? "Hier wurden keine Videos oder Bilder gefunden." : message);
+        err.put("url", target);
+        for (String p : LOGIN_PLATFORMS) {
+            if (p.equals(platform)) err.put("login", platform);
+        }
+        return err;
+    }
+
+    /** Wartet auf einen Ausleser; Fehler landen in errors[i], Abbruch beendet alle Prozesse. */
+    private static JSONObject await(Future<JSONObject> f, AtomicBoolean cancel, String processId, String[] errors, int i) throws Exception {
+        while (true) {
+            if (cancel.get()) {
+                Engine.cancel(processId);
+                Gallery.cancel(processId + "-g");
+                throw new Canceled();
+            }
+            try {
+                return f.get(200, java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (java.util.concurrent.TimeoutException e) {
+                // weiter warten
+            } catch (ExecutionException e) {
+                Throwable t = e.getCause();
+                errors[i] = i == 0 ? Engine.friendlyError(t) : t.getMessage();
+                return null;
+            }
         }
     }
 
@@ -98,6 +197,14 @@ final class Analyzer {
             return ok(TikTok.extract(resolved, http));
         } catch (Exception e) {
             if (first == null) first = e;
+        }
+        check(cancel);
+        try {
+            return ok(Gallery.list(c, resolved, processId + "-g"));
+        } catch (InterruptedException e) {
+            throw new Canceled();
+        } catch (Exception ignored) {
+            // weiter mit dem unsichtbaren Browser
         }
         check(cancel);
         String id = Links.tikTokId(resolved);

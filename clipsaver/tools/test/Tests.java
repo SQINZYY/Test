@@ -35,6 +35,12 @@ public class Tests {
         sniffer();
         cookies();
         httpRedirectCookies();
+        linksPlatforms();
+        twitter();
+        instagram();
+        pageMedia();
+        galleryList();
+        merge();
         System.out.println(passed + " Prüfungen ok, " + failed + " fehlgeschlagen");
         if (failed > 0) System.exit(1);
     }
@@ -67,7 +73,8 @@ public class Tests {
         eq("ads", Links.platform("https://library.tiktok.com/ads/detail/?ad_id=123"), "TikTok-Werbebibliothek");
         eq("ads", Links.platform("https://ads.tiktok.com/business/creativecenter/topads/123/pc/de"), "Creative Center");
         eq("ads", Links.platform("https://adstransparency.google.com/advertiser/AR1?region=DE"), "Google-Transparenzcenter");
-        eq("other", Links.platform("https://vimeo.com/123"), "andere Seite");
+        eq("ads", Links.platform("https://www.facebook.com/ads/library/?id=123"), "Meta-Werbebibliothek");
+        eq("other", Links.platform("https://www.example.com/video/123"), "andere Seite");
         eq("other", Links.platform("https://evil.com/tiktok.com/video/123"), "TikTok nur im Pfad");
         yes(Links.isTikTokShort("https://vm.tiktok.com/ZMabc/"), "vm-Kurzlink");
         yes(Links.isTikTokShort("https://www.tiktok.com/t/ZTabc/"), "/t/-Kurzlink");
@@ -314,6 +321,161 @@ public class Tests {
         yes(c.domains().contains("tiktok.com") && c.domains().contains("youtube.com"), "Domains");
         Cookies back = Cookies.parse(c.toText());
         eq(c.rows.size(), back.rows.size(), "cookies.txt schreiben/lesen");
+    }
+
+    static void linksPlatforms() {
+        eq("instagram", Links.platform("https://www.instagram.com/p/CxAbC123/?igsh=x"), "Instagram");
+        eq("twitter", Links.platform("https://x.com/max/status/1932498346298290497"), "X");
+        eq("twitter", Links.platform("https://mobile.twitter.com/max/status/1"), "Twitter mobil");
+        eq("facebook", Links.platform("https://fb.watch/abc/"), "fb.watch");
+        eq("reddit", Links.platform("https://www.reddit.com/r/pics/comments/abc/x/"), "Reddit");
+        eq("pinterest", Links.platform("https://pin.it/1a2b3c"), "pin.it");
+        eq("threads", Links.platform("https://www.threads.net/@user/post/Cabc"), "Threads");
+        eq("bluesky", Links.platform("https://bsky.app/profile/a.bsky.social/post/3k"), "Bluesky");
+        eq("other", Links.platform("https://t.co/abc"), "t.co ist keine Plattform");
+        yes(Links.isShortener("https://t.co/abc") && Links.isShortener("https://bit.ly/x") && Links.isShortener("https://pin.it/x"), "Kurzlinks");
+        yes(!Links.isShortener("https://www.instagram.com/p/x/"), "kein Kurzlink");
+        eq("1932498346298290497", Links.tweetId("https://x.com/max_konzert/status/1932498346298290497/photo/1"), "Tweet-ID");
+        eq("1932498346298290497", Links.tweetId("https://vxtwitter.com/a/status/1932498346298290497"), "Tweet-ID vxtwitter");
+        eq(null, Links.tweetId("https://example.com/status/1932498346298290497"), "keine Tweet-ID fremder Seiten");
+        eq("CxAbC123", Links.instagramCode("https://www.instagram.com/p/CxAbC123/"), "Instagram-Kürzel");
+        eq("DAbCdEf_1-2", Links.instagramCode("https://instagram.com/reel/DAbCdEf_1-2/?utm=x"), "Reel-Kürzel");
+        eq("CxAbC123", Links.instagramCode("https://www.instagram.com/reise.tagebuch/p/CxAbC123/"), "Kürzel mit Nutzer");
+        eq(null, Links.instagramCode("https://www.instagram.com/reise.tagebuch/"), "Profil ohne Kürzel");
+        eq("https://instagram.com/p/CxAbC123/", Links.findUrl("Schau: instagram.com/p/CxAbC123/ !"), "ohne https (beliebige Domain)");
+        eq(null, Links.findUrl("mail an max@gmx.de/x"), "keine E-Mail als Link");
+    }
+
+    static void twitter() throws Exception {
+        // Erwartete Werte von JavaScript: ((Number(id) / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, '')
+        eq("4on4ewe14gx", Twitter.token("1932498346298290497"), "Token 1");
+        eq("45fhqezna5p", Twitter.token("1712345678901234567"), "Token 2");
+        eq("3iu6crkhv5", Twitter.token("1453459127363645444"), "Token mit Null in der Mitte");
+        eq("6dq1a2xwd93", Twitter.token("20"), "Token kleine Zahl");
+        eq("3iu.6crkh0v5", Twitter.jsToString36(1453459127363645444.0 / 1e15 * Math.PI), "Basis 36 wie JavaScript");
+
+        JSONObject p = Twitter.parse(new JSONObject(read("twitter-photos.json")), "https://x.com/i/status/1932498346298290497");
+        eq("images", p.getString("kind"), "X Fotos: Art");
+        eq("@max_konzert", p.getString("uploader"), "X: Nutzer");
+        eq("Zwei Bilder vom Konzert gestern 🎸", p.getString("title"), "X: Text ohne t.co-Link");
+        JSONArray imgs = p.getJSONArray("images");
+        eq(2, imgs.length(), "X: zwei Bilder");
+        eq("https://pbs.twimg.com/media/GxPhoto1?format=jpg&name=orig", imgs.getJSONObject(0).getString("url"), "X: Originalgröße");
+        eq("https://pbs.twimg.com/media/GxPhoto1?format=jpg&name=4096x4096", imgs.getJSONObject(0).getJSONArray("fallback").getString(0), "X: Ersatzgröße");
+        eq(1600L, imgs.getJSONObject(1).getLong("height"), "X: Bildhöhe");
+
+        JSONObject v = Twitter.parse(new JSONObject(read("twitter-video.json")), "https://x.com/i/status/1712345678901234567");
+        eq("video", v.getString("kind"), "X Video: Art");
+        JSONArray vids = v.getJSONArray("videos");
+        eq(3, vids.length(), "X Video: nur MP4-Fassungen");
+        eq(1080L, vids.getJSONObject(0).getLong("res"), "X Video: 1080p zuerst");
+        eq(720L, vids.getJSONObject(1).getLong("res"), "X Video: dann 720p");
+        eq(30.5, v.getDouble("duration"), "X Video: Dauer");
+        yes(v.getString("thumbnail").contains("name=large"), "X Video: Vorschaubild");
+        JSONObject quoted = new JSONObject().put("text", "Zitat").put("quoted_tweet", new JSONObject(read("twitter-photos.json")));
+        eq(2, Twitter.parse(quoted, "x").getJSONArray("images").length(), "X: Medien aus zitiertem Beitrag");
+        try {
+            Twitter.parse(new JSONObject().put("text", "nur Text"), "x");
+            yes(false, "X ohne Medien: Fehler");
+        } catch (java.io.IOException e) {
+            yes(e.getMessage().contains("keine Bilder"), "X ohne Medien: Fehler");
+        }
+    }
+
+    static void instagram() throws Exception {
+        JSONObject r = Instagram.parseEmbed(read("instagram-embed-carousel.html"), "https://www.instagram.com/p/CxAbC123/");
+        eq("images", r.getString("kind"), "IG Karussell: Art");
+        eq("@reise.tagebuch", r.getString("uploader"), "IG: Nutzer");
+        eq("Sommer am Meer 🌊 \"Teil 1\" {Strand}", r.getString("title"), "IG: Bildtext");
+        JSONArray items = r.getJSONArray("images");
+        eq(4, items.length(), "IG: alle Teile des Karussells");
+        eq("https://scontent.cdninstagram.com/v/t51/img1_1080.jpg", items.getJSONObject(0).getString("url"), "IG: größte Fassung");
+        eq("video", items.getJSONObject(2).getString("type"), "IG: Video im Karussell");
+        eq("https://scontent.cdninstagram.com/o1/v/t16/video.mp4?efg=x", items.getJSONObject(2).getString("url"), "IG: Video-Adresse");
+        yes(items.getJSONObject(3).optBoolean("videoPoster"), "IG: Video ohne Adresse als Vorschaubild markiert");
+        yes(r.has("note"), "IG: Hinweis zur Anmeldung");
+
+        JSONObject one = Instagram.parseEmbed(read("instagram-embed-image.html"), "https://www.instagram.com/p/X/");
+        eq(1, one.getJSONArray("images").length(), "IG Einzelbild aus srcset");
+        eq("https://scontent.cdninstagram.com/v/t51/cat_1080.jpg?a=1&b=2", one.getJSONArray("images").getJSONObject(0).getString("url"),
+                "IG: größte srcset-Breite, &amp; aufgelöst");
+        eq("Foto von @katzen", one.getString("title"), "IG: alt-Text als Titel");
+        try {
+            Instagram.parseEmbed("<html>Login</html>", "x");
+            yes(false, "IG ohne Daten: Fehler");
+        } catch (java.io.IOException e) {
+            yes(e.getMessage().contains("angemeldet"), "IG ohne Daten: Anmelde-Hinweis");
+        }
+    }
+
+    static void pageMedia() throws Exception {
+        JSONObject r = PageMedia.parse(read("page-og.html"), "https://news.example.com/artikel/1");
+        eq("Großer Bericht & Bilder", r.getString("title"), "Seite: og:title mit Entität");
+        eq("images", r.getString("kind"), "Seite: mehrere Medien als Galerie");
+        JSONArray items = r.getJSONArray("images");
+        eq(4, items.length(), "Seite: 2 Bilder (ohne Doppelte) + 2 Videos");
+        eq("https://news.example.com/bilder/haupt.jpg", items.getJSONObject(0).getString("url"), "Seite: relative Adresse aufgelöst");
+        eq("https://cdn.example.com/clip.mp4?sig=1&e=2", items.getJSONObject(2).getString("url"), "Seite: og:video");
+        eq("https://news.example.com/media/zweites.webm", items.getJSONObject(3).getString("url"), "Seite: <video src>");
+        JSONObject e = PageMedia.parse(read("page-embed.html"), "https://blog.example.com/x");
+        eq("https://www.youtube.com/embed/dQw4w9WgXcQ", e.getJSONArray("embeds").getString(0), "Seite: eingebetteter Player");
+        eq("ä & \" '", PageMedia.unescape("&#228; &amp; &quot; &#x27;"), "HTML-Entitäten");
+    }
+
+    static void galleryList() throws Exception {
+        JSONObject r = GalleryList.parse("Vorspann\n" + read("gallerydl-tweet.json"), "https://x.com/max_konzert/status/1");
+        eq("gallery-dl", r.getString("source"), "gdl: Quelle");
+        eq("twitter", r.getString("platform"), "gdl: Plattform");
+        eq("Drei Medien in einem Beitrag", r.getString("title"), "gdl: Titel aus content");
+        eq("max_konzert", r.getString("uploader"), "gdl: Nutzer aus author.name");
+        JSONArray items = r.getJSONArray("images");
+        eq(4, items.length(), "gdl: alle Dateien");
+        eq("image", items.getJSONObject(1).getString("type"), "gdl: PNG ist Bild");
+        eq("video", items.getJSONObject(2).getString("type"), "gdl: MP4 ist Video");
+        eq(3, items.getJSONObject(2).getInt("index"), "gdl: Nummer für --range");
+        eq("ytdlp", items.getJSONObject(3).getString("via"), "gdl: ytdl:-Adressen lädt yt-dlp");
+        eq("https://v.redd.it/abc123", items.getJSONObject(3).getString("url"), "gdl: ytdl:-Präfix entfernt");
+        yes(r.getBoolean("gdlRange"), "gdl: ein Ausleser → --range möglich");
+        eq("https://pbs.twimg.com/media/A1.jpg?name=orig", r.getString("thumbnail"), "gdl: Vorschaubild");
+
+        JSONObject m = GalleryList.parse(read("gallerydl-mixed.json"), "https://www.reddit.com/r/garten/comments/1/");
+        yes(!m.getBoolean("gdlRange"), "gdl: aufgelöste Unter-Links → alles laden");
+        eq("Mein Garten", m.getString("title"), "gdl: Titel");
+        try {
+            GalleryList.parse(read("gallerydl-error.json"), "x");
+            yes(false, "gdl Fehler");
+        } catch (java.io.IOException e) {
+            eq("Login required", e.getMessage(), "gdl: Fehlermeldung");
+        }
+        eq("Diese Seite zeigt den Beitrag nur angemeldet. Melde dich unter „Mehr → Anmeldung“ an.",
+                GalleryList.friendlyError("[instagram][error] AuthRequired: Login required", "x"), "gdl: Anmelde-Fehler verständlich");
+        eq("Dieser Link wird nicht unterstützt.", GalleryList.friendlyError("[gallery-dl][error] Unsupported URL 'https://x'", "x"), "gdl: nicht unterstützt");
+        eq("Irgendwas kaputt", GalleryList.friendlyError("[foo][info] a\n[foo][error] Irgendwas kaputt\n", "x"), "gdl: letzte Fehlerzeile");
+        eq("Ersatz", GalleryList.friendlyError("", "Ersatz"), "gdl: Ersatzmeldung");
+    }
+
+    static void merge() throws Exception {
+        JSONObject video = new JSONObject().put("kind", "video").put("title", "Video");
+        JSONObject media = new JSONObject().put("kind", "images").put("headers", new JSONObject().put("Referer", "r"))
+                .put("gdlUrl", "u").put("gdlRange", true).put("images", new JSONArray()
+                        .put(new JSONObject().put("type", "image").put("url", "a.jpg"))
+                        .put(new JSONObject().put("type", "video").put("url", "b.mp4"))
+                        .put(new JSONObject().put("type", "image").put("url", "poster.jpg").put("videoPoster", true)));
+        JSONObject m = Results.merge(video, media);
+        eq("video", m.getString("kind"), "Zusammenführen: Video bleibt Video");
+        eq(1, m.getJSONArray("images").length(), "Zusammenführen: nur Beitragsbilder dazu");
+        eq("r", m.getJSONObject("headers").getString("Referer"), "Zusammenführen: Header der Bilder");
+        eq("u", m.getString("gdlUrl"), "Zusammenführen: gallery-dl-Link");
+        JSONObject playlist = new JSONObject().put("kind", "playlist");
+        eq("images", Results.merge(playlist, media).getString("kind"), "Karussell: Galerie statt Playlist");
+        eq("playlist", Results.merge(playlist, null).getString("kind"), "Playlist ohne Galerie");
+        eq("images", Results.merge(null, media).getString("kind"), "nur Bilder");
+        eq(null, Results.merge(null, null), "nichts gefunden");
+        JSONObject small = new JSONObject().put("images", new JSONArray().put(new JSONObject()));
+        eq(media, Results.richer(small, media), "mehr Dateien gewinnt");
+        eq(small, Results.richer(small, new JSONObject().put("images", new JSONArray().put(1))), "Gleichstand: eigener Ausleser");
+        eq("Bitte anmelden", Results.pickError(null, "Fehler A", "Bitte anmelden"), "Fehler mit Anmelde-Hinweis zuerst");
+        eq("Fehler A", Results.pickError(null, "Fehler A", "Fehler B"), "sonst erster Fehler");
     }
 
     /** Http folgt Weiterleitungen selbst und behält Cookies aus jeder Zwischenantwort. */

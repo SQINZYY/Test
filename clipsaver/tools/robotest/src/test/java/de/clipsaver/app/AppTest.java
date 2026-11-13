@@ -144,7 +144,7 @@ public class AppTest {
         ClipboardManager cm = (ClipboardManager) a.getSystemService(Context.CLIPBOARD_SERVICE);
         cm.setPrimaryClip(ClipData.newPlainText("x", "https://vm.tiktok.com/ZMabc/"));
         assertEquals("https://vm.tiktok.com/ZMabc/", call(bridge, "getClipboard"));
-        assertEquals("1.0", call(bridge, "appVersion"));
+        assertTrue(((String) call(bridge, "appVersion")).matches("\\d+\\.\\d+"));
 
         // Browser öffnen → BrowserActivity mit Adresse und Modus
         call(bridge, "browse", "https://library.tiktok.com/ads", "sniff", "");
@@ -171,10 +171,16 @@ public class AppTest {
         call(bridge, "analyze", "r2", "Werbung: https://library.tiktok.com/ads/detail/?ad_id=123");
         js = waitForJs(sw, "\"r2\"");
         assertTrue(js, js.contains("\"kind\":\"browse\"") && js.contains("\"why\":\"ads\""));
+
+        // Jede andere Plattform: yt-dlp, gallery-dl und eigene Auslese laufen parallel; scheitern alle
+        // (hier ohne Engine und ohne Netz), kommt eine Meldung mit Anmelde-Knopf für die Plattform
+        call(bridge, "analyze", "r3", "https://www.instagram.com/p/CxAbC123/?igsh=abc");
+        js = waitForJs(sw, "\"r3\"");
+        assertTrue(js, js.contains("\"ok\":false") && js.contains("\"login\":\"instagram\""));
     }
 
     private static String waitForJs(ShadowWebView sw, String marker) throws Exception {
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 600; i++) {
             shadowOf(Looper.getMainLooper()).idle();
             String js = sw.getLastEvaluatedJavascript();
             if (js != null && js.contains(marker)) return js;

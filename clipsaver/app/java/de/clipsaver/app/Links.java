@@ -4,7 +4,7 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Erkennt Links in geteiltem Text und ordnet sie TikTok, YouTube oder Werbebibliotheken zu. (Ohne Android-Klassen, damit testbar.) */
+/** Erkennt Links in geteiltem Text und ordnet sie Plattformen (TikTok, YouTube, Instagram, X …) zu. (Ohne Android-Klassen, damit testbar.) */
 final class Links {
 
     private static final Pattern URL = Pattern.compile("https?://[^\\s<>\"'`]+", Pattern.CASE_INSENSITIVE);
@@ -13,6 +13,26 @@ final class Links {
     private static final Pattern YT_ID = Pattern.compile(
             "(?:[?&]v=|youtu\\.be/|/shorts/|/embed/|/live/|/v/|/e/)([\\w-]{11})(?![\\w-])");
     private static final Pattern YT_POST = Pattern.compile("(?:/post/|[?&]lb=)(Ug[\\w-]{10,})");
+    private static final Pattern TWEET_ID = Pattern.compile("/status(?:es)?/(\\d{5,})");
+    private static final Pattern INSTA_CODE = Pattern.compile("instagram\\.com/(?:[\\w.-]+/)?(?:p|reels?|tv)/([\\w-]{5,})", Pattern.CASE_INSENSITIVE);
+
+    /** Domain → Plattform-Kürzel (für Anzeige, Anmelde-Hinweise und eigene Auslese). */
+    private static final String[][] PLATFORMS = {
+            {"instagram.com", "instagram"}, {"instagr.am", "instagram"},
+            {"x.com", "twitter"}, {"twitter.com", "twitter"}, {"fxtwitter.com", "twitter"}, {"vxtwitter.com", "twitter"},
+            {"fixupx.com", "twitter"}, {"fixvx.com", "twitter"},
+            {"facebook.com", "facebook"}, {"fb.watch", "facebook"}, {"fb.com", "facebook"},
+            {"reddit.com", "reddit"}, {"redd.it", "reddit"},
+            {"pinterest.com", "pinterest"}, {"pinterest.de", "pinterest"}, {"pin.it", "pinterest"},
+            {"snapchat.com", "snapchat"}, {"threads.net", "threads"}, {"threads.com", "threads"},
+            {"bsky.app", "bluesky"}, {"vimeo.com", "vimeo"}, {"twitch.tv", "twitch"}, {"tumblr.com", "tumblr"},
+            {"linkedin.com", "linkedin"}, {"dailymotion.com", "dailymotion"}, {"dai.ly", "dailymotion"},
+            {"soundcloud.com", "soundcloud"}, {"imgur.com", "imgur"}, {"flickr.com", "flickr"}, {"vk.com", "vk"},
+            {"bilibili.com", "bilibili"}, {"kick.com", "kick"}, {"9gag.com", "9gag"}, {"likee.video", "likee"},
+    };
+    /** Kurzlinks, die erst auf die eigentliche Seite weiterleiten. */
+    private static final String[] SHORTENERS = {"t.co", "pin.it", "redd.it", "bit.ly", "tinyurl.com", "ow.ly", "buff.ly",
+            "dlvr.it", "goo.gl", "is.gd", "lnkd.in", "instagr.am", "fb.me", "trib.al", "shorturl.at", "rb.gy", "cutt.ly"};
 
     private Links() {
     }
@@ -22,9 +42,8 @@ final class Links {
         if (text == null) return null;
         Matcher m = URL.matcher(text.trim());
         if (m.find()) return trimUrl(m.group());
-        // Link ohne Schema, z. B. "www.tiktok.com/@a/video/1" oder "youtu.be/abc"
-        Matcher bare = Pattern.compile("(?:www\\.|m\\.|vm\\.|vt\\.)?(?:tiktok\\.com|youtube\\.com|youtu\\.be)/[^\\s<>\"']+",
-                Pattern.CASE_INSENSITIVE).matcher(text);
+        // Link ohne Schema, z. B. "www.instagram.com/p/abc" oder "youtu.be/abc"
+        Matcher bare = Pattern.compile("(?<![\\w@.-])(?:[a-z0-9-]+\\.)+[a-z]{2,}/[^\\s<>\"']+", Pattern.CASE_INSENSITIVE).matcher(text);
         return bare.find() ? "https://" + trimUrl(bare.group()) : null;
     }
 
@@ -68,7 +87,33 @@ final class Links {
         if (isAdLibrary(url)) return "ads";
         if (isTikTok(url)) return "tiktok";
         if (isYouTube(url)) return "youtube";
+        for (String[] p : PLATFORMS) {
+            if (hostIs(url, p[0])) return p[1];
+        }
         return "other";
+    }
+
+    static boolean isShortener(String url) {
+        String h = host(url);
+        if (h.startsWith("www.")) h = h.substring(4);
+        for (String s : SHORTENERS) {
+            if (h.equals(s)) return true;
+        }
+        return false;
+    }
+
+    /** Beitrags-ID auf X/Twitter: x.com/nutzer/status/123… (auch fxtwitter, vxtwitter …). */
+    static String tweetId(String url) {
+        if (!"twitter".equals(platform(url))) return null;
+        Matcher m = TWEET_ID.matcher(url);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /** Kürzel eines Instagram-Beitrags: instagram.com/p/…, /reel/…, /tv/… */
+    static String instagramCode(String url) {
+        if (url == null || !"instagram".equals(platform(url))) return null;
+        Matcher m = INSTA_CODE.matcher(url);
+        return m.find() ? m.group(1) : null;
     }
 
     /** vm.tiktok.com/…, vt.tiktok.com/…, tiktok.com/t/… leiten erst auf den eigentlichen Beitrag weiter. */
@@ -109,7 +154,7 @@ final class Links {
     }
 
     /**
-     * Werbebibliotheken, in denen man Anzeigen von TikTok und YouTube/Google findet. Diese Seiten werden im
+     * Werbebibliotheken, in denen man Anzeigen von TikTok, YouTube/Google und Instagram/Facebook (Meta) findet. Diese Seiten werden im
      * eingebauten Browser geöffnet, der die Videos und Bilder der Anzeigen erkennt.
      */
     static boolean isAdLibrary(String url) {
@@ -117,6 +162,7 @@ final class Links {
         String u = url == null ? "" : url.toLowerCase(Locale.ROOT);
         return h.equals("library.tiktok.com")
                 || (h.equals("ads.tiktok.com") && u.contains("creativecenter"))
-                || h.equals("adstransparency.google.com");
+                || h.equals("adstransparency.google.com")
+                || (h.endsWith("facebook.com") && u.contains("/ads/library"));
     }
 }
