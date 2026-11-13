@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zwei Fotos übereinander + Abspiel-Knopf, innerhalb der 66dp-Sicherheitszone -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:rotation="-13" android:pivotX="54" android:pivotY="54">
+        <path android:fillColor="#FFFFC15E"
+            android:pathData="M33,32 h42 a4,4 0 0 1 4,4 v36 a4,4 0 0 1 -4,4 h-42 a4,4 0 0 1 -4,-4 v-36 a4,4 0 0 1 4,-4 z" />
+    </group>
+    <path android:fillColor="#FFFFFDF8"
+        android:pathData="M32,32 h44 a3,3 0 0 1 3,3 v38 a3,3 0 0 1 -3,3 h-44 a3,3 0 0 1 -3,-3 v-38 a3,3 0 0 1 3,-3 z" />
+    <path android:fillColor="#FFFF7A59" android:pathData="M33,36 h42 v30 h-42 z" />
+    <path android:fillColor="#FFC8483A" android:pathData="M33,66 L44,53 L51,59 L60,48 L75,63 L75,66 Z" />
+    <path android:fillColor="#FFFFC15E" android:pathData="M67,43 m-4,0 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0" />
+    <path android:fillColor="#FF1A1426" android:pathData="M74,71 m-11,0 a11,11 0 1 0 22,0 a11,11 0 1 0 -22,0" />
+    <path android:fillColor="#FFFF7A59" android:pathData="M74,71 m-9,0 a9,9 0 1 0 18,0 a9,9 0 1 0 -18,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M71,66 L79.5,71 L71,76 Z" />
+</vector>
