@@ -36,6 +36,8 @@ public class Tests {
         cookies();
         httpRedirectCookies();
         linksPlatforms();
+        linkRecognition();
+        linkResolve();
         twitter();
         instagram();
         pageMedia();
@@ -346,6 +348,122 @@ public class Tests {
         eq(null, Links.findUrl("mail an max@gmx.de/x"), "keine E-Mail als Link");
     }
 
+    /** Echte Teilen-Texte der Apps und Sonderfälle beim Einfügen. */
+    static void linkRecognition() {
+        // TikTok-App: Text, Hashtags, Kurzlink
+        eq("https://vm.tiktok.com/ZMabc123/", Links.findUrl("Schau dir das Video von @max an! #fyp #viral https://vm.tiktok.com/ZMabc123/ Lade TikTok herunter"),
+                "TikTok-Teilen-Text");
+        eq("https://www.tiktok.com/@max/video/7300000000000000000",
+                Links.findUrl("https://www.tiktok.com/@max/video/7300000000000000000?is_from_webapp=1&sender_device=pc&web_id=7312345678901234567"),
+                "TikTok: Tracking entfernt");
+        eq("https://www.tiktokv.com/share/video/7300000000000000000/", Links.findUrl("https://www.tiktokv.com/share/video/7300000000000000000/"), "TikTok Lite");
+        eq("tiktok", Links.platform("https://www.tiktokv.com/share/video/7300000000000000000/"), "tiktokv ist TikTok");
+        eq("7300000000000000000", Links.tikTokId("https://www.tiktokv.com/share/video/7300000000000000000/"), "TikTok-Lite-ID");
+        eq("7300000000000000000", Links.tikTokId("https://www.tiktok.com/embed/v2/7300000000000000000"), "TikTok-Embed-ID");
+        // Instagram
+        eq("https://www.instagram.com/reel/DAbC123xyz/", Links.findUrl("https://www.instagram.com/reel/DAbC123xyz/?igsh=MWZ0Y2x5bWQ0"), "Instagram: igsh weg");
+        yes(Links.needsResolve("https://www.instagram.com/share/reel/BAxyz123AbC"), "Instagram-Teilen-Link wird aufgelöst");
+        eq("Instagram · Reel", Links.describe("https://www.instagram.com/reel/DAbC123xyz/"), "Beschreibung Reel");
+        eq("Instagram · geteilter Link", Links.describe("https://www.instagram.com/share/p/BAxyz/"), "Beschreibung Teilen-Link");
+        eq("Instagram · Profil", Links.describe("https://www.instagram.com/max/"), "Beschreibung Profil");
+        // X
+        eq("https://x.com/max/status/1932498346298290497", Links.findUrl("Krass 😳 https://x.com/max/status/1932498346298290497?s=46&t=AbCdEfGh"), "X: s/t weg");
+        eq("X · Beitrag", Links.describe("https://x.com/max/status/1932498346298290497"), "Beschreibung X");
+        // YouTube
+        eq("https://youtu.be/dQw4w9WgXcQ", Links.findUrl("https://youtu.be/dQw4w9WgXcQ?si=AbCdEf123"), "YouTube: si weg");
+        eq("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123&t=42", Links.findUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123&pp=ygUF&t=42&feature=shared"),
+                "YouTube: v, list, t bleiben");
+        eq("https://www.youtube.com/watch?v=dQw4w9WgXcQ", Links.findUrl("HTTPS://WWW.YOUTUBE.COM/watch?v=dQw4w9WgXcQ"), "Großbuchstaben");
+        eq("YouTube · Short", Links.describe("https://youtube.com/shorts/dQw4w9WgXcQ"), "Beschreibung Short");
+        eq("YouTube · Playlist", Links.describe("https://www.youtube.com/playlist?list=PL123"), "Beschreibung Playlist");
+        eq("dQw4w9WgXcQ", Links.youTubeVideoId(Links.findUrl("https://music.youtube.com/watch?v=dQw4w9WgXcQ&si=x")), "YouTube Music");
+        // Facebook, Reddit, Pinterest, Snapchat
+        eq("https://www.facebook.com/share/r/1AbCdEfGh/", Links.findUrl("https://www.facebook.com/share/r/1AbCdEfGh/?mibextid=wwXIfr"), "Facebook: mibextid weg");
+        yes(Links.needsResolve("https://www.facebook.com/share/v/1AbCdEfGh/"), "Facebook-Teilen-Link wird aufgelöst");
+        yes(Links.needsResolve("https://www.reddit.com/r/pics/s/AbCdEf123"), "Reddit-Teilen-Link wird aufgelöst");
+        yes(!Links.needsResolve("https://www.reddit.com/r/pics/comments/abc/titel/"), "Reddit-Beitrag direkt");
+        eq("pinterest", Links.platform("https://www.pinterest.de/pin/123456/"), "Pinterest .de");
+        eq("pinterest", Links.platform("https://pinterest.co.uk/pin/1/"), "Pinterest .co.uk");
+        eq("Pinterest · Pin", Links.describe("https://www.pinterest.de/pin/123456/"), "Beschreibung Pin");
+        yes(Links.needsResolve("https://t.snapchat.com/AbCdEf"), "Snapchat-Kurzlink");
+        eq("facebook", Links.platform("https://m.facebook.com/watch/?v=123"), "Facebook mobil");
+        // Sonderzeichen rund um den Link
+        eq("https://youtu.be/dQw4w9WgXcQ", Links.findUrl("Video:\u00A0https://youtu.be/dQw4w9WgXcQ\u00A0super"), "geschütztes Leerzeichen");
+        eq("https://youtu.be/dQw4w9WgXcQ", Links.findUrl("https://you\u200Btu.be/dQw4w9WgXcQ"), "unsichtbares Zeichen im Link");
+        eq("https://youtu.be/dQw4w9WgXcQ", Links.findUrl("https://youtu.be/dQw4w9WgXcQ🔥🔥"), "Emoji direkt dahinter");
+        eq("https://x.com/a/status/123456", Links.findUrl("„https://x.com/a/status/123456“"), "deutsche Anführungszeichen");
+        eq("https://x.com/a/status/123456", Links.findUrl("«https://x.com/a/status/123456»"), "Guillemets");
+        eq("https://de.wikipedia.org/wiki/Test_(Begriff)", Links.findUrl("(siehe https://de.wikipedia.org/wiki/Test_(Begriff))"), "Klammern im Link");
+        eq("https://example.com/video", Links.findUrl("[Video](https://example.com/video)"), "Markdown-Link");
+        eq("https://example.com/a", Links.findUrl("**https://example.com/a**"), "fett markiert");
+        eq("https://v.douyin.com/abc/", Links.findUrl("复制此链接https://v.douyin.com/abc/，打开抖音"), "chinesische Satzzeichen");
+        eq("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1", Links.findUrl("<a href=\"https://www.youtube.com/watch?v=dQw4w9WgXcQ&amp;t=1\">x</a>"), "&amp; aus HTML");
+        eq("https://www.instagram.com/p/CxAbC123/", Links.findUrl("www.instagram.com/p/CxAbC123/"), "www ohne https");
+        eq(null, Links.findUrl("Schreib mir an max@gmx.de oder ruf an"), "E-Mail ist kein Link");
+        eq(null, Links.findUrl("   "), "leer");
+        // mehrere Links: der Beitrag gewinnt, nicht das Profil oder die Startseite
+        eq("https://www.instagram.com/p/CxAbC123/", Links.findUrl("Folgt mir https://www.instagram.com/max/ – neuer Post: https://www.instagram.com/p/CxAbC123/"),
+                "Beitrag vor Profil");
+        eq("https://www.tiktok.com/@max/video/7300000000000000000",
+                Links.findUrl("https://www.tiktok.com/ https://www.tiktok.com/@max/video/7300000000000000000"), "Video vor Startseite");
+        eq(java.util.Arrays.asList("https://youtu.be/dQw4w9WgXcQ", "https://x.com/a/status/123456"),
+                Links.findUrls("1) https://youtu.be/dQw4w9WgXcQ?si=1 2) https://x.com/a/status/123456 3) https://youtu.be/dQw4w9WgXcQ"),
+                "alle Links ohne Doppelte");
+        // Weiterleitungen auspacken
+        eq("https://www.youtube.com/watch?v=dQw4w9WgXcQ", Links.findUrl("https://www.google.com/url?sa=t&url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DdQw4w9WgXcQ&ved=2a"),
+                "Google-Weiterleitung");
+        eq("https://example.com/clip.mp4", Links.findUrl("https://l.instagram.com/?u=https%3A%2F%2Fexample.com%2Fclip.mp4&e=AT0x"), "Instagram-Weiterleitung");
+        eq("https://example.com/x", Links.findUrl("https://l.facebook.com/l.php?u=https%3A%2F%2Fexample.com%2Fx%3Ffbclid%3Dabc&h=AT1"), "Facebook-Weiterleitung + fbclid");
+        eq("https://www.youtube.com/watch?v=dQw4w9WgXcQ", Links.findUrl("https://www.youtube.com/attribution_link?a=x&u=%2Fwatch%3Fv%3DdQw4w9WgXcQ%26feature%3Dshare"),
+                "YouTube attribution_link");
+        eq("https://www.instagram.com/reel/DAbC123xyz/", Links.clean("https://www.instagram.com/accounts/login/?next=%2Freel%2FDAbC123xyz%2F%3Figsh%3Dx"),
+                "Anmeldeseite mit next=");
+        eq("https://www.theguardian.com/world/1", Links.findUrl("https://www.google.com/amp/s/www.theguardian.com/world/1"), "Google AMP");
+        eq("Kurzlink (bit.ly)", Links.describe("https://bit.ly/3abc"), "Beschreibung Kurzlink");
+        eq("Link auf example.com", Links.describe("https://www.example.com/seite"), "Beschreibung fremde Seite");
+        JSONObject d = Links.detect("Profil https://www.instagram.com/max/ und Reel https://www.instagram.com/reel/DAbC123xyz/?igsh=1");
+        eq(2, d.optJSONArray("links").length(), "detect: zwei Links");
+        eq(1, d.optInt("best"), "detect: Reel ist der passendste");
+        eq("Instagram · Reel", d.optJSONArray("links").optJSONObject(1).optString("label"), "detect: Beschreibung");
+        eq(-1, Links.detect("kein Link").optInt("best"), "detect: ohne Link");
+    }
+
+    /** Auflösen von Teilen-Links über HTTP-Weiterleitung und über die kanonische Adresse der Seite. */
+    static void linkResolve() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        final String[] base = new String[1];
+        server.createContext("/share/reel/abc", ex -> {
+            ex.getResponseHeaders().add("Location", "/accounts/login/?next=%2Freel%2FDAbC123xyz%2F%3Figsh%3Dx");
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
+        });
+        server.createContext("/accounts/login/", ex -> {
+            byte[] body = "<html>Bitte anmelden</html>".getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, body.length);
+            try (OutputStream o = ex.getResponseBody()) {
+                o.write(body);
+            }
+        });
+        server.createContext("/s/xyz", ex -> {
+            byte[] body = ("<html><head><link rel=\"canonical\" href=\"https://www.reddit.com/r/pics/comments/1abc/titel/?share_id=q\"></head></html>")
+                    .getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, body.length);
+            try (OutputStream o = ex.getResponseBody()) {
+                o.write(body);
+            }
+        });
+        server.start();
+        try {
+            base[0] = "http://127.0.0.1:" + server.getAddress().getPort();
+            eq("http://127.0.0.1:" + server.getAddress().getPort() + "/reel/DAbC123xyz/", Links.resolve(base[0] + "/share/reel/abc", new Http()),
+                    "Teilen-Link → Anmeldeseite → eigentlicher Beitrag");
+            eq("https://www.reddit.com/r/pics/comments/1abc/titel/", Links.resolve(base[0] + "/s/xyz", new Http()), "kanonische Adresse der Seite");
+            eq("http://127.0.0.1:1/nix", Links.resolve("http://127.0.0.1:1/nix", new Http()), "nicht erreichbar → Link bleibt");
+        } finally {
+            server.stop(0);
+        }
+    }
+
     static void twitter() throws Exception {
         // Erwartete Werte von JavaScript: ((Number(id) / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, '')
         eq("4on4ewe14gx", Twitter.token("1932498346298290497"), "Token 1");
@@ -503,7 +621,7 @@ public class Tests {
             Http.Response r = http.get(base + "/short", null);
             eq(200, r.code, "HTTP: Ziel erreicht");
             eq(base + "/@user/video/7300000000000000000?_r=1", r.url, "HTTP: Ziel-Adresse");
-            eq("7300000000000000000", Links.tikTokId(r.url), "HTTP: ID aus Weiterleitung");
+            yes(r.url.endsWith("/@user/video/7300000000000000000?_r=1"), "HTTP: Pfad aus Weiterleitung");
             eq("tt_chain_token=abc", seen.get(0), "HTTP: Cookie aus Weiterleitung mitgeschickt");
             eq("<html>ok</html>", r.body, "HTTP: Inhalt");
         } finally {

@@ -41,6 +41,19 @@ const server = http.createServer((req, res) => {
   };
 
   await shot('01-start');
+  // Teilen-Text mit zwei Links: Erkennung zeigt den Beitrag, der andere ist wählbar
+  await page.fill('#in-home', 'Folgt mir https://www.instagram.com/max/ – neues Reel: https://www.instagram.com/reel/DAbC123xyz/?igsh=1 🔥');
+  await page.waitForSelector('#det-home .ok');
+  await tap('[data-a="chooseLink"]');
+  await shot('01b-link-erkannt-auswahl');
+  await tap('[data-a="pickLink"][data-i="0"]');
+  const picked = await page.$eval('#det-home', el => el.textContent);
+  if (!/Profil/.test(picked)) throw new Error('Linkauswahl nicht übernommen: ' + picked);
+  await page.fill('#in-home', 'nur Text ohne Link');
+  await page.waitForSelector('#det-home .no');
+  await page.evaluate(() => CS.onClipboard(JSON.parse(Android.detect('https://x.com/max/status/1932498346298290497'))));
+  await shot('01c-zwischenablage');
+  await page.fill('#in-home', '');
   await analyze('https://www.youtube.com/watch?v=abcdefghijk');
   await tap('[data-q="2160"]');
   await shot('02-youtube-4k');

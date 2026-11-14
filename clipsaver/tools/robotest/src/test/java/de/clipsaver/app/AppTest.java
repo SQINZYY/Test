@@ -189,6 +189,51 @@ public class AppTest {
         return String.valueOf(sw.getLastEvaluatedJavascript());
     }
 
+    /** Text mit Link in einer anderen App markiert → "Mit ClipSaver laden"; Link nur im Betreff beim Teilen. */
+    @Test
+    public void processTextAndSubjectAreAccepted() throws Exception {
+        java.lang.reflect.Field f = MainActivity.class.getDeclaredField("pendingShared");
+        f.setAccessible(true);
+        Intent select = new Intent(Intent.ACTION_PROCESS_TEXT).setType("text/plain")
+                .putExtra(Intent.EXTRA_PROCESS_TEXT, "guck https://x.com/a/status/123456");
+        assertEquals("guck https://x.com/a/status/123456", f.get(Robolectric.buildActivity(MainActivity.class, select).setup().get()));
+        Intent subjectOnly = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, "https://youtu.be/dQw4w9WgXcQ");
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", f.get(Robolectric.buildActivity(MainActivity.class, subjectOnly).setup().get()));
+    }
+
+    /** Neuer Link in der Zwischenablage → genau ein Vorschlag an die Oberfläche; detect() erkennt den passenden Link. */
+    @Test
+    public void clipboardLinkIsSuggestedOnce() throws Exception {
+        MainActivity a = Robolectric.buildActivity(MainActivity.class).setup().get();
+        WebView web = findWebView(a.getWindow().getDecorView());
+        ShadowWebView sw = shadowOf(web);
+        sw.getWebViewClient().onPageFinished(web, "https://appassets.androidplatform.net/www/index.html");
+        Object bridge = sw.getJavascriptInterface("Android");
+        JSONObject det = new JSONObject((String) call(bridge, "detect", "Profil https://www.instagram.com/max/ Reel https://www.instagram.com/reel/DAbC123xyz/?igsh=1"));
+        assertEquals(1, det.getInt("best"));
+        assertEquals("https://www.instagram.com/reel/DAbC123xyz/", det.getJSONArray("links").getJSONObject(1).getString("url"));
+
+        ClipboardManager cm = (ClipboardManager) a.getSystemService(Context.CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(ClipData.newPlainText("x", "Schau mal https://vm.tiktok.com/ZMabc123/ 😂"));
+        a.onWindowFocusChanged(true);
+        shadowOf(Looper.getMainLooper()).idle();
+        String js = sw.getLastEvaluatedJavascript();
+        assertTrue(js, js != null && js.contains("CS.onClipboard(") && js.contains("vm.tiktok.com") && js.contains("ZMabc123"));
+
+        // gleicher Inhalt → kein zweiter Vorschlag
+        sw.getWebViewClient().onPageFinished(web, "https://appassets.androidplatform.net/www/index.html");
+        web.evaluateJavascript("marker", null);
+        a.onWindowFocusChanged(true);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals("marker", sw.getLastEvaluatedJavascript());
+
+        // Text ohne Link → kein Vorschlag
+        cm.setPrimaryClip(ClipData.newPlainText("x", "Einkaufsliste: Milch, Brot"));
+        a.onWindowFocusChanged(true);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals("marker", sw.getLastEvaluatedJavascript());
+    }
+
     @Test
     public void sharedLinkIsKeptForUi() throws Exception {
         Intent share = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "Guck mal https://vm.tiktok.com/ZMabc/");

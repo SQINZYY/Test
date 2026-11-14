@@ -19,9 +19,17 @@ bestehen (Fotos, Karussells, Galerien), werden genauso gespeichert, ebenso MP3 u
 
 ## Funktionen
 
-- **Laden** – Link von irgendeiner Seite einfügen (📋 fügt aus der Zwischenablage ein und prüft sofort). Kurzlinks (t.co, pin.it,
-  bit.ly …) werden aufgelöst. Die App fragt gleichzeitig drei Ausleser und führt die Ergebnisse zusammen – ein Beitrag mit Video **und**
-  Bildern zeigt beides:
+- **Links erkennen** – egal wie der Link ankommt:
+  - **Teilen → ClipSaver** in jeder App, **Text markieren → „Mit ClipSaver laden“**, Einfügen ins Feld (📋) oder Vorschlag, wenn beim
+    Öffnen ein neuer Link in der Zwischenablage liegt (abschaltbar unter „Mehr“).
+  - Links mitten im Text, auch mit Emojis, „Anführungszeichen“, Klammern, Markdown, geschützten oder unsichtbaren Leerzeichen
+    oder ohne `https://`. Unter dem Eingabefeld steht sofort, was erkannt wurde (z. B. „Instagram · Reel“).
+  - Stehen mehrere Links im Text, nimmt die App den Beitrag statt Profil oder Startseite; ein anderer lässt sich auswählen.
+  - Kurz- und Teilen-Links werden aufgelöst (t.co, pin.it, bit.ly, vm.tiktok.com, instagram.com/share/…, facebook.com/share/…,
+    reddit.com/r/…/s/…, t.snapchat.com …), Weiterleitungen ausgepackt (google.com/url, l.instagram.com, l.facebook.com,
+    YouTube-Weiterleitungen, Anmeldeseiten mit `next=`), Tracking-Anhängsel entfernt (`?igsh=`, `?si=`, `?s=…&t=…`, `utm_…` …).
+- **Laden** – Die App fragt gleichzeitig drei Ausleser und führt die Ergebnisse zusammen – ein Beitrag mit Video **und** Bildern zeigt
+  beides:
   - **Videos und Shorts** in **1080p**, **1440p** oder **4K** – die App zeigt zu jeder Stufe die ungefähre Dateigröße. Stufen, die es für
     ein Video nicht gibt, sind ausgegraut (hochgerechnet wird nichts). Hochkant-Videos zählen nach der kürzeren Seite (1080×1920 = 1080p).
   - **MP3** (nur Ton). Bei TikTok wird der Ton des Videos genommen, nicht nur die Hintergrundmusik.
@@ -86,7 +94,9 @@ bestehen (Fotos, Karussells, Galerien), werden genauso gespeichert, ebenso MP3 u
     `PageMedia.java` – Bilder/Videos aus den Meta-Angaben beliebiger Webseiten
   - `BrowserActivity.java` + `MediaSniffer.java` – eingebauter Browser mit Medien-Erkennung (Werbebibliotheken, beliebige Seiten), Anmeldung
   - `DownloadService.java` – Warteschlange als Vordergrund-Dienst mit Benachrichtigungen; `Saver.java` – Galerie (MediaStore) und Verlauf
-  - `Links.java`, `Http.java`, `Cookies.java`, `Json.java` – Hilfsklassen
+  - `Links.java` – Link-Erkennung: Links im Text finden, den passendsten wählen, Weiterleitungen und Tracking entfernen,
+    Kurz-/Teilen-Links auflösen, Plattform und Art erkennen („Instagram · Reel“)
+  - `Http.java`, `Cookies.java`, `Json.java` – Hilfsklassen
 - `tools/build.sh` – baut die APKs ohne Android SDK (lädt aapt2, dx, Android-Klassen und die Bibliotheken von Maven Central, die
   gallery-dl-Wheels mit Prüfsumme von PyPI über `tools/fetch_wheels.py`)
 
@@ -95,7 +105,7 @@ bestehen (Fotos, Karussells, Galerien), werden genauso gespeichert, ebenso MP3 u
 ```sh
 pip install cryptography
 ./tools/build.sh                                   # -> release/ClipSaver.apk + release/ClipSaver-32bit.apk
-ABIS=arm64-v8a VERSION_CODE=3 VERSION_NAME=1.2 ./tools/build.sh
+ABIS=arm64-v8a VERSION_CODE=4 VERSION_NAME=1.3 ./tools/build.sh
 ```
 
 Signiert wird mit dem Debug-Schlüssel `tools/debug-signing.p12` (Passwort `android`), damit Updates sich über die alte Version installieren

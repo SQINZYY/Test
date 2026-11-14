@@ -3,6 +3,7 @@ package de.clipsaver.app;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
+import android.content.ClipDescription;
 import android.content.ClipboardManager;
 import android.content.ContentUris;
 import android.content.Context;
@@ -110,6 +111,7 @@ public class MainActivity extends Activity implements DownloadService.Listener, 
             public void onPageFinished(WebView view, String url) {
                 pageReady = true;
                 deliverPending();
+                if (hasWindowFocus()) checkClipboard();
             }
         });
         root = new FrameLayout(this);
@@ -267,10 +269,54 @@ public class MainActivity extends Activity implements DownloadService.Listener, 
     private void handleIntent(Intent intent) {
         if (intent == null) return;
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
-            String text = intent.getStringExtra(Intent.EXTRA_TEXT);
-            if (text != null && text.length() > 0) pendingShared = text;
+            // Manche Apps legen den Link in den Betreff statt in den Text
+            CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+            String subject = intent.getStringExtra(Intent.EXTRA_SUBJECT);
+            String all = (text == null ? "" : text.toString()) + (subject == null ? "" : "\n" + subject);
+            if (all.trim().length() > 0) pendingShared = all.trim();
+        } else if (Intent.ACTION_PROCESS_TEXT.equals(intent.getAction())) {
+            // Text in einer anderen App markiert → "Mit ClipSaver laden"
+            CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
+            if (text != null && text.length() > 0) pendingShared = text.toString();
         } else if ("downloads".equals(intent.getAction())) {
             pendingTab = "downloads";
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // Die Zwischenablage darf eine App ab Android 10 nur lesen, solange sie im Vordergrund den Fokus hat
+        if (hasFocus) checkClipboard();
+    }
+
+    /**
+     * Neuer Link in der Zwischenablage → der Oberfläche als Vorschlag melden, einmal je kopiertem Text.
+     * Ab Android 8 verrät der Zeitstempel, ob sich etwas geändert hat, ohne den Inhalt zu lesen.
+     */
+    private void checkClipboard() {
+        if (!pageReady || !"1".equals(prefs.getString("ui.clipSuggest", "1"))) return;
+        try {
+            ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm == null || !cm.hasPrimaryClip()) return;
+            ClipDescription d = cm.getPrimaryClipDescription();
+            if (d == null || !(d.hasMimeType("text/*") || d.hasMimeType(ClipDescription.MIMETYPE_TEXT_URILIST))) return;
+            if (Build.VERSION.SDK_INT >= 26) {
+                long stamp = d.getTimestamp();
+                if (stamp == prefs.getLong("clipStamp", -1)) return;
+                prefs.edit().putLong("clipStamp", stamp).apply();
+            }
+            ClipData clip = cm.getPrimaryClip();
+            if (clip == null || clip.getItemCount() == 0) return;
+            CharSequence t = clip.getItemAt(0).coerceToText(this);
+            if (t == null) return;
+            String key = Integer.toHexString(t.toString().hashCode());
+            if (key.equals(prefs.getString("clipKey", null))) return;
+            prefs.edit().putString("clipKey", key).apply();
+            JSONObject det = Links.detect(t.toString());
+            if (det.optInt("best", -1) >= 0) js("CS.onClipboard(" + det + ")");
+        } catch (Exception ignored) {
+            // Zwischenablage nicht lesbar
         }
     }
 
@@ -503,7 +549,16 @@ public class MainActivity extends Activity implements DownloadService.Listener, 
             ClipData clip = cm.getPrimaryClip();
             if (clip == null || clip.getItemCount() == 0) return null;
             CharSequence t = clip.getItemAt(0).coerceToText(MainActivity.this);
-            return t == null ? null : t.toString();
+            if (t == null) return null;
+            // selbst eingefügt → nicht noch einmal als Vorschlag anbieten
+            prefs.edit().putString("clipKey", Integer.toHexString(t.toString().hashCode())).apply();
+            return t.toString();
+        }
+
+        /** Was im Text als Link erkannt wird – für die Anzeige unter dem Eingabefeld. */
+        @JavascriptInterface
+        public String detect(String text) {
+            return Links.detect(text).toString();
         }
 
         @JavascriptInterface

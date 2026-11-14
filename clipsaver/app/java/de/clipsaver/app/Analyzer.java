@@ -76,14 +76,9 @@ final class Analyzer {
 
     /** Jede andere Plattform: alle Ausleser gleichzeitig, dann zusammenführen. */
     private static JSONObject universal(final Context c, String input, final String processId, AtomicBoolean cancel) throws Exception {
-        String url = input;
-        if (Links.isShortener(url)) {
-            try {
-                url = new Http().get(url, null).url;
-            } catch (Exception ignored) {
-                // yt-dlp und gallery-dl folgen Kurzlinks auch selbst
-            }
-        }
+        // Kurz- und Teilen-Links (t.co, pin.it, instagram.com/share/…, facebook.com/share/…) erst auflösen;
+        // klappt das nicht, folgen yt-dlp und gallery-dl ihnen meist selbst
+        String url = Links.needsResolve(input) ? Links.resolve(input, new Http()) : input;
         check(cancel);
         final String target = url;
         final String platform = Links.platform(target);

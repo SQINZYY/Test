@@ -107,6 +107,20 @@
     load: function (k) { return localStorage.getItem(k); },
     save: function (k, v) { localStorage.setItem(k, v); },
     getClipboard: function () { return clipboard; },
+    // vereinfachte Nachbildung von Links.detect für die Vorschau
+    detect: function (text) {
+      var re = /https?:\/\/[^\s"'<>“”„]+/g, m, links = [];
+      while ((m = re.exec(text))) {
+        var url = m[0].replace(/[.,;:!?)]+$/, '');
+        var host = url.split('/')[2].replace(/^www\./, '');
+        var label = /instagram/.test(host) ? (/\/reel/.test(url) ? 'Instagram · Reel' : /\/p\//.test(url) ? 'Instagram · Beitrag' : 'Instagram · Profil')
+          : /tiktok/.test(host) ? 'TikTok · Video' : /youtu/.test(host) ? 'YouTube · Video' : /x\.com/.test(host) ? 'X · Beitrag' : 'Link auf ' + host;
+        links.push({ url: url, label: label, platform: 'other' });
+      }
+      var best = links.length ? 0 : -1;
+      links.forEach(function (l, i) { if (/Reel|Beitrag|Video/.test(l.label) && !/Reel|Beitrag|Video/.test(links[best].label)) best = i; });
+      return JSON.stringify({ links: links, best: best });
+    },
     appVersion: function () { return '1.0'; },
     engineInfo: function () { return JSON.stringify({ state: 'ready', version: '2026.10.20', galleryVersion: '1.32.19', autoUpdate: true, nightly: false, lastCheck: Date.now() - 3600e3 }); },
     analyze: function (req, text) { setTimeout(function () { CS.onAnalyzed(req, pick(text)); }, 400); },

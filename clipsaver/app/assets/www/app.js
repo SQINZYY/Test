@@ -120,9 +120,10 @@
     engine: { state: 'init' },
     cookies: { domains: [] },
     found: null,
-    sheet: null
+    sheet: null,
+    clip: null
   };
-  function newSlot() { return { input: '', req: null, loading: false, result: null, error: null, q: null, sel: [] }; }
+  function newSlot() { return { input: '', pick: null, req: null, loading: false, result: null, error: null, q: null, sel: [] }; }
 
   // ---------- Navigation ----------
   var TABS = [
@@ -170,7 +171,7 @@
   // ---------- Startseite ----------
   function viewHome() {
     var st = S.slots.home;
-    var h = '<section class="card hero">'
+    var h = clipBanner('home') + '<section class="card hero">'
       + '<h1>Video oder Bild speichern</h1>'
       + '<p class="muted">Link von jeder Plattform einfügen – TikTok, YouTube, Instagram, X, Facebook, Reddit, Pinterest … Videos in 1080p, 1440p oder 4K, Bilder und Galerien in voller Größe.</p>'
       + inputRow('home', 'Link einfügen – von jeder Seite')
@@ -199,7 +200,44 @@
     return '<div class="input-row">'
       + '<input id="in-' + slot + '" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="' + esc(placeholder) + '" value="' + esc(st.input) + '" data-slot="' + slot + '">'
       + '<button class="square" data-a="paste" data-slot="' + slot + '" aria-label="Einfügen">' + icon('paste') + '</button>'
-      + '</div>';
+      + '</div><div class="detect" id="det-' + slot + '">' + detectHtml(slot) + '</div>';
+  }
+
+  /** Was im eingegebenen Text als Link erkannt wird (Links.detect in der App). */
+  function detect(text) {
+    if (!text || !text.trim() || !A || !A.detect) return null;
+    return parse(A.detect(text), null);
+  }
+
+  function chosenLink(slot) {
+    var st = S.slots[slot];
+    var d = detect(st.input);
+    if (!d || !d.links || !d.links.length) return null;
+    var i = st.pick != null && st.pick < d.links.length ? st.pick : d.best;
+    return { link: d.links[i], others: d.links.length - 1, all: d.links };
+  }
+
+  function detectHtml(slot) {
+    var st = S.slots[slot];
+    if (!st.input || !st.input.trim()) return '';
+    var c = chosenLink(slot);
+    if (!c) return '<span class="no">' + icon('alert', 'sm') + 'Kein Link erkannt – füge den Link oder den ganzen geteilten Text ein.</span>';
+    return '<span class="ok">' + icon('check', 'sm') + 'Erkannt: <b>' + esc(c.link.label) + '</b></span>'
+      + (c.others ? '<button class="link" data-a="chooseLink" data-slot="' + slot + '">' + (c.others === 1 ? '1 weiterer Link' : c.others + ' weitere Links') + ' – anderen wählen</button>' : '');
+  }
+
+  function updateDetect(slot) {
+    var el = document.getElementById('det-' + slot);
+    if (el) el.innerHTML = detectHtml(slot);
+  }
+
+  /** Vorschlag, wenn ein neuer Link in der Zwischenablage liegt (MainActivity.checkClipboard). */
+  function clipBanner(slot) {
+    if (!S.clip) return '';
+    var l = S.clip.links[S.clip.best];
+    return '<div class="clip-banner">' + icon('paste') + '<span class="txt">Link in der Zwischenablage:<b>' + esc(l.label) + '</b></span>'
+      + '<button class="btn primary small" data-a="useClip" data-slot="' + slot + '">Laden</button>'
+      + '<button class="round" data-a="dismissClip" aria-label="Ausblenden">' + icon('x', 'sm') + '</button></div>';
   }
 
   function engineBanner() {
@@ -431,7 +469,7 @@
 
   // ---------- Werbung ----------
   function viewAds() {
-    var h = '<section class="card hero"><h1>Werbung speichern</h1>'
+    var h = clipBanner('ads') + '<section class="card hero"><h1>Werbung speichern</h1>'
       + '<p class="muted">Video- und Bild-Anzeigen von TikTok, YouTube, Instagram, Facebook und anderen: Link der Anzeige einfügen oder unten in einer Werbebibliothek suchen.</p>'
       + inputRow('ads', 'Link der Anzeige einfügen')
       + '<button class="btn primary big" data-a="analyze" data-slot="ads">' + icon('search') + 'Werbung laden</button></section>';
@@ -534,6 +572,12 @@
       + '<div class="set-row"><span>Nightly-Versionen<small>neueste Korrekturen, etwas weniger getestet</small></span>'
       + '<button class="switch' + (e.nightly ? ' on' : '') + '" data-a="toggleNightly" aria-label="Nightly"></button></div></section>';
 
+    h += '<div class="section-title">Links erkennen</div><section class="card">'
+      + '<div class="set-row"><span>Links aus der Zwischenablage vorschlagen<small>Kopierst du in einer anderen App einen Link, schlägt ClipSaver ihn beim Öffnen vor.</small></span>'
+      + '<button class="switch' + (load('clipSuggest') !== '0' ? ' on' : '') + '" data-a="toggleClip" aria-label="Zwischenablage"></button></div>'
+      + '<p class="muted small" style="margin:6px 0 0">Außerdem: In jeder App auf <b>Teilen → ClipSaver</b>, oder Text mit Link markieren → <b>Mit ClipSaver laden</b>. '
+      + 'Erkannt werden auch Links mitten im Text, Kurz- und Teilen-Links (t.co, pin.it, instagram.com/share …) und Weiterleitungen; Tracking-Anhängsel werden entfernt.</p></section>';
+
     var d = (S.cookies.domains || []);
     h += '<div class="section-title">Anmeldung (optional)</div><section class="card">'
       + '<p class="muted small" style="margin:0 0 10px">Nötig, wenn eine Plattform Beiträge nur angemeldet zeigt (oft bei Instagram und Facebook), für private oder '
@@ -575,9 +619,17 @@
   function analyze(slot, text) {
     var st = S.slots[slot];
     var input = $('#in-' + slot);
-    text = (text != null ? text : (input ? input.value : st.input) || '').trim();
+    var given = text != null;
+    text = (given ? text : (input ? input.value : st.input) || '').trim();
     if (!text) { toast('Bitte zuerst einen Link einfügen'); return; }
     if (!A) { toast('Nur in der App verfügbar'); return; }
+    // Den erkannten (bzw. ausgewählten) Link prüfen und bereinigt ins Feld schreiben
+    if (given && text !== st.input) st.pick = null;
+    st.input = text;
+    var c = chosenLink(slot);
+    if (!c) { render(); toast('Im Text wurde kein Link gefunden'); return; }
+    text = c.link.url;
+    st.pick = null;
     if (st.req) A.cancelAnalyze(st.req);
     st.req = 'r' + Date.now();
     st.input = text;
@@ -813,6 +865,8 @@
       var text = A ? A.getClipboard() : null;
       if (!text) { toast('Zwischenablage ist leer'); return; }
       S.slots[slot].input = text.trim();
+      S.slots[slot].pick = null;
+      S.clip = null;
       var input = $('#in-' + slot);
       if (input) input.value = text.trim();
       analyze(slot, text);
@@ -908,6 +962,37 @@
       if (A) A.setEngineOptions(S.engine.autoUpdate, !!S.engine.nightly);
       render();
     },
+    chooseLink: function (el) {
+      var slot = el.dataset.slot;
+      var c = chosenLink(slot);
+      if (!c) return;
+      openSheet('<div class="result-title" style="padding:0 6px 8px">Welchen Link laden?</div>' + c.all.map(function (l, i) {
+        return '<button class="opt" data-a="pickLink" data-slot="' + slot + '" data-i="' + i + '">' + icon(l.url === c.link.url ? 'check' : 'globe')
+          + '<span style="min-width:0"><b style="display:block">' + esc(l.label) + '</b><small class="muted" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+          + esc(l.url) + '</small></span></button>';
+      }).join(''));
+    },
+    pickLink: function (el) {
+      var st = S.slots[el.dataset.slot];
+      st.pick = +el.dataset.i;
+      closeSheet();
+      updateDetect(el.dataset.slot);
+    },
+    useClip: function (el) {
+      var slot = el.dataset.slot;
+      var det = S.clip;
+      S.clip = null;
+      if (!det) return;
+      S.slots[slot].input = det.links[det.best].url;
+      S.slots[slot].pick = null;
+      analyze(slot, det.links[det.best].url);
+    },
+    dismissClip: function () { S.clip = null; render(); },
+    toggleClip: function () {
+      var on = load('clipSuggest') !== '0';
+      save('clipSuggest', on ? '0' : '1');
+      render();
+    },
     toggleNightly: function () {
       S.engine.nightly = !S.engine.nightly;
       if (A) A.setEngineOptions(S.engine.autoUpdate !== false, S.engine.nightly);
@@ -956,7 +1041,12 @@
     }
   });
   document.addEventListener('input', function (ev) {
-    if (ev.target.matches && ev.target.matches('input[data-slot]')) S.slots[ev.target.dataset.slot].input = ev.target.value;
+    if (ev.target.matches && ev.target.matches('input[data-slot]')) {
+      var slot = ev.target.dataset.slot;
+      S.slots[slot].input = ev.target.value;
+      S.slots[slot].pick = null;
+      updateDetect(slot);
+    }
   });
 
   // ---------- Rückrufe aus Android ----------
@@ -982,8 +1072,22 @@
         }
       });
     },
+    onClipboard: function (det) {
+      if (!det || !det.links || det.best < 0) return;
+      var url = det.links[det.best].url;
+      // schon im Feld oder gerade geprüft → kein Vorschlag nötig
+      var same = Object.keys(S.slots).some(function (k) {
+        var c = chosenLink(k);
+        return c && c.link.url === url;
+      });
+      if (same) return;
+      S.clip = det;
+      if (S.tab === 'home' || S.tab === 'ads') render();
+    },
     onShared: function (text) {
       closeAllOverlays();
+      S.clip = null;
+      S.slots.home.pick = null;
       S.tab = 'home';
       S.slots.home.input = text;
       render();

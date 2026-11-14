@@ -12,8 +12,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TOOLS="$ROOT/.build-tools"
 OUT="$ROOT/build"
-VERSION_CODE="${VERSION_CODE:-2}"
-VERSION_NAME="${VERSION_NAME:-1.1}"
+VERSION_CODE="${VERSION_CODE:-3}"
+VERSION_NAME="${VERSION_NAME:-1.2}"
 ABIS="${ABIS:-arm64-v8a armeabi-v7a}"
 YTDL_VERSION="0.18.1"  # youtubedl-android: yt-dlp + Python + QuickJS + FFmpeg fürs Handy
 # gallery-dl (Bilder/Galerien von 300+ Seiten) mit Abhängigkeiten; läuft mit dem Python aus youtubedl-android

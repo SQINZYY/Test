@@ -33,9 +33,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- In TikTok/YouTube auf "Teilen" → ClipSaver -->
+            <!-- In jeder App auf "Teilen" → ClipSaver -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <!-- Text mit Link markieren → im Auswahlmenü "Mit ClipSaver laden" -->
+            <intent-filter android:label="@string/process_text">
+                <action android:name="android.intent.action.PROCESS_TEXT" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
