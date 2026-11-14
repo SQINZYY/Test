@@ -39,6 +39,7 @@ public class Tests {
         linkRecognition();
         linkResolve();
         twitter();
+        xUserLink();
         instagram();
         pageMedia();
         galleryList();
@@ -369,6 +370,30 @@ public class Tests {
         // X
         eq("https://x.com/max/status/1932498346298290497", Links.findUrl("Krass 😳 https://x.com/max/status/1932498346298290497?s=46&t=AbCdEfGh"), "X: s/t weg");
         eq("X · Beitrag", Links.describe("https://x.com/max/status/1932498346298290497"), "Beschreibung X");
+        // X: alle Formen landen bei x.com/nutzer/status/ID
+        String tweet = "https://x.com/max/status/1932498346298290497";
+        for (String in : new String[]{"https://twitter.com/max/status/1932498346298290497", "https://mobile.twitter.com/max/status/1932498346298290497",
+                "https://mobile.x.com/max/status/1932498346298290497?s=20", "x.com/max/status/1932498346298290497",
+                "https://xcancel.com/max/status/1932498346298290497#m", "https://nitter.net/max/status/1932498346298290497",
+                "https://fxtwitter.com/max/status/1932498346298290497", "https://vxtwitter.com/max/status/1932498346298290497",
+                "https://x.com/max/status/1932498346298290497?ref_src=twsrc%5Etfw%7Ctwcamp%5Etweetembed&lang=de"}) {
+            eq(tweet, Links.findUrl(in), "X-Form: " + in);
+        }
+        eq("https://x.com/i/status/1932498346298290497", Links.findUrl("https://platform.twitter.com/embed/Tweet.html?id=1932498346298290497"), "X eingebettet");
+        eq("https://x.com/i/status/1932498346298290497", Links.findUrl("https://twitter.com/i/videos/tweet/1932498346298290497"), "X /i/videos/tweet/");
+        eq("https://x.com/i/status/1932498346298290497", Links.findUrl("https://x.com/i/web/status/1932498346298290497"), "X /i/web/status/");
+        eq(tweet + "/photo/2", Links.findUrl(tweet + "/photo/2?s=46"), "X: Foto-Nummer bleibt");
+        eq("X · Beitrag (Foto)", Links.describe(tweet + "/photo/2"), "Beschreibung X-Foto");
+        eq(tweet, Links.findUrl("Neues Video! https://youtu.be/dQw4w9WgXcQ https://t.co/abc123 — " + tweet), "X-Beitrag vor Links aus seinem Text");
+        eq(tweet, Links.findUrl(tweet + " Link im Post: https://youtu.be/dQw4w9WgXcQ"), "X-Beitrag auch, wenn er zuerst steht");
+        eq("X · Profil", Links.describe("https://x.com/max"), "X-Profil");
+        eq("X", Links.describe("https://x.com/hashtag/Fussball"), "Hashtag ist kein Profil");
+        eq("X · Livestream", Links.describe("https://x.com/i/broadcasts/1ZkJzjBbVeExv"), "X-Livestream");
+        yes(Links.needsResolve("https://pic.x.com/AbCdEf") && Links.needsResolve("https://t.co/AbCdEf"), "pic.x.com und t.co werden aufgelöst");
+        eq("X · Bild-Link", Links.describe("https://pic.x.com/AbCdEf"), "Beschreibung pic.x.com");
+        eq("X-Kurzlink (t.co)", Links.describe("https://t.co/AbCdEf"), "Beschreibung t.co");
+        eq("X · Bild", Links.describe("https://pbs.twimg.com/media/GxAbC.jpg?name=orig"), "X-Bilddatei");
+        eq("twitter", Links.platform("https://video.twimg.com/ext_tw_video/1/pu/vid/1280x720/a.mp4"), "X-Videodatei");
         // YouTube
         eq("https://youtu.be/dQw4w9WgXcQ", Links.findUrl("https://youtu.be/dQw4w9WgXcQ?si=AbCdEf123"), "YouTube: si weg");
         eq("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123&t=42", Links.findUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123&pp=ygUF&t=42&feature=shared"),
@@ -444,6 +469,23 @@ public class Tests {
                 o.write(body);
             }
         });
+        // t.co im Browser: kein HTTP-Redirect, sondern meta refresh + location.replace
+        server.createContext("/tco", ex -> {
+            byte[] body = ("<head><meta name=\"referrer\" content=\"always\"><noscript><META http-equiv=\"refresh\" content=\"0;URL=https://x.com/max/status/1932498346298290497/photo/1\">"
+                    + "</noscript><title>https://x.com/max/status/1932498346298290497/photo/1</title></head>"
+                    + "<script>window.opener = null; location.replace(\"https:\\/\\/x.com\\/max\\/status\\/1932498346298290497\\/photo\\/1\")</script>").getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, body.length);
+            try (OutputStream o = ex.getResponseBody()) {
+                o.write(body);
+            }
+        });
+        server.createContext("/tcojs", ex -> {
+            byte[] body = "<script>location.replace(\"https:\\/\\/youtu.be\\/dQw4w9WgXcQ?si=x\")</script>".getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, body.length);
+            try (OutputStream o = ex.getResponseBody()) {
+                o.write(body);
+            }
+        });
         server.createContext("/s/xyz", ex -> {
             byte[] body = ("<html><head><link rel=\"canonical\" href=\"https://www.reddit.com/r/pics/comments/1abc/titel/?share_id=q\"></head></html>")
                     .getBytes(StandardCharsets.UTF_8);
@@ -458,6 +500,8 @@ public class Tests {
             eq("http://127.0.0.1:" + server.getAddress().getPort() + "/reel/DAbC123xyz/", Links.resolve(base[0] + "/share/reel/abc", new Http()),
                     "Teilen-Link → Anmeldeseite → eigentlicher Beitrag");
             eq("https://www.reddit.com/r/pics/comments/1abc/titel/", Links.resolve(base[0] + "/s/xyz", new Http()), "kanonische Adresse der Seite");
+            eq("https://x.com/max/status/1932498346298290497/photo/1", Links.resolve(base[0] + "/tco", new Http()), "t.co: meta refresh");
+            eq("https://youtu.be/dQw4w9WgXcQ", Links.resolve(base[0] + "/tcojs", new Http()), "t.co: location.replace");
             eq("http://127.0.0.1:1/nix", Links.resolve("http://127.0.0.1:1/nix", new Http()), "nicht erreichbar → Link bleibt");
         } finally {
             server.stop(0);
@@ -498,6 +542,60 @@ public class Tests {
         } catch (java.io.IOException e) {
             yes(e.getMessage().contains("keine Bilder"), "X ohne Medien: Fehler");
         }
+    }
+
+    /**
+     * Der Link aus der Nutzer-Meldung: X-Beitrag, dessen Vorschau nur das Profilbild zeigt. Erkannt werden muss der
+     * Beitrag; das Profilbild darf nie als Ergebnis erscheinen; FxTwitter/vxTwitter liefern die echten Medien.
+     */
+    static void xUserLink() throws Exception {
+        String link = "https://x.com/kujo_alya88282/status/2121268063530070048?a=JvDA9NAJOO_O1BQeshU&s=19";
+        eq("https://x.com/kujo_alya88282/status/2121268063530070048", Links.findUrl(link), "Nutzer-Link: bereinigt");
+        eq("X · Beitrag", Links.describe(Links.findUrl(link)), "Nutzer-Link: als Beitrag erkannt");
+        eq("2121268063530070048", Links.tweetId(Links.findUrl(link)), "Nutzer-Link: ID");
+        eq("kujo_alya88282", Links.tweetUser(Links.findUrl(link)), "Nutzer-Link: Nutzername");
+        eq(null, Links.tweetUser("https://x.com/i/status/2121268063530070048"), "ohne Nutzername");
+        eq("5545rkn5rtv", Twitter.token("2121268063530070048"), "Nutzer-Link: Token wie JavaScript");
+
+        // Seite zeigt nur Profilbild/Logo → kein Ergebnis statt falschem Bild
+        try {
+            PageMedia.parse(read("x-page-profilbild.html"), "https://x.com/kujo_alya88282/status/2121268063530070048");
+            yes(false, "Profilbild-Seite: kein Ergebnis");
+        } catch (java.io.IOException e) {
+            yes(true, "Profilbild-Seite: kein Ergebnis");
+        }
+        JSONObject img = PageMedia.parse(read("x-page-bild.html"), "https://x.com/a/status/1");
+        eq("https://pbs.twimg.com/media/HAbC1?format=jpg&name=orig", img.getJSONArray("images").getJSONObject(0).getString("url"),
+                "Seite mit Beitragsbild: Originalgröße");
+        yes(PageMedia.isProfileImage("https://pbs.twimg.com/profile_images/1890/AbCd_400x400.jpg"), "Profilbild X");
+        yes(PageMedia.isProfileImage("https://scontent.cdninstagram.com/v/t51.2885-19/123_n.jpg"), "Profilbild Instagram");
+        yes(PageMedia.isProfileImage("https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/abc~c5_100x100.jpeg"), "Profilbild TikTok");
+        yes(PageMedia.isProfileImage("https://example.com/img/avatar.png"), "Avatar allgemein");
+        yes(!PageMedia.isProfileImage("https://pbs.twimg.com/media/HAbC1.jpg"), "Beitragsbild ist kein Profilbild");
+        eq(null, MediaSniffer.classify("https://pbs.twimg.com/profile_images/1/a_400x400.jpg", null), "Werbe-Browser ignoriert Profilbilder");
+
+        // Gesperrter/sensibler Beitrag beim Einbettungs-Endpunkt → Anmelde-Hinweis
+        JSONObject tomb = new JSONObject().put("__typename", "TweetTombstone").put("tombstone", new JSONObject().put("text",
+                new JSONObject().put("text", "Age-restricted adult content. This content might not be appropriate for people under 18 years old. To view this media, you’ll need to log in to X.")));
+        eq(Twitter.LOGIN_NEEDED, Twitter.tombstoneMessage(tomb), "sensibler Beitrag: Anmelde-Hinweis");
+        yes(Results.pickError(Twitter.LOGIN_NEEDED, "No video could be found in this tweet", null) == Twitter.LOGIN_NEEDED, "Anmelde-Hinweis wird angezeigt");
+
+        // FxTwitter: zwei Bilder + Video
+        JSONObject fx = Twitter.parseFx(new JSONObject(read("fxtwitter.json")).getJSONObject("tweet"), "https://x.com/i/status/2121268063530070048");
+        eq("images", fx.getString("kind"), "FxTwitter: Galerie");
+        JSONArray items = fx.getJSONArray("images");
+        eq(3, items.length(), "FxTwitter: alle Medien");
+        eq("https://pbs.twimg.com/media/HAbC1?format=jpg&name=orig", items.getJSONObject(0).getString("url"), "FxTwitter: Bild in Originalgröße");
+        eq("https://pbs.twimg.com/media/HAbC2?format=png&name=orig", items.getJSONObject(1).getString("url"), "FxTwitter: PNG in Originalgröße");
+        eq("https://video.twimg.com/amplify_video/2/vid/avc1/1080x1920/c.mp4?tag=16", items.getJSONObject(2).getString("url"), "FxTwitter: bestes Video");
+        eq("@kujo_alya88282", fx.getString("uploader"), "FxTwitter: Nutzer");
+        yes(!fx.toString().contains("profile_images"), "FxTwitter: kein Profilbild im Ergebnis");
+
+        // vxTwitter: einzelnes Video
+        JSONObject vx = Twitter.parseVx(new JSONObject(read("vxtwitter.json")), "https://x.com/i/status/2121268063530070048");
+        eq("video", vx.getString("kind"), "vxTwitter: Video");
+        eq(720L, vx.getJSONArray("videos").getJSONObject(0).getLong("res"), "vxTwitter: Auflösung aus der Adresse");
+        eq(30.5, vx.getDouble("duration"), "vxTwitter: Dauer");
     }
 
     static void instagram() throws Exception {

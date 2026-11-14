@@ -101,7 +101,7 @@ final class Analyzer {
             own = POOL.submit(new Callable<JSONObject>() {
                 @Override
                 public JSONObject call() throws Exception {
-                    return Twitter.extract(tweet, new Http());
+                    return Twitter.extractAny(tweet, Links.tweetUser(target));
                 }
             });
         } else if (insta != null) {

@@ -222,7 +222,10 @@
     if (!st.input || !st.input.trim()) return '';
     var c = chosenLink(slot);
     if (!c) return '<span class="no">' + icon('alert', 'sm') + 'Kein Link erkannt – füge den Link oder den ganzen geteilten Text ein.</span>';
+    var shown = c.link.url.replace(/^https?:\/\/(www\.)?/, '');
+    if (shown.length > 46) shown = shown.slice(0, 45) + '…';
     return '<span class="ok">' + icon('check', 'sm') + 'Erkannt: <b>' + esc(c.link.label) + '</b></span>'
+      + '<span class="u">' + esc(shown) + '</span>'
       + (c.others ? '<button class="link" data-a="chooseLink" data-slot="' + slot + '">' + (c.others === 1 ? '1 weiterer Link' : c.others + ' weitere Links') + ' – anderen wählen</button>' : '');
   }
 

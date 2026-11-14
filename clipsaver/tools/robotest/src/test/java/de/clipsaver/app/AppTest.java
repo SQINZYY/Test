@@ -177,6 +177,11 @@ public class AppTest {
         call(bridge, "analyze", "r3", "https://www.instagram.com/p/CxAbC123/?igsh=abc");
         js = waitForJs(sw, "\"r3\"");
         assertTrue(js, js.contains("\"ok\":false") && js.contains("\"login\":\"instagram\""));
+
+        // Der X-Link aus der Nutzer-Meldung: ohne erreichbare Quellen nie ein Profilbild, sondern Anmelde-Knopf für X
+        call(bridge, "analyze", "r4", "https://x.com/kujo_alya88282/status/2121268063530070048?a=JvDA9NAJOO_O1BQeshU&s=19");
+        js = waitForJs(sw, "\"r4\"");
+        assertTrue(js, js.contains("\"ok\":false") && js.contains("\"login\":\"twitter\"") && !js.contains("profile_images"));
     }
 
     private static String waitForJs(ShadowWebView sw, String marker) throws Exception {

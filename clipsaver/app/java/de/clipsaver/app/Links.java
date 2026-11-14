@@ -34,7 +34,13 @@ final class Links {
     private static final Pattern YT_ID = Pattern.compile(
             "(?:[?&]v=|youtu\\.be/|/shorts/|/embed/|/live/|/v/|/e/)([\\w-]{11})(?![\\w-])");
     private static final Pattern YT_POST = Pattern.compile("(?:/post/|[?&]lb=)(Ug[\\w-]{10,})");
-    private static final Pattern TWEET_ID = Pattern.compile("/status(?:es)?/(\\d{5,})");
+    private static final Pattern TWEET_ID = Pattern.compile("/(?:status(?:es)?|videos/tweet)/(\\d{5,})");
+    private static final Pattern TWEET_PATH = Pattern.compile("^/([A-Za-z0-9_]{1,15})/status(?:es)?/\\d+(/(?:photo|video)/\\d)?");
+    /** Erste Pfadteile auf X, die kein Nutzername sind */
+    private static final Set<String> X_RESERVED = set("i", "home", "explore", "search", "notifications", "messages", "settings", "hashtag",
+            "compose", "intent", "share", "login", "logout", "tos", "privacy", "jobs", "lists", "communities", "premium", "jf");
+    /** Plattformen, deren Beiträge selbst Links enthalten: Der Beitrag-Link ist das Ziel, nicht die Links im Beitragstext */
+    private static final Set<String> CONTAINERS = set("twitter", "threads", "bluesky", "reddit", "facebook");
     private static final Pattern INSTA_CODE = Pattern.compile("instagram\\.com/(?:[\\w.-]+/)?(?:p|reels?|tv)/([\\w-]{5,})", Pattern.CASE_INSENSITIVE);
     private static final Pattern PINTEREST = Pattern.compile("(?:^|\\.)pinterest\\.(?:com|[a-z]{2}|co\\.[a-z]{2}|com\\.[a-z]{2})$");
     /** Pfade, die auf einen einzelnen Beitrag zeigen (für die Auswahl unter mehreren Links) */
@@ -46,7 +52,8 @@ final class Links {
     private static final String[][] PLATFORMS = {
             {"instagram.com", "instagram"}, {"instagr.am", "instagram"},
             {"x.com", "twitter"}, {"twitter.com", "twitter"}, {"fxtwitter.com", "twitter"}, {"vxtwitter.com", "twitter"},
-            {"fixupx.com", "twitter"}, {"fixvx.com", "twitter"},
+            {"fixupx.com", "twitter"}, {"fixvx.com", "twitter"}, {"twittpr.com", "twitter"}, {"twimg.com", "twitter"},
+            {"xcancel.com", "twitter"}, {"nitter.net", "twitter"}, {"nitter.poast.org", "twitter"}, {"nitter.privacydev.net", "twitter"},
             {"facebook.com", "facebook"}, {"fb.watch", "facebook"}, {"fb.com", "facebook"}, {"fb.gg", "facebook"},
             {"reddit.com", "reddit"}, {"redd.it", "reddit"},
             {"pin.it", "pinterest"},
@@ -67,7 +74,8 @@ final class Links {
     /** Kurzlinks, die erst auf die eigentliche Seite weiterleiten. */
     private static final String[] SHORTENERS = {"t.co", "pin.it", "redd.it", "bit.ly", "tinyurl.com", "ow.ly", "buff.ly",
             "dlvr.it", "goo.gl", "is.gd", "lnkd.in", "instagr.am", "fb.me", "trib.al", "shorturl.at", "rb.gy", "cutt.ly", "t.ly",
-            "tiny.cc", "s.id", "b23.tv", "v.douyin.com", "on.soundcloud.com", "t.snapchat.com", "flic.kr", "fb.watch"};
+            "tiny.cc", "s.id", "b23.tv", "v.douyin.com", "on.soundcloud.com", "t.snapchat.com", "flic.kr", "fb.watch",
+            "pic.x.com", "pic.twitter.com"};
     /** Tracking-Anhängsel, die überall wegkommen (dazu alle utm_…) */
     private static final Set<String> TRACKING = set("fbclid", "gclid", "dclid", "igsh", "igshid", "_branch_match_id", "_branch_referrer");
     /** … und je Plattform; nur Parameter, die nie für den Inhalt gebraucht werden */
@@ -91,14 +99,17 @@ final class Links {
         return new HashSet<>(Arrays.asList(values));
     }
 
-    /** Der passendste Link im Text (Beitrag vor Profil/Startseite; bei Gleichstand der erste), bereinigt. */
+    /**
+     * Der passendste Link im Text, bereinigt: Beitrag vor Profil/Startseite; ein Beitrag auf X, Reddit, Facebook …
+     * vor Links aus dessen Text; bei Gleichstand der letzte (Apps hängen den geteilten Link hinten an).
+     */
     static String findUrl(String text) {
         List<String> all = findUrls(text);
         String best = null;
         int bestScore = -1;
         for (String u : all) {
             int s = score(u);
-            if (s > bestScore) {
+            if (s >= bestScore) {
                 best = u;
                 bestScore = s;
             }
@@ -160,7 +171,7 @@ final class Links {
         while (end < u.length() && "/?#".indexOf(u.charAt(end)) < 0) end++;
         u = u.substring(0, end).toLowerCase(Locale.ROOT) + u.substring(end);
         if (host(u).indexOf('.') < 0) return;
-        u = clean(u);
+        u = canonicalTweet(clean(u));
         if (!out.contains(u)) out.add(u);
     }
 
@@ -302,10 +313,10 @@ final class Links {
     /** Wie gut passt der Link als Ziel: Beitrag (4) › Kurz-/Teilen-Link (3) › Seite mit Pfad (2) › Profil/Startseite. */
     static int score(String url) {
         if (isAdLibrary(url)) return 3;
-        if (tikTokId(url) != null || youTubeVideoId(url) != null || youTubePostId(url) != null || tweetId(url) != null
-                || instagramCode(url) != null) return 4;
-        if (needsResolve(url)) return 3;
         String p = path(url);
+        if (CONTAINERS.contains(platform(url)) && (tweetId(url) != null || (!host(url).endsWith("twimg.com") && CONTENT_PATH.matcher(p).find()))) return 5;
+        if (tikTokId(url) != null || youTubeVideoId(url) != null || youTubePostId(url) != null || instagramCode(url) != null) return 4;
+        if (needsResolve(url)) return 3;
         if (CONTENT_PATH.matcher(p).find()) return 3;
         if (!"other".equals(platform(url))) return p.length() > 1 ? 2 : 1;
         return p.length() > 1 ? 2 : 0;
@@ -382,13 +393,26 @@ final class Links {
             Http.Response r = http.get(url, null);
             String target = r.url;
             if (stripTracking(target).equals(stripTracking(url)) && r.body != null) {
-                String canon = canonical(r.body);
+                String canon = refresh(r.body);
+                if (canon == null) canon = canonical(r.body);
                 if (canon != null) target = PageMedia.absolute(r.url, canon);
             }
-            return target == null ? url : clean(target);
+            return target == null ? url : canonicalTweet(clean(target));
         } catch (Exception e) {
             return url;
         }
+    }
+
+    /** Weiterleitung im HTML: &lt;meta http-equiv="refresh" content="0;URL=…"&gt; oder location.replace("…") wie bei t.co. */
+    private static String refresh(String html) {
+        Matcher m = Pattern.compile("<meta[^>]+http-equiv=[\"']?refresh[\"']?[^>]*>", Pattern.CASE_INSENSITIVE).matcher(html);
+        if (m.find()) {
+            String content = PageMedia.attr(m.group(), "content");
+            Matcher u = Pattern.compile("url\\s*=\\s*['\"]?([^'\">\\s]+)", Pattern.CASE_INSENSITIVE).matcher(content == null ? "" : content);
+            if (u.find()) return u.group(1);
+        }
+        Matcher js = Pattern.compile("location\\.(?:replace\\(|href\\s*=\\s*)[\"']([^\"']+)[\"']").matcher(html);
+        return js.find() ? js.group(1).replace("\\/", "/") : null;
     }
 
     private static String canonical(String html) {
@@ -403,8 +427,31 @@ final class Links {
     /** Beitrags-ID auf X/Twitter: x.com/nutzer/status/123… (auch fxtwitter, vxtwitter …). */
     static String tweetId(String url) {
         if (!"twitter".equals(platform(url))) return null;
-        Matcher m = TWEET_ID.matcher(url);
-        return m.find() ? m.group(1) : null;
+        Matcher m = TWEET_ID.matcher(path(url));
+        if (m.find()) return m.group(1);
+        // eingebetteter Post: platform.twitter.com/embed/Tweet.html?id=…
+        String id = host(url).startsWith("platform.") || host(url).startsWith("syndication.") ? param(url, "id") : null;
+        return id != null && id.matches("\\d{5,}") ? id : null;
+    }
+
+    /** Nutzername eines X-Beitrags (x.com/nutzer/status/…) oder null bei /i/status/… */
+    static String tweetUser(String url) {
+        Matcher m = TWEET_PATH.matcher(path(url));
+        return m.find() && !X_RESERVED.contains(m.group(1).toLowerCase(Locale.ROOT)) ? m.group(1) : null;
+    }
+
+    /**
+     * X-Beiträge in eine Form bringen, die yt-dlp und gallery-dl sicher kennen: x.com/nutzer/status/ID –
+     * auch von Spiegelseiten (xcancel, nitter, fxtwitter …), eingebetteten Posts und /i/videos/tweet/….
+     */
+    static String canonicalTweet(String url) {
+        String id = tweetId(url);
+        if (id == null || host(url).endsWith("twimg.com")) return url;
+        Matcher m = TWEET_PATH.matcher(path(url));
+        boolean found = m.find();
+        String user = found && !X_RESERVED.contains(m.group(1).toLowerCase(Locale.ROOT)) ? m.group(1) : "i";
+        String media = found && m.group(2) != null ? m.group(2) : "";
+        return "https://x.com/" + user + "/status/" + id + media;
     }
 
     /** Kürzel eines Instagram-Beitrags: instagram.com/p/…, /reel/…, /tv/… */
@@ -471,6 +518,21 @@ final class Links {
         return null;
     }
 
+    private static String describeX(String url, String p) {
+        String h = host(url);
+        if (h.equals("pbs.twimg.com")) return "Bild";
+        if (h.endsWith("twimg.com")) return "Video-Datei";
+        if (isShortener(url)) return "Bild-Link";
+        if (tweetId(url) != null) return p.contains("/photo/") ? "Beitrag (Foto)" : p.contains("/video/") ? "Beitrag (Video)" : "Beitrag";
+        String[] parts = p.split("/");
+        String first = parts.length > 1 ? parts[1].toLowerCase(Locale.ROOT) : "";
+        if (p.startsWith("/i/broadcasts/")) return "Livestream";
+        if (p.startsWith("/i/spaces/")) return "Space";
+        if (p.contains("/article/")) return "Artikel";
+        if (first.length() > 0 && !X_RESERVED.contains(first) && parts.length <= 3) return "Profil";
+        return null;
+    }
+
     /** Kurze Beschreibung für die Anzeige unter dem Eingabefeld, z. B. "Instagram · Reel" oder "Link auf example.com". */
     static String describe(String url) {
         String plat = platform(url);
@@ -493,7 +555,7 @@ final class Links {
                         : p.contains("/tv/") ? "Video" : p.startsWith("/stories/") ? "Story" : p.length() > 1 ? "Profil" : null;
                 break;
             case "twitter":
-                what = tweetId(url) != null ? "Beitrag" : p.length() > 1 ? "Profil" : null;
+                what = describeX(url, p);
                 break;
             case "facebook":
                 what = p.startsWith("/share/") || hostIs(url, "fb.watch") ? "geteilter Link" : p.contains("/reel") ? "Reel"
@@ -513,6 +575,7 @@ final class Links {
         if (name == null) {
             String h = host(url);
             if (h.startsWith("www.")) h = h.substring(4);
+            if (h.equals("t.co")) return "X-Kurzlink (t.co)";
             return isShortener(url) ? "Kurzlink (" + h + ")" : "Link auf " + h;
         }
         return what == null ? name : name + " · " + what;

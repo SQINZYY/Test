@@ -75,6 +75,7 @@ final class MediaSniffer {
 
     /** Icons, Zählpixel und Werbe-Tracking. Kleine Bilder filtert zusätzlich die Oberfläche nach dem Laden. */
     static boolean isNoise(String lower) {
+        if (PageMedia.isProfileImage(lower)) return true;
         String path = pathOf(lower);
         if (path.endsWith(".svg") || path.endsWith(".ico") || path.contains("favicon")) return true;
         if (path.contains("/pixel") || path.contains("1x1") || path.contains("spacer") || path.contains("sprite")) return true;

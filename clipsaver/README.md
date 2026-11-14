@@ -38,6 +38,9 @@ bestehen (Fotos, Karussells, Galerien), werden genauso gespeichert, ebenso MP3 u
   - **Vorschaubild / Titelbild** jedes Videos in bester Auflösung.
   - **Instagram**: Reels, Videos, Fotos und Karussells (gemischt aus Bildern und Videos) – jedes Teil einzeln auswählbar.
   - **X/Twitter**: Videos (alle Qualitäten) und Bilder in Originalgröße, auch Beiträge, die nur Bilder haben; funktioniert ohne Anmeldung.
+    Gibt X die Medien nicht heraus (z. B. bei als sensibel markierten Beiträgen), fragt die App die öffentlichen Vorschau-Dienste
+    [FxTwitter](https://github.com/FixTweet/FxTwitter) und [vxTwitter](https://github.com/dylanpdx/BetterTwitFix) (dabei geht nur die
+    Beitrags-ID an diese Dienste). Klappt auch das nicht, bietet sie „Bei X anmelden“ an.
   - **Facebook, Reddit, Pinterest, Snapchat, Threads, Bluesky, Tumblr, Vimeo, Twitch, Imgur, Flickr …**: Videos über yt-dlp
     (über 1800 Seiten), Bilder und Galerien über gallery-dl (über 300 Seiten).
   - **Jede andere Webseite**: Video und Vorschaubild aus den Angaben der Seite (og:image, og:video, `<video>`), eingebettete Player
@@ -45,6 +48,8 @@ bestehen (Fotos, Karussells, Galerien), werden genauso gespeichert, ebenso MP3 u
   - **Playlists**: alle Videos auf einmal in der gewählten Qualität.
   - Findet die App auf einer Seite gar nichts, öffnet „Im Browser suchen“ die Seite und sammelt alle Videos und Bilder, die dort geladen
     werden. Zeigt eine Plattform den Beitrag nur angemeldet, bietet die Fehlermeldung direkt „Bei … anmelden“ an.
+  - Profilbilder, Banner und Logos (die Seiten oft als Vorschaubild angeben, wenn der Beitrag gesperrt ist) gelten nie als Medien
+    des Beitrags.
 - **Werbung** – Video- und Bild-Anzeigen speichern:
   - Link einer Anzeige einfügen: TikTok-Anzeigen über **Teilen → Link kopieren**; viele YouTube-Spots sind normale (oft nicht gelistete) Videos.
   - **Werbebibliotheken** direkt in der App durchsuchen: [TikTok Werbebibliothek](https://library.tiktok.com/ads),
@@ -105,7 +110,7 @@ bestehen (Fotos, Karussells, Galerien), werden genauso gespeichert, ebenso MP3 u
 ```sh
 pip install cryptography
 ./tools/build.sh                                   # -> release/ClipSaver.apk + release/ClipSaver-32bit.apk
-ABIS=arm64-v8a VERSION_CODE=4 VERSION_NAME=1.3 ./tools/build.sh
+ABIS=arm64-v8a VERSION_CODE=5 VERSION_NAME=1.4 ./tools/build.sh
 ```
 
 Signiert wird mit dem Debug-Schlüssel `tools/debug-signing.p12` (Passwort `android`), damit Updates sich über die alte Version installieren

@@ -258,6 +258,7 @@ details.help li { margin-bottom: 10px; }
 .detect .ok .ic { color: var(--ok); }
 .detect .ok b { color: var(--text); font-weight: 600; }
 .detect .no { color: var(--warn); }
+.detect .u { flex-basis: 100%; color: var(--muted); font-size: 12px; margin-left: 22px; word-break: break-all; }
 .detect .link { font-size: 13px; padding: 0; }
 .clip-banner { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; margin-bottom: 14px; border-radius: 14px;
   background: var(--accent-soft); border: 1px solid rgba(255, 61, 110, .35); }

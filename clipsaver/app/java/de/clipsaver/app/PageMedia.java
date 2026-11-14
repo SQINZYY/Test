@@ -52,7 +52,8 @@ final class PageMedia {
                 case "og:image:secure_url":
                 case "twitter:image":
                 case "twitter:image:src":
-                    if (abs != null) images.add(abs);
+                    // Profilbilder und Logos sind nie das Bild des Beitrags (X zeigt bei gesperrten Beiträgen das Profilbild)
+                    if (abs != null && !isProfileImage(abs)) images.add(fullSize(abs));
                     break;
                 case "og:video":
                 case "og:video:url":
@@ -107,6 +108,24 @@ final class PageMedia {
         }
         if (videos.isEmpty() && images.isEmpty() && embeds.isEmpty()) throw new IOException("Auf der Seite wurden keine Bilder oder Videos gefunden");
         return res;
+    }
+
+    /**
+     * Profilbilder, Banner, Logos und Icons der Plattformen. Sie stehen oft in og:image, wenn eine Seite den
+     * eigentlichen Beitrag nicht ohne Anmeldung zeigt, und dürfen nie als Medien des Beitrags gelten.
+     */
+    static boolean isProfileImage(String url) {
+        String l = url.toLowerCase(Locale.ROOT);
+        return l.contains("/profile_images/") || l.contains("/profile_banners/") || l.contains("abs.twimg.com")
+                || l.contains("/default_profile") || l.contains("/t51.2885-19/") || l.contains("/t39.30808-1/")
+                || l.contains("-avt-") || l.contains("avt-0068") || l.contains("/emoji/") || l.contains("static.xx.fbcdn.net")
+                || l.matches(".*[/_.-](avatars?|profile_?pic|profileicon|logo|logos|favicon|apple-touch-icon|og-default|default-og)[/_.-].*");
+    }
+
+    /** Vorschau-Größe → Originalgröße, wo die Plattform das per Adresse erlaubt (X-Bilder). */
+    private static String fullSize(String url) {
+        if (url.contains("pbs.twimg.com/media/")) return Twitter.sized(url, "orig");
+        return url;
     }
 
     /** Wert eines Attributs in einem einzelnen Tag (doppelte oder einfache Anführungszeichen). */
