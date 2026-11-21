@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Schwert vor einem Runenkreis, innerhalb der 66dp-Sicherheitszone -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#00000000" android:strokeColor="#FF9F67F5" android:strokeWidth="2.5"
+        android:pathData="M54,54 m-26,0 a26,26 0 1 0 52,0 a26,26 0 1 0 -52,0" />
+    <path android:fillColor="#00000000" android:strokeColor="#669F67F5" android:strokeWidth="1.5"
+        android:pathData="M54,30 L74.8,66 L33.2,66 Z M54,78 L33.2,42 L74.8,42 Z" />
+    <path android:fillColor="#FFF5E6C8" android:pathData="M54,25 L58,31 L58,66 L50,66 L50,31 Z" />
+    <path android:fillColor="#FFF59E0B" android:pathData="M42,66 h24 a2,2 0 0 1 0,4 h-24 a2,2 0 0 1 0,-4 z M52,70 h4 v10 h-4 z" />
+    <path android:fillColor="#FFF59E0B" android:pathData="M54,83 m-3.5,0 a3.5,3.5 0 1 0 7,0 a3.5,3.5 0 1 0 -7,0" />
+</vector>

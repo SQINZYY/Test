@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dark Fantasy Generator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="embers" aria-hidden="true"></div>
+
+  <main id="view-create" class="view active">
+    <header class="hero">
+      <div class="hero-title">ERSCHAFFE</div>
+      <div class="hero-sub">legendäre Charaktere</div>
+      <div class="counter" id="counter"></div>
+    </header>
+
+    <section class="panel">
+      <div class="row-head"><h2>Stil wählen</h2></div>
+      <div class="styles" id="styles"></div>
+
+      <div class="option">
+        <div class="option-label">Geschlecht</div>
+        <div class="chips" id="gender">
+          <button data-v="r" class="chip">Zufällig</button>
+          <button data-v="m" class="chip">Männlich</button>
+          <button data-v="f" class="chip">Weiblich</button>
+        </div>
+      </div>
+
+      <button class="option mode" id="mode">
+        <div>
+          <div class="option-label">Modus</div>
+          <div class="option-value" id="mode-value"></div>
+        </div>
+        <svg viewBox="0 0 24 24" class="mode-icon"><path d="M12 2l2.4 6.6L21 9l-5.2 4.3L17.6 21 12 17.3 6.4 21l1.8-7.7L3 9l6.6-.4z"/></svg>
+      </button>
+    </section>
+
+    <button class="summon" id="summon"><span>Charakter beschwören</span></button>
+
+    <section id="result"></section>
+  </main>
+
+  <main id="view-editor" class="view">
+    <header class="page-head">
+      <h1>Selbst erstellen</h1>
+      <button class="ghost" id="ed-new">🎲 Neu</button>
+    </header>
+    <p class="hint">Stell deinen Charakter selbst zusammen. Bei jeder Auswahl siehst du die Stufe – <span class="best">★ Beste</span> ist die stärkste Wahl.</p>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Grundlagen</h3>
+      <label class="field"><span>Name</span>
+        <div class="with-btn"><input id="ed-name" maxlength="60" autocomplete="off"><button class="dice" data-dice="name" title="Zufälliger Name">🎲</button></div></label>
+      <label class="field"><span>Beiname</span>
+        <div class="with-btn"><input id="ed-epithet" maxlength="60" autocomplete="off"><button class="dice" data-dice="epithet" title="Zufälliger Beiname">🎲</button></div></label>
+      <div class="field"><span>Stil</span><div class="chips" id="ed-style"></div></div>
+      <div class="field"><span>Geschlecht</span><div class="chips" id="ed-gender">
+        <button class="chip" data-v="m">Männlich</button><button class="chip" data-v="f">Weiblich</button></div></div>
+      <label class="field"><span>Volk</span><select id="ed-race"></select></label>
+      <label class="field"><span>Klasse</span><select id="ed-cls"></select></label>
+      <label class="field"><span>Gesinnung</span><select id="ed-align"></select></label>
+    </section>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Seltenheit</h3>
+      <div id="ed-rarity" class="rarity-pick"></div>
+      <div id="ed-rarity-info" class="ed-info"></div>
+      <div class="field"><span>Stufe <b id="ed-level-v"></b></span>
+        <div class="with-btn"><input type="range" id="ed-level"><button class="chip best-btn" id="ed-level-max">Max ★ Beste</button></div></div>
+    </section>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Attribute <span class="ed-count" id="ed-points"></span></h3>
+      <div id="ed-stats"></div>
+      <button class="chip best-btn wide" id="ed-best-stats">Optimal für die Klasse verteilen ★ Beste</button>
+    </section>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Fähigkeiten <span class="ed-count" id="ed-abil-count"></span></h3>
+      <div id="ed-abilities"></div>
+    </section>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Waffe</h3>
+      <select id="ed-weapon"></select>
+      <input id="ed-weapon-own" maxlength="60" placeholder="Eigene Waffe, z. B. „Klinge der Asche“" hidden>
+    </section>
+
+    <section class="panel ed">
+      <h3 class="ed-h">Lore & Zitat</h3>
+      <div class="field"><span class="row-between">Geschichte <button class="chip" data-dice="lore">🎲 Lore würfeln</button></span>
+        <textarea id="ed-lore" rows="6" maxlength="1500" placeholder="Woher kommt dein Charakter? Was treibt ihn an?"></textarea></div>
+      <div class="field"><span class="row-between">Zitat <button class="chip" data-dice="quote">🎲</button></span>
+        <input id="ed-quote" maxlength="200"></div>
+    </section>
+
+    <h3 class="ed-h preview-h">Vorschau</h3>
+    <div id="ed-preview"></div>
+    <button class="summon" id="ed-save"><span>In Sammlung speichern</span></button>
+  </main>
+
+  <main id="view-arena" class="view">
+    <header class="page-head"><h1>Arena</h1></header>
+    <section class="panel arena-intro">
+      <h3 class="ed-h">Turm der Schatten</h3>
+      <p>Kämpfe dich mit deinen Charakteren Ebene für Ebene nach oben. Gegner zeigen an, was sie als Nächstes tun –
+        verteidige dich gegen schwere Schläge, betäube sie oder heile dich rechtzeitig. Nach jedem Sieg wählst du einen Segen,
+        alle 5 Ebenen wartet ein Boss.</p>
+      <div id="arena-top"></div>
+    </section>
+    <h3 class="ed-h arena-h">Wähle deinen Champion</h3>
+    <div id="arena-list" class="list"></div>
+  </main>
+
+  <main id="view-collection" class="view">
+    <header class="page-head">
+      <h1>Sammlung</h1>
+      <button class="ghost" id="import-btn">Code einfügen</button>
+    </header>
+    <div class="chips filter" id="filter"></div>
+    <div id="collection-list" class="list"></div>
+  </main>
+
+  <main id="view-history" class="view">
+    <header class="page-head">
+      <h1>Verlauf</h1>
+      <button class="ghost" id="clear-history">Leeren</button>
+    </header>
+    <div id="history-list" class="list"></div>
+  </main>
+
+  <div id="detail" class="overlay" hidden>
+    <div class="overlay-bar"><button class="ghost" id="detail-close">← Zurück</button></div>
+    <div id="detail-body"></div>
+  </div>
+
+  <div id="dialog" class="overlay dialog" hidden>
+    <div class="dialog-box">
+      <h3>Charakter-Code einfügen</h3>
+      <p class="muted">Codes beginnen mit <b>DF1.</b> oder <b>DFC1.</b> (selbst erstellt) – du kannst auch die ganze geteilte Nachricht einfügen.</p>
+      <textarea id="import-text" rows="4" placeholder="DF1.dark.rb.…"></textarea>
+      <div class="dialog-actions">
+        <button class="ghost" id="paste">Aus Zwischenablage</button>
+        <span class="grow"></span>
+        <button class="ghost" id="import-cancel">Abbrechen</button>
+        <button class="primary" id="import-ok">Laden</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="battle" class="battle" hidden>
+    <div class="b-top">
+      <button class="ghost" id="b-quit">✕ Aufgeben</button>
+      <div class="b-floor" id="b-floor"></div>
+      <div class="b-best" id="b-best"></div>
+    </div>
+    <div class="b-enemy" id="b-enemy">
+      <div class="b-intent" id="b-intent"></div>
+      <div class="b-sigil" id="b-esigil"></div>
+      <div class="b-name" id="b-ename"></div>
+      <div class="hp" id="b-ehp"><i></i><span></span></div>
+      <div class="b-status" id="b-estatus"></div>
+    </div>
+    <div class="b-log" id="b-log"></div>
+    <div class="b-player" id="b-player">
+      <div class="b-prow">
+        <div class="b-psigil" id="b-psigil"></div>
+        <div class="b-pinfo">
+          <div class="b-pname" id="b-pname"></div>
+          <div class="hp" id="b-php"><i></i><span></span></div>
+          <div class="b-status" id="b-pstatus"></div>
+        </div>
+      </div>
+      <div class="b-actions" id="b-actions"></div>
+    </div>
+    <div class="b-modal" id="b-modal" hidden></div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <nav class="tabs">
+    <button data-view="create" class="active">
+      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 9l-5.2 4.3L17.6 21 12 17.3 6.4 21l1.8-7.7L3 9l6.6-.4z"/></svg>Beschwören</button>
+    <button data-view="editor">
+      <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Erstellen</button>
+    <button data-view="arena">
+      <svg viewBox="0 0 24 24"><path d="M6.9 3 3 3v3.9l6.2 6.2-2.1 2.1-1.4-1.4-1.4 1.4 2.5 2.5L4 20.5 5.5 22l2.8-2.8 2.5 2.5 1.4-1.4-1.4-1.4 2.1-2.1zM17.1 3 21 3v3.9l-5.4 5.4-3.9-3.9zM13.6 16.3l2.1 2.1-1.4 1.4 1.4 1.4 2.5-2.5 2.8 2.8 1.5-1.5-2.8-2.8 2.5-2.5-1.4-1.4-1.4 1.4-2.1-2.1z"/></svg>Arena</button>
+    <button data-view="collection">
+      <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.3C1 8 3.5 4 7.2 4c2 0 3.6 1.1 4.8 2.8C13.2 5.1 14.8 4 16.8 4 20.5 4 23 8 21.5 11.7 19.5 16.4 12 21 12 21z"/></svg>Sammlung</button>
+    <button data-view="history">
+      <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.05-4.95L14 10h7V3l-2.64 2.64A8.96 8.96 0 0 0 12 3zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8z"/></svg>Verlauf</button>
+  </nav>
+
+  <script src="data.js"></script>
+  <script src="generator.js"></script>
+  <script src="sigil.js"></script>
+  <script src="game.js"></script>
+  <script src="app.js"></script>
+  <script src="arena.js"></script>
+</body>
+</html>
