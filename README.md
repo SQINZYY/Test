@@ -1,3 +1,6 @@
+> **Neu im Repo:** [Unterwegs](unterwegs/README.md) – Routenplaner-App (zu Fuß, Fahrrad, Auto, Bus, Bahn, Zug, auch kombiniert),
+> APK: [`release/Unterwegs.apk`](release/Unterwegs.apk).
+
 # SetupBuilder
 
 Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die garantiert zusammenpassen, Teile vergleichen, Budget verwalten, den eigenen PC mit Freunden teilen und Upgrade-Tipps bekommen.
