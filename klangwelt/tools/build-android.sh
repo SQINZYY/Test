@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Baut release/SetupBuilder.apk ohne Android Studio / Android SDK.
+# Baut klangwelt/release/Klangwelt.apk ohne Android Studio / Android SDK.
 # Benötigt: Java (JDK 17+), Python 3 mit "cryptography", curl, unzip.
-# Die Werkzeuge (aapt2, dx, Android-Klassen) werden einmalig von Maven Central geladen.
+# Werkzeuge (aapt2, dx, Android-Klassen) kommen einmalig von Maven Central – wie bei tools/build.sh im Repo.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TOOLS="$ROOT/.build-tools"
-OUT="$ROOT/build"
-VERSION_CODE="${VERSION_CODE:-7}"
-VERSION_NAME="${VERSION_NAME:-1.6}"
+KW="$(cd "$(dirname "$0")/.." && pwd)"
+REPO="$(cd "$KW/.." && pwd)"
+TOOLS="$REPO/.build-tools"
+OUT="$REPO/build/klangwelt-android"
+VERSION_CODE="${VERSION_CODE:-3}"
+VERSION_NAME="${VERSION_NAME:-1.2.0}"
 MAVEN="https://repo1.maven.org/maven2"
 
 fetch() { # url ziel
@@ -28,24 +29,25 @@ if [ ! -x "$TOOLS/aapt2" ]; then
 fi
 
 rm -rf "$OUT"
-mkdir -p "$OUT/classes" "$ROOT/release"
+mkdir -p "$OUT/classes" "$OUT/assets/www" "$KW/release"
+cp -r "$KW/web/." "$OUT/assets/www/"
 
 echo "Ressourcen …"
-"$TOOLS/aapt2" compile --dir "$ROOT/app/res" -o "$OUT/res.zip"
+"$TOOLS/aapt2" compile --dir "$KW/android/res" -o "$OUT/res.zip"
 "$TOOLS/aapt2" link -o "$OUT/base.apk" -I "$TOOLS/android-framework.jar" \
-  --manifest "$ROOT/app/AndroidManifest.xml" -A "$ROOT/app/assets" \
+  --manifest "$KW/android/AndroidManifest.xml" -A "$OUT/assets" \
   --min-sdk-version 24 --target-sdk-version 34 \
   --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" "$OUT/res.zip"
 
 echo "Java …"
 javac -nowarn -Xlint:-options --release 8 -encoding UTF-8 \
   -classpath "$TOOLS/android-all.jar" -d "$OUT/classes" \
-  $(find "$ROOT/app/java" -name '*.java')
+  $(find "$KW/android/java" -name '*.java')
 java -cp "$TOOLS/dx.jar" com.android.dx.command.Main --dex --min-sdk-version=24 \
   --output="$OUT/classes.dex" "$OUT/classes"
 
 echo "Packen & signieren …"
-python3 "$ROOT/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$ROOT/release/SetupBuilder.apk" \
-  "$ROOT/tools/debug-signing.p12" android
+python3 "$REPO/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$KW/release/Klangwelt.apk" \
+  "$REPO/tools/debug-signing.p12" android
 
-echo "Fertig: release/SetupBuilder.apk ($(du -h "$ROOT/release/SetupBuilder.apk" | cut -f1))"
+echo "Fertig: klangwelt/release/Klangwelt.apk ($(du -h "$KW/release/Klangwelt.apk" | cut -f1))"

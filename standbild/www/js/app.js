@@ -1,0 +1,1083 @@
+/* Standbild – Oberfläche: Video laden, Analyse zeigen, Poster-Galerie, Editor, Speichern. */
+(function () {
+  'use strict';
+  const S = window.Standbild;
+  const T = S.templates;
+  const $ = id => document.getElementById(id);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+  // Plattform: Android-App (Bridge), Claude-Artifact (downloads/sample) oder normaler Browser
+  const android = !!(window.Android && typeof window.Android.saveImage === 'function');
+  const inClaude = !!(window.claude && typeof window.claude.use === 'function');
+  const use = name => inClaude ? Promise.resolve().then(() => window.claude.use(name)).catch(() => null) : Promise.resolve(null);
+  const downloadsP = use('downloads');
+  const sampleP = use('sample');
+
+  const state = {
+    a: null, posters: [], text: { title: '', subtitle: '', line: '', infos: true }, touched: false,
+    format: 'poster', filetype: 'jpg', demo: false, busy: false, ai: null,
+  };
+  let nextId = 1;
+  S.app = state;
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const byId = id => state.posters.find(p => String(p.id) === String(id));
+  const pad = n => String(n).padStart(2, '0');
+  const slug = s => (String(s || 'poster').toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'poster').slice(0, 40);
+
+  let toastTimer;
+  function toast(msg, ms) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('is-on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('is-on'), ms || 3400);
+  }
+
+  const fontsReady = (async () => {
+    if (!document.fonts || !document.fonts.load) return;
+    const specs = ['400 40px Anton', '400 40px "Instrument Serif"', 'italic 400 40px "Instrument Serif"', '400 40px "Archivo Black"',
+      '400 40px "IBM Plex Mono"', '600 40px "IBM Plex Mono"', '400 40px "IBM Plex Sans"', '600 40px "IBM Plex Sans"', '400 40px Shrikhand'];
+    await Promise.race([Promise.all(specs.map(s => document.fonts.load(s).catch(() => null))), new Promise(r => setTimeout(r, 4000))]);
+  })();
+
+  // ---------- Format ----------
+
+  function cm(px) { return (px / 300 * 2.54).toFixed(1).replace('.', ',').replace(',0', ''); }
+  function buildFormats() {
+    const box = $('formats');
+    for (const [k, f] of Object.entries(S.formats)) {
+      const lab = el('label');
+      const inp = el('input');
+      inp.type = 'radio'; inp.name = 'fmt'; inp.id = 'fmt-' + k; inp.value = k; inp.checked = k === state.format;
+      inp.addEventListener('change', () => { state.format = k; updateFormatHint(); refreshAll(); });
+      lab.append(inp, el('span', null, f.name));
+      box.append(lab);
+    }
+    document.querySelectorAll('input[name="ft"]').forEach(inp => inp.addEventListener('change', () => { state.filetype = inp.value; }));
+    updateFormatHint();
+  }
+  function updateFormatHint() {
+    const [w, h] = S.formats[state.format].export;
+    $('format-hint').textContent = `${w} × ${h} Pixel, ${cm(w)} × ${cm(h)} cm bei 300 dpi`;
+  }
+
+  // ---------- Leerer Zustand ----------
+
+  function showGhosts() {
+    const grid = $('grid');
+    grid.innerHTML = '';
+    const ratio = S.formats[state.format].ratio;
+    for (const k of S.templateOrder) {
+      const fig = el('figure', 'ghost');
+      const sheet = el('div', 'ghost-sheet');
+      sheet.style.aspectRatio = String(ratio);
+      sheet.append(el('span', null, T[k].name));
+      fig.append(sheet, el('figcaption', null, T[k].about));
+      grid.append(fig);
+    }
+  }
+
+  // ---------- Video laden ----------
+
+  const STEPS = {
+    video: [['load', 'Video öffnen', 0.03], ['sample', 'Bilder abtasten', 0.72], ['refine', 'Schärfste Momente suchen', 0.1],
+      ['capture', 'Standbilder in voller Größe holen', 0.12], ['colors', 'Farben und Ausschnitte bestimmen', 0.03]],
+    photo: [['load', 'Fotos laden', 0.9], ['colors', 'Farben und Ausschnitte bestimmen', 0.1]],
+  };
+  let PHASES = [], WEIGHT = {};
+  let live = null;
+
+  function showProgress(kind) {
+    PHASES = STEPS[kind].map(x => x[0]);
+    WEIGHT = Object.fromEntries(STEPS[kind].map(x => [x[0], x[2]]));
+    const list = $('phases');
+    list.innerHTML = '';
+    for (const [id, label] of STEPS[kind]) {
+      const li = el('li', null, label + ' ');
+      li.dataset.phase = id;
+      const c = el('span', 'count');
+      c.dataset.count = id;
+      li.append(c);
+      list.append(li);
+    }
+    $('progress').hidden = false;
+    $('bar-fill').style.width = '0%';
+    $('live').hidden = kind !== 'video';
+    const cv = $('live');
+    cv.width = Math.max(200, Math.round(cv.clientWidth * Math.min(2, window.devicePixelRatio || 1)));
+    cv.height = 80;
+    live = cv.getContext('2d');
+    live.clearRect(0, 0, cv.width, cv.height);
+  }
+
+  function onProgress(p) {
+    const idx = PHASES.indexOf(p.phase);
+    document.querySelectorAll('#phases li').forEach((li, i) => {
+      li.classList.toggle('is-done', i < idx);
+      li.classList.toggle('is-now', i === idx);
+    });
+    const count = document.querySelector(`[data-count="${p.phase}"]`);
+    if (count && p.total > 1) count.textContent = `${Math.min(p.done + (p.phase === 'sample' ? 0 : 1), p.total)}/${p.total}`;
+    if (!(p.phase in WEIGHT)) return;
+    let pct = 0;
+    for (let i = 0; i < idx; i++) pct += WEIGHT[PHASES[i]];
+    pct += WEIGHT[p.phase] * (p.total ? p.done / p.total : 0);
+    $('bar-fill').style.width = Math.round(pct * 100) + '%';
+    if (p.sample && live) {
+      const cv = live.canvas, n = p.total, i = p.done - 1;
+      const x0 = Math.floor(i * cv.width / n), x1 = Math.floor((i + 1) * cv.width / n);
+      const rows = p.sample.rows, R = rows.length / 3;
+      for (let r = 0; r < R; r++) {
+        live.fillStyle = `rgb(${rows[r * 3]},${rows[r * 3 + 1]},${rows[r * 3 + 2]})`;
+        live.fillRect(x0, Math.floor(r * cv.height / R), x1 - x0, Math.ceil(cv.height / R));
+      }
+    }
+  }
+
+  function errorText(e) {
+    const m = e && e.message;
+    if (m === 'codec') return 'Dieses Video kann der Browser nicht öffnen. Speichere es als MP4 (H.264) und versuch es noch einmal.';
+    if (m === 'duration') return 'Die Länge des Videos ließ sich nicht lesen. Versuch es mit einer MP4-Datei.';
+    if (m === 'empty') return 'Im Video gab es keine brauchbaren Bilder (nur schwarz oder einfarbig?).';
+    if (m === 'image') return 'Ein Foto ließ sich nicht öffnen. HEIC-Bilder vom iPhone kann nicht jeder Browser lesen, speichere sie als JPG.';
+    return 'Die Analyse ist fehlgeschlagen. Versuch es mit einer anderen Videodatei.';
+  }
+
+  const isVideo = f => (f.type || '').startsWith('video/') || /\.(mp4|mov|m4v|webm|mkv|3gp)$/i.test(f.name || '');
+  const isImage = f => (f.type || '').startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|avif|heic)$/i.test(f.name || '');
+
+  // Nimmt, was gewählt oder hineingezogen wurde: das erste Video, sonst bis zu 12 Fotos
+  function startFiles(list) {
+    const files = Array.from(list || []);
+    const video = files.find(isVideo);
+    if (video) return start('video', video);
+    const photos = files.filter(isImage);
+    if (photos.length) {
+      if (photos.length > 12) toast('Es werden die ersten 12 Fotos verwendet.');
+      return start('photo', photos.slice(0, 12));
+    }
+    if (files.length) toast('Wähle ein Video (MP4, MOV, WebM) oder Fotos (JPG, PNG, WebP).');
+  }
+
+  async function start(kind, payload) {
+    if (state.busy || !payload) return;
+    state.busy = true;
+    document.querySelector('.panel').classList.add('is-busy');
+    setButtons();
+    $('report').hidden = true;
+    showProgress(kind);
+    try {
+      const a = kind === 'video' ? await S.analyzeVideo(payload, onProgress) : await S.analyzePhotos(payload, onProgress);
+      await fontsReady;
+      useAnalysis(a, false, null);
+      toast(kind === 'video'
+        ? `${a.keyframes.length} Standbilder gefunden, ${state.posters.length} Poster gestaltet.`
+        : `${a.keyframes.length === 1 ? 'Foto' : a.keyframes.length + ' Fotos'} geladen, ${state.posters.length} Poster gestaltet.`);
+    } catch (e) {
+      console.error(e);
+      toast(errorText(e), 7000);
+      if (state.a) $('report').hidden = false;
+    } finally {
+      state.busy = false;
+      document.querySelector('.panel').classList.remove('is-busy');
+      $('progress').hidden = true;
+      setButtons();
+    }
+  }
+
+  function defaultText(a) {
+    const photo = a.kind === 'photo';
+    const clean = S.cleanName(photo && a.frames.length > 1 ? a.frames[0].name : a.name), mood = a.mood || { title: 'Standbild', line: '' };
+    const n = a.keyframes.length;
+    return {
+      title: clean || mood.title,
+      subtitle: photo ? (n > 1 ? `Eine Serie in ${n} Fotos` : 'Eine Fotografie')
+        : a.scenes.length > 1 ? `Ein Film in ${a.scenes.length} Szenen` : 'Ein Moment, angehalten',
+      line: mood.line || '',
+    };
+  }
+  function setText(t) {
+    state.text = Object.assign({}, state.text, { title: t.title || '', subtitle: t.subtitle || '', line: t.line || '' });
+    $('t-title').value = state.text.title;
+    $('t-sub').value = state.text.subtitle;
+    $('t-line').value = state.text.line;
+  }
+
+  function useAnalysis(a, demo, text) {
+    const keepTyped = state.touched && !state.a;
+    state.a = a;
+    state.demo = demo;
+    if (text) setText(text);
+    else if (!keepTyped) setText(defaultText(a));
+    state.touched = false;
+    state.posters = S.suggest(a).map(p => Object.assign({ id: nextId++ }, p));
+    $('ai-ideas').innerHTML = '';
+    showReport();
+    buildGallery();
+    setButtons();
+    if (state.ai) {
+      $('ai').hidden = false;
+      $('ai-note').textContent = a.kind === 'photo'
+        ? 'Claude schaut sich die Fotos an und schlägt Titel, Untertitel und Zeile vor.'
+        : 'Claude schaut sich vier Standbilder an und schlägt Titel, Untertitel und Zeile vor.';
+    }
+  }
+
+  function setButtons() {
+    const ready = !!state.a && !state.busy;
+    $('save-all').disabled = !ready || !state.posters.length;
+    $('more').disabled = !ready;
+    $('save-frames').disabled = !ready;
+    $('save-frames').hidden = !!state.a && state.a.kind === 'photo';
+  }
+
+  // ---------- Analysebericht ----------
+
+  function frameThumb(f, w) {
+    const c = f.content, ar = c.w / c.h;
+    const cv = S.canvas(w, w / ar);
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(f.canvas, c.x, c.y, c.w, c.h, 0, 0, cv.width, cv.height);
+    return cv;
+  }
+
+  function showReport() {
+    const a = state.a;
+    $('report').hidden = false;
+    $('src-name').textContent = a.name;
+    $('src-name').title = a.name;
+    $('src-badge').hidden = !state.demo;
+    const photo = a.kind === 'photo';
+    const sizes = new Set(a.timeline.map(f => (f.size || []).join('×')));
+    const facts = photo ? [
+      ['Fotos', String(a.keyframes.length)],
+      ['Auflösung', sizes.size === 1 ? [...sizes][0] : 'gemischt'],
+      ['Farben', String(a.palette.length)],
+      ['Stimmung', a.mood ? a.mood.title : '–'],
+    ] : [
+      ['Länge', S.tc(a.duration)],
+      ['Auflösung', `${a.width}×${a.height}`],
+      ['Szenen', String(a.scenes.length)],
+      ['Geprüft', `${a.checked} Bilder`],
+      ['Schwarzbilder', String(a.blackCount)],
+      ['Kino-Balken', a.letterbox ? 'entfernt' : 'keine'],
+    ];
+    const dl = $('facts');
+    dl.innerHTML = '';
+    for (const [k, v] of facts) {
+      const d = el('div');
+      d.append(el('dt', null, k), el('dd', null, v));
+      dl.append(d);
+    }
+
+    // Zeitleiste: Filmbarcode, Szenenschnitte, gewählte Standbilder
+    const cv = $('strip');
+    cv.width = 720; cv.height = 92;
+    const ctx = cv.getContext('2d');
+    const n = a.samples.length, R = a.samples[0].rows.length / 3, top = 14, h = cv.height - top;
+    a.samples.forEach((s, i) => {
+      const x0 = Math.floor(i * cv.width / n), x1 = Math.floor((i + 1) * cv.width / n);
+      for (let r = 0; r < R; r++) {
+        ctx.fillStyle = `rgb(${s.rows[r * 3]},${s.rows[r * 3 + 1]},${s.rows[r * 3 + 2]})`;
+        ctx.fillRect(x0, top + Math.floor(r * h / R), x1 - x0, Math.ceil(h / R));
+      }
+    });
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#c70063';
+    const ink = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#666';
+    ctx.fillStyle = ink;
+    for (const sc of a.scenes) ctx.fillRect(Math.round(sc.start / a.duration * cv.width), 0, 2, 7);
+    ctx.fillStyle = accent;
+    for (const f of photo ? [] : a.keyframes) {
+      const x = f.t / a.duration * cv.width;
+      ctx.beginPath(); ctx.moveTo(x - 6, 2); ctx.lineTo(x + 6, 2); ctx.lineTo(x, 12); ctx.closePath(); ctx.fill();
+      ctx.fillRect(x - 1, top, 2, h);
+    }
+    const axis = $('strip-axis');
+    axis.innerHTML = '';
+    if (!photo) for (let k = 0; k <= 4; k++) axis.append(el('span', null, S.tc(a.duration * k / 4)));
+
+    const keys = $('keys');
+    keys.innerHTML = '';
+    a.keyframes.forEach((f, i) => {
+      const box = el('div', 'key');
+      const label = el('span');
+      label.append(el('b', null, `#${i + 1}`), document.createTextNode(photo ? '' : ` ${S.tc(f.t)}`));
+      box.append(frameThumb(f, 192), label);
+      box.title = photo ? (f.name || `Foto ${i + 1}`) : `Standbild ${i + 1} bei ${S.tc(f.t, true)}`;
+      keys.append(box);
+    });
+    $('save-frames').textContent = android ? 'Standbilder ohne Gestaltung in der Galerie speichern' : 'Standbilder ohne Gestaltung speichern (ZIP)';
+  }
+
+  // ---------- Galerie ----------
+
+  const ICON_DL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  function cardLabel(p) {
+    const a = state.a, t = T[p.tpl], photo = a.kind === 'photo';
+    if (t.frames === 'all') return `${a.timeline.length} ${photo ? 'Fotos' : 'Bilder'}`;
+    if (t.frames === 0) return photo ? `${a.samples.length} Farbstreifen` : `${a.samples.length} Streifen, ganzes Video`;
+    const f = a.keyframes[p.frame] || a.keyframes[0];
+    if (photo) {
+      if (t.frames === 3) return `${Math.min(3, a.timeline.length)} Fotos ab Foto ${f.index + 1}`;
+      return a.keyframes.length > 1 ? `Foto ${f.index + 1}` : (f.name || 'Foto');
+    }
+    return t.frames === 3 ? `3 Bilder ab ${S.tc(f.t)}` : `Standbild ${S.tc(f.t)}`;
+  }
+
+  function makeCard(p) {
+    const fig = el('figure', 'card');
+    fig.dataset.id = p.id;
+    const open = el('button', 'card-open');
+    open.type = 'button';
+    const cv = el('canvas');
+    const ratio = S.formats[state.format].ratio;
+    cv.width = 200; cv.height = Math.round(200 / ratio);
+    open.append(cv);
+    open.addEventListener('click', () => openEditor(p.id));
+    const cap = el('figcaption');
+    const name = el('div', 'card-name');
+    name.append(el('b'), el('span'));
+    const dl = el('button', 'icon-btn');
+    dl.type = 'button';
+    dl.innerHTML = ICON_DL;
+    dl.addEventListener('click', () => downloadOne(p.id));
+    cap.append(name, dl);
+    fig.append(open, cap);
+    labelCard(fig, p);
+    return fig;
+  }
+  function labelCard(fig, p) {
+    const n = T[p.tpl].name;
+    fig.querySelector('.card-name b').textContent = n;
+    fig.querySelector('.card-name span').textContent = cardLabel(p);
+    fig.querySelector('.card-open').setAttribute('aria-label', `Poster „${n}“ bearbeiten`);
+    fig.querySelector('.icon-btn').setAttribute('aria-label', `Poster „${n}“ ${android ? 'in der Galerie speichern' : 'herunterladen'}`);
+  }
+
+  function buildGallery() {
+    const grid = $('grid');
+    grid.innerHTML = '';
+    for (const p of state.posters) grid.append(makeCard(p));
+    updateGalleryHead();
+    refreshAll();
+  }
+  function updateGalleryHead() {
+    $('gallery-title').textContent = `${state.posters.length} Posterideen`;
+    $('gallery-sub').textContent = state.demo
+      ? 'Beispiel aus deinem TikTok-Testvideo. Lade oben ein eigenes Video oder Foto hoch, dann entstehen deine Poster.'
+      : `Tippe ein Poster an, um Stil, ${state.a && state.a.kind === 'photo' ? 'Foto' : 'Standbild'}, Ausschnitt, Farbe und Texte zu ändern.`;
+  }
+
+  let renderGen = 0;
+  async function refreshAll() {
+    if (!state.a) { showGhosts(); return; }
+    const gen = ++renderGen;
+    await fontsReady;
+    for (const fig of Array.from($('grid').querySelectorAll('.card'))) {
+      if (gen !== renderGen) return;
+      renderCard(fig);
+      await tick();
+    }
+  }
+  function renderCard(fig) {
+    const p = byId(fig.dataset.id);
+    if (!p) return;
+    const cv = fig.querySelector('canvas');
+    const ratio = S.formats[state.format].ratio;
+    const cssW = fig.clientWidth || 220;
+    const W = Math.round(Math.min(900, cssW * Math.min(2, window.devicePixelRatio || 1)));
+    const H = Math.round(W / ratio);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    S.render(cv, state.a, p, state.text, state.format);
+  }
+  function renderOne(id) {
+    const fig = document.querySelector(`.card[data-id="${id}"]`);
+    if (fig) { labelCard(fig, byId(id)); renderCard(fig); }
+  }
+
+  let textTimer;
+  function scheduleRefresh() {
+    clearTimeout(textTimer);
+    textTimer = setTimeout(refreshAll, 220);
+  }
+
+  function moreIdeas() {
+    const a = state.a;
+    if (!a) return;
+    const key = p => [p.tpl, p.frame, p.zoom || 1, p.accent ? p.accent.join() : ''].join(':');
+    const have = new Set(state.posters.map(key));
+    const tpls = S.templateOrder.filter(k => T[k].frames !== 0 && T[k].frames !== 'all' && S.available(a, k));
+    const rand = S.rng(state.posters.length * 31 + 7);
+    const fresh = [];
+    for (let guard = 0; fresh.length < 6 && guard < 600; guard++) {
+      const frame = Math.floor(rand() * a.keyframes.length);
+      // Erst neue Kombinationen aus Stil und Bild, danach Varianten mit engerem Ausschnitt oder anderer Akzentfarbe
+      const variant = guard > 120 || a.keyframes.length === 1;
+      const pal = a.keyframes[frame].palette;
+      const p = {
+        tpl: tpls[Math.floor(rand() * tpls.length)], frame,
+        zoom: variant ? [1, 1.35, 1.7][Math.floor(rand() * 3)] : (rand() < 0.35 ? 1.35 : 1),
+        accent: variant && pal.length && rand() < 0.6 ? pal[Math.floor(rand() * pal.length)].rgb.slice() : null,
+      };
+      if (have.has(key(p))) continue;
+      have.add(key(p));
+      fresh.push(Object.assign({ id: nextId++ }, p));
+    }
+    if (!fresh.length) { toast('Mehr Kombinationen gibt es nicht. Ändere einzelne Poster im Editor.'); return; }
+    state.posters.push(...fresh);
+    const grid = $('grid');
+    const figs = fresh.map(makeCard);
+    figs.forEach(f => grid.append(f));
+    updateGalleryHead();
+    setButtons();
+    (async () => { await fontsReady; for (const f of figs) { renderCard(f); await tick(); } })();
+    figs[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    toast(`${fresh.length} neue Ideen unten angefügt.`);
+  }
+
+  // ---------- Exportieren & Speichern ----------
+
+  async function exportPoster(p) {
+    await fontsReady;
+    const [w, h] = S.formats[state.format].export;
+    const cv = S.canvas(w, h);
+    S.render(cv, state.a, p, state.text, state.format);
+    const type = state.filetype === 'png' ? 'image/png' : 'image/jpeg';
+    const blob = await new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('blob')), type, 0.93));
+    cv.width = cv.height = 1;
+    return blob;
+  }
+  function posterName(p, i) {
+    const title = p.title ?? state.text.title;
+    return `standbild-${slug(title)}-${pad(i + 1)}-${p.tpl}.${state.filetype === 'png' ? 'png' : 'jpg'}`;
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result).split(',')[1] || '');
+      r.onerror = () => rej(r.error);
+      r.readAsDataURL(blob);
+    });
+  }
+
+  async function save(blob, name) {
+    if (android) {
+      const r = window.Android.saveImage(await blobToBase64(blob), name, blob.type || 'image/jpeg');
+      if (r !== 'ok') throw new Error(r || 'save');
+      return;
+    }
+    if (inClaude) {
+      const dl = await downloadsP;
+      if (!dl) throw { code: 'unavailable' };
+      await dl.save({ filename: name, data: blob });
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = el('a');
+    link.href = url; link.download = name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+  function saveError(e) {
+    const c = e && e.code;
+    if (c === 'declined') return 'Download abgebrochen.';
+    if (c === 'rate_limited') return 'Es ist noch ein Download offen. Bestätige ihn oder warte kurz.';
+    if (c === 'too_large') return 'Die Datei ist zu groß. Lade die Poster einzeln herunter.';
+    if (c === 'unavailable' || c === 'not_granted' || c === 'capability_disabled') return 'Herunterladen ist in dieser Ansicht nicht möglich.';
+    if (e && e.message === 'permission') return 'Ohne Speicher-Berechtigung kann die App nichts in der Galerie ablegen.';
+    return 'Speichern hat nicht geklappt. Versuch es noch einmal.';
+  }
+
+  async function downloadOne(id) {
+    const p = byId(id);
+    if (!p || state.busy) return;
+    const i = state.posters.indexOf(p);
+    toast('Poster wird in voller Größe gerendert …', 20000);
+    try {
+      const blob = await exportPoster(p);
+      await save(blob, posterName(p, i));
+      toast(android ? 'In der Galerie gespeichert (Bilder › Standbild).' : `Gespeichert: ${posterName(p, i)}`);
+    } catch (e) {
+      console.error(e);
+      toast(saveError(e), 5000);
+    }
+  }
+
+  async function saveMany(items, zipName, what) {
+    state.busy = true;
+    setButtons();
+    try {
+      if (android) {
+        for (let i = 0; i < items.length; i++) {
+          toast(`${what} ${i + 1} von ${items.length} wird gespeichert …`, 60000);
+          const { name, blob } = await items[i]();
+          await save(blob, name);
+        }
+        toast(`${items.length} ${what === 'Poster' ? 'Poster' : 'Standbilder'} in der Galerie gespeichert (Bilder › Standbild).`, 5000);
+      } else {
+        const files = [];
+        for (let i = 0; i < items.length; i++) {
+          toast(`${what} ${i + 1} von ${items.length} wird gerendert …`, 60000);
+          const { name, blob } = await items[i]();
+          files.push({ name, data: new Uint8Array(await blob.arrayBuffer()) });
+          await tick();
+        }
+        toast('ZIP wird gepackt …', 60000);
+        await save(S.zip(files), zipName);
+        toast(`ZIP mit ${files.length} Dateien gespeichert.`, 5000);
+      }
+    } catch (e) {
+      console.error(e);
+      toast(saveError(e), 5000);
+    } finally {
+      state.busy = false;
+      setButtons();
+    }
+  }
+
+  function saveAll() {
+    if (!state.a || state.busy) return;
+    const items = state.posters.map((p, i) => async () => ({ name: posterName(p, i), blob: await exportPoster(p) }));
+    saveMany(items, `standbild-${slug(state.text.title)}-poster.zip`, 'Poster');
+  }
+
+  function saveFrames() {
+    if (!state.a || state.busy) return;
+    const items = state.a.keyframes.map((f, i) => async () => {
+      const c = f.content, cv = S.canvas(c.w, c.h);
+      cv.getContext('2d').drawImage(f.canvas, c.x, c.y, c.w, c.h, 0, 0, cv.width, cv.height);
+      const blob = await new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('blob')), 'image/jpeg', 0.95));
+      return { name: `standbild-${pad(i + 1)}-${S.tc(f.t, true).replace(/[:.]/g, '-')}.jpg`, blob };
+    });
+    saveMany(items, `standbild-${slug(state.text.title)}-standbilder.zip`, 'Standbild');
+  }
+
+  // ---------- Editor ----------
+
+  let edId = null, drag = null, edQueued = false;
+
+  function openEditor(id) {
+    const p = byId(id);
+    if (!p) return;
+    edId = id;
+    buildEditor(p);
+    const dlg = $('editor');
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    requestAnimationFrame(renderEditor);
+  }
+  function closeEditor() {
+    const dlg = $('editor');
+    if (dlg.close) dlg.close(); else { dlg.removeAttribute('open'); onEditorClosed(); }
+  }
+  function onEditorClosed() {
+    if (edId != null) renderOne(edId);
+    edId = null;
+  }
+
+  function chip(label, pressed, onClick, cls) {
+    const b = el('button', cls || 'chip', label);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function buildEditor(p) {
+    const a = state.a, t = T[p.tpl];
+    $('ed-title').textContent = `${t.name}-Poster`;
+    const tpls = $('ed-tpls');
+    tpls.innerHTML = '';
+    for (const k of S.templateOrder) {
+      if (!S.available(a, k)) continue;
+      tpls.append(chip(T[k].name, k === p.tpl, () => { p.tpl = k; p.focus = null; edChanged(true); }));
+    }
+    const photo = a.kind === 'photo';
+    $('ed-frames-title').textContent = photo ? 'Foto' : 'Standbild';
+    const frames = $('ed-frames');
+    frames.innerHTML = '';
+    if (t.frames === 0) {
+      frames.append(el('p', 'hint', photo ? 'Dieser Stil macht aus allen Fotos Farbstreifen.' : 'Dieser Stil nutzt das ganze Video, nicht ein einzelnes Standbild.'));
+    } else {
+      a.keyframes.forEach((f, i) => {
+        const b = el('button', 'thumb');
+        b.type = 'button';
+        b.setAttribute('aria-pressed', i === p.frame ? 'true' : 'false');
+        b.setAttribute('aria-label', photo ? `Foto ${i + 1}` : `Standbild ${i + 1} bei ${S.tc(f.t)}`);
+        b.append(frameThumb(f, 160), el('span', null, photo ? `Foto ${i + 1}` : S.tc(f.t)));
+        b.addEventListener('click', () => { p.frame = i; p.focus = null; p.accent = null; edChanged(true); });
+        frames.append(b);
+      });
+    }
+    $('ed-zoom').value = p.zoom || 1;
+    $('ed-zoom').disabled = t.frames === 0;
+    document.querySelector('.ed-drag').hidden = t.frames === 0;
+    p.style = p.style || {};
+    p.vis = p.vis || {};
+    p.info = p.info || {};
+    const f = a.keyframes[p.frame] || a.keyframes[0];
+    colorRow($('ed-colors'), p.accent, rgb => { p.accent = rgb; }, f);
+    colorRow($('ed-tcolor'), p.style.titleColor, rgb => { p.style.titleColor = rgb; }, f);
+    colorRow($('ed-xcolor'), p.style.textColor, rgb => { p.style.textColor = rgb; }, f);
+    for (const [id, key] of [['ed-t-title', 'title'], ['ed-t-sub', 'subtitle'], ['ed-t-line', 'line']]) {
+      const inp = $(id);
+      inp.value = p[key] ?? '';
+      inp.placeholder = state.text[key] || '';
+      $('ed-v-' + key).checked = p.vis[key] !== false;
+    }
+    fillFonts($('ed-tfont'), 'Titelschrift wie Vorlage', p.style.titleFont);
+    fillFonts($('ed-xfont'), 'Textschrift wie Vorlage', p.style.textFont);
+    $('ed-tcase').value = p.style.titleCase || '';
+    $('ed-tsize').value = p.style.titleScale || 1;
+    $('ed-tsize-out').textContent = Math.round((p.style.titleScale || 1) * 100) + ' %';
+    buildInfos(p);
+    $('ed-save').textContent = android ? 'In der Galerie speichern' : 'Herunterladen';
+  }
+
+  // Farbauswahl: Automatisch, Farben aus dem Bild, Weiß, Schwarz und ein freier Farbwähler
+  function colorRow(box, current, set, frame) {
+    box.innerHTML = '';
+    const same = (x, y) => !!x && !!y && x.join() === y.join();
+    const pick = rgb => { set(rgb); edChanged(true); };
+    box.append(chip('Auto', !current, () => pick(null), 'swatch swatch-auto'));
+    const seen = [];
+    const options = frame.palette.concat(state.a.palette).map(c => c.rgb).concat([[255, 255, 255], [17, 17, 17]]);
+    for (const rgb of options) {
+      if (seen.some(s => Math.hypot(s[0] - rgb[0], s[1] - rgb[1], s[2] - rgb[2]) < 30) || seen.length >= 11) continue;
+      seen.push(rgb);
+      const b = chip('', same(current, rgb), () => pick(rgb.slice()), 'swatch');
+      b.style.background = S.color.css(rgb);
+      b.setAttribute('aria-label', `${S.colorName(rgb)} ${S.color.hex(rgb)}`);
+      b.title = `${S.colorName(rgb)} ${S.color.hex(rgb)}`;
+      box.append(b);
+    }
+    const own = el('label', 'swatch swatch-pick');
+    own.title = 'Eigene Farbe wählen';
+    const inp = el('input');
+    inp.type = 'color';
+    inp.value = current ? S.color.hex(current).toLowerCase() : '#ffffff';
+    inp.setAttribute('aria-label', 'Eigene Farbe wählen');
+    const custom = current && !seen.some(s => same(s, current));
+    own.setAttribute('aria-pressed', custom ? 'true' : 'false');
+    if (custom) own.style.background = S.color.css(current);
+    inp.addEventListener('input', () => {
+      const h = inp.value;
+      set([parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+      own.style.background = h;
+      queueEditorRender();
+    });
+    inp.addEventListener('change', () => edChanged(true));
+    own.append(inp);
+    box.append(own);
+  }
+
+  function fillFonts(sel, first, current) {
+    sel.innerHTML = '';
+    const o0 = el('option', null, first);
+    o0.value = '';
+    sel.append(o0);
+    for (const [k, f] of Object.entries(S.fontChoices)) {
+      const o = el('option', null, f.name);
+      o.value = k;
+      sel.append(o);
+    }
+    sel.value = current || '';
+  }
+
+  // Zusatzinfos des aktuellen Stils: Haken = sichtbar, Feld = eigener Text (leer = automatisch)
+  function buildInfos(p) {
+    const box = $('ed-infos');
+    box.innerHTML = '';
+    const used = S.render(S.canvas(80, 120), state.a, p, state.text, state.format).used;
+    const items = T[p.tpl].items || {};
+    $('ed-infos-group').hidden = !used.length;
+    for (const it of used) {
+      const row = el('div', 'info-row');
+      const on = p.vis[it.key] ?? (state.text.infos !== false);
+      row.classList.toggle('is-off', !on);
+      const lab = el('label', 'check');
+      const cb = el('input');
+      cb.type = 'checkbox';
+      cb.checked = on;
+      cb.addEventListener('change', () => {
+        p.vis[it.key] = cb.checked;
+        row.classList.toggle('is-off', !cb.checked);
+        queueEditorRender();
+      });
+      lab.append(cb, el('span', null, items[it.key] || it.key));
+      row.append(lab);
+      if (it.def !== null) {
+        const inp = el('input');
+        inp.type = 'text';
+        inp.autocomplete = 'off';
+        inp.maxLength = 120;
+        inp.value = p.info[it.key] || '';
+        inp.placeholder = it.def || '(leer)';
+        inp.setAttribute('aria-label', `${items[it.key] || it.key}: eigener Text`);
+        inp.addEventListener('input', () => {
+          if (inp.value.trim()) p.info[it.key] = inp.value; else delete p.info[it.key];
+          if (inp.value.trim() && !cb.checked) { cb.checked = true; p.vis[it.key] = true; row.classList.remove('is-off'); }
+          queueEditorRender();
+        });
+        row.append(inp);
+      }
+      box.append(row);
+    }
+  }
+
+  function edChanged(rebuild) {
+    const p = byId(edId);
+    if (!p) return;
+    if (rebuild) buildEditor(p);
+    queueEditorRender();
+  }
+  function queueEditorRender() {
+    if (edQueued) return;
+    edQueued = true;
+    requestAnimationFrame(() => { edQueued = false; renderEditor(); });
+  }
+
+  let lastMain = null;
+  function renderEditor() {
+    const p = byId(edId);
+    if (!p) return;
+    const cv = $('ed-canvas'), stage = $('ed-stage');
+    const ratio = S.formats[state.format].ratio;
+    const narrow = window.matchMedia('(max-width: 820px)').matches;
+    const availW = Math.max(160, stage.clientWidth - (narrow ? 28 : 48));
+    const availH = narrow ? window.innerHeight * 0.58 : Math.max(200, stage.clientHeight - 80);
+    let w = availW, h = w / ratio;
+    if (h > availH) { h = availH; w = h * ratio; }
+    cv.style.width = Math.round(w) + 'px';
+    cv.style.height = Math.round(h) + 'px';
+    const W = Math.round(Math.min(1600, w * Math.min(2, window.devicePixelRatio || 1)));
+    const H = Math.round(W / ratio);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const d = S.render(cv, state.a, p, state.text, state.format);
+    lastMain = d.main;
+  }
+
+  function setupEditor() {
+    const dlg = $('editor');
+    dlg.addEventListener('close', onEditorClosed);
+    dlg.addEventListener('click', e => { if (e.target === dlg) closeEditor(); });
+    $('ed-close').addEventListener('click', closeEditor);
+    $('ed-zoom').addEventListener('input', e => {
+      const p = byId(edId);
+      if (!p) return;
+      p.zoom = parseFloat(e.target.value) || 1;
+      queueEditorRender();
+    });
+    $('ed-reset').addEventListener('click', () => {
+      const p = byId(edId);
+      if (!p) return;
+      p.focus = null; p.zoom = 1;
+      $('ed-zoom').value = 1;
+      queueEditorRender();
+    });
+    for (const [id, key] of [['ed-t-title', 'title'], ['ed-t-sub', 'subtitle'], ['ed-t-line', 'line']]) {
+      $(id).addEventListener('input', e => {
+        const p = byId(edId);
+        if (!p) return;
+        p[key] = e.target.value.trim() ? e.target.value : null;
+        queueEditorRender();
+      });
+    }
+    for (const key of ['title', 'subtitle', 'line']) {
+      $('ed-v-' + key).addEventListener('change', e => {
+        const p = byId(edId);
+        if (!p) return;
+        p.vis = p.vis || {};
+        p.vis[key] = e.target.checked;
+        queueEditorRender();
+      });
+    }
+    const styleInput = (id, key, parse) => $(id).addEventListener('input', e => {
+      const p = byId(edId);
+      if (!p) return;
+      p.style = p.style || {};
+      p.style[key] = parse(e.target.value);
+      if (key === 'titleScale') $('ed-tsize-out').textContent = Math.round(p.style.titleScale * 100) + ' %';
+      queueEditorRender();
+    });
+    styleInput('ed-tfont', 'titleFont', v => v || null);
+    styleInput('ed-xfont', 'textFont', v => v || null);
+    styleInput('ed-tcase', 'titleCase', v => v || null);
+    styleInput('ed-tsize', 'titleScale', v => parseFloat(v) || 1);
+    $('ed-apply-all').addEventListener('click', () => {
+      const p = byId(edId);
+      if (!p) return;
+      let n = 0;
+      for (const q of state.posters) {
+        if (q === p) continue;
+        q.style = Object.assign({}, p.style);
+        q.accent = p.accent ? p.accent.slice() : null;
+        q.vis = Object.assign({}, q.tpl === p.tpl ? p.vis : q.vis, { title: p.vis.title, subtitle: p.vis.subtitle, line: p.vis.line });
+        if (q.tpl === p.tpl) q.info = Object.assign({}, p.info);
+        n++;
+      }
+      refreshAll();
+      toast(`Gestaltung auf ${n} weitere Poster übertragen. Zusatzinfos gelten für alle ${T[p.tpl].name}-Poster.`, 4500);
+    });
+    $('ed-save').addEventListener('click', () => { if (edId != null) downloadOne(edId); });
+    $('ed-dup').addEventListener('click', () => {
+      const p = byId(edId);
+      if (!p) return;
+      const copy = Object.assign({}, p, {
+        id: nextId++, focus: p.focus && Object.assign({}, p.focus),
+        style: Object.assign({}, p.style), vis: Object.assign({}, p.vis), info: Object.assign({}, p.info),
+      });
+      state.posters.splice(state.posters.indexOf(p) + 1, 0, copy);
+      const fig = makeCard(copy);
+      document.querySelector(`.card[data-id="${p.id}"]`).after(fig);
+      renderOne(p.id);
+      edId = copy.id;
+      buildEditor(copy);
+      queueEditorRender();
+      updateGalleryHead();
+      toast('Kopie angelegt, du bearbeitest jetzt die Kopie.');
+    });
+    $('ed-del').addEventListener('click', () => {
+      const p = byId(edId);
+      if (!p) return;
+      state.posters.splice(state.posters.indexOf(p), 1);
+      const fig = document.querySelector(`.card[data-id="${p.id}"]`);
+      if (fig) fig.remove();
+      edId = null;
+      closeEditor();
+      updateGalleryHead();
+      setButtons();
+      toast('Poster entfernt.');
+    });
+
+    // Ausschnitt mit Maus oder Finger verschieben
+    const cv = $('ed-canvas');
+    cv.addEventListener('pointerdown', e => {
+      const p = byId(edId);
+      if (!p || T[p.tpl].frames === 0) return;
+      const frame = state.a.keyframes[p.frame] || state.a.keyframes[0];
+      const main = lastMain || { aspect: S.formats[state.format].ratio, share: 1 };
+      const box = S.cropBox(frame, main.aspect, p.zoom || 1, p.focus);
+      const shown = cv.clientWidth * main.share;
+      drag = {
+        x: e.clientX, y: e.clientY, frame, aspect: main.aspect,
+        fx: (box.x + box.w / 2) / frame.canvas.width, fy: (box.y + box.h / 2) / frame.canvas.height,
+        kx: box.w / frame.canvas.width / shown, ky: box.h / frame.canvas.height / (shown / main.aspect),
+      };
+      cv.setPointerCapture(e.pointerId);
+      cv.classList.add('is-dragging');
+      e.preventDefault();
+    });
+    cv.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const p = byId(edId);
+      if (!p) return;
+      p.focus = { x: clamp(drag.fx - (e.clientX - drag.x) * drag.kx, 0, 1), y: clamp(drag.fy - (e.clientY - drag.y) * drag.ky, 0, 1) };
+      queueEditorRender();
+    });
+    const end = () => {
+      if (!drag) return;
+      const p = byId(edId);
+      if (p && p.focus) {
+        // Fokus auf den tatsächlich möglichen Ausschnitt zurückholen, damit es beim nächsten Ziehen nicht hakt
+        const box = S.cropBox(drag.frame, drag.aspect, p.zoom || 1, p.focus);
+        p.focus = { x: (box.x + box.w / 2) / drag.frame.canvas.width, y: (box.y + box.h / 2) / drag.frame.canvas.height };
+      }
+      drag = null;
+      cv.classList.remove('is-dragging');
+    };
+    cv.addEventListener('pointerup', end);
+    cv.addEventListener('pointercancel', end);
+  }
+
+  // ---------- Texte von Claude ----------
+
+  async function setupAI() {
+    const sample = await sampleP;
+    if (!sample || typeof sample.json !== 'function') return;
+    let lim = null;
+    try { lim = await sample.limits(); } catch (e) { lim = null; }
+    if (!lim || !lim.images) return;
+    state.ai = { sample, max: Math.max(1, Math.min(4, lim.images.maxCount || 4)) };
+    if (state.a) $('ai').hidden = false;
+  }
+
+  function frameJpeg(f, max) {
+    const c = f.content, k = Math.min(1, max / Math.max(c.w, c.h));
+    const cv = S.canvas(c.w * k, c.h * k);
+    cv.getContext('2d').drawImage(f.canvas, c.x, c.y, c.w, c.h, 0, 0, cv.width, cv.height);
+    return new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('blob')), 'image/jpeg', 0.85));
+  }
+
+  async function askClaude() {
+    if (!state.ai || !state.a) return;
+    const btn = $('ai-go'), note = $('ai-note'), a = state.a;
+    btn.disabled = true;
+    note.textContent = a.kind === 'photo' ? 'Claude schaut sich die Fotos an …' : 'Claude schaut sich die Standbilder an …';
+    try {
+      const frames = a.keyframes.slice(0, state.ai.max);
+      const images = await Promise.all(frames.map(f => frameJpeg(f, 768)));
+      const prompt = [
+        a.kind === 'photo'
+          ? `Du bekommst ${frames.length === 1 ? 'ein Foto' : frames.length + ' Fotos'} (Datei: "${a.name}").`
+          : `Du bekommst ${frames.length} Standbilder aus einem Video (Datei: "${a.name}", Länge ${S.tc(a.duration)}, ${a.scenes.length} Szenen).`,
+        'Daraus werden Poster gestaltet: Filmplakat, Magazin-Cover, Kunstdruck und ähnliche Stile.',
+        'Schlage 4 unterschiedliche Text-Sets für diese Poster vor. Jedes Set hat:',
+        '- "titel": 1 bis 3 Wörter, prägnant wie ein Filmtitel. Steht im Bild gut lesbarer Text (Name, Ort, Marke, Modell), darfst du ihn nutzen.',
+        '- "untertitel": höchstens 6 Wörter, sagt sachlich, was zu sehen ist.',
+        '- "zeile": ein kurzer, stimmungsvoller Satz (Tagline), höchstens 9 Wörter.',
+        'Schreib auf Deutsch; Eigennamen und feste englische Begriffe dürfen bleiben. Keine Anführungszeichen, keine Emojis, keine Hashtags.',
+        'Antworte nur mit JSON in genau dieser Form: {"ideen":[{"titel":"...","untertitel":"...","zeile":"..."}]}',
+      ].join('\n');
+      const res = await state.ai.sample.json(prompt, { images, modelTier: 'default' });
+      const ideas = ((res && res.ideen) || []).filter(i => i && typeof i.titel === 'string' && i.titel.trim()).slice(0, 4)
+        .map(i => ({ title: i.titel.trim(), subtitle: String(i.untertitel || '').trim(), line: String(i.zeile || '').trim() }));
+      if (!ideas.length) throw { code: 'empty' };
+      showIdeas(ideas);
+      applyIdea(ideas[0], 0);
+      note.textContent = 'Der erste Vorschlag ist übernommen. Tippe einen anderen an, um zu wechseln.';
+    } catch (e) {
+      console.error(e);
+      if (e && e.code === 'not_granted') {
+        note.textContent = 'Claude darf auf dieser Seite nicht genutzt werden. Trag die Texte einfach selbst ein.';
+        btn.hidden = true;
+      } else if (e && e.code === 'rate_limited') {
+        note.textContent = 'Gerade zu viele Anfragen. Versuch es in einer Minute noch einmal.';
+      } else {
+        note.textContent = 'Claude konnte gerade keine Vorschläge machen. Versuch es noch einmal oder trag die Texte selbst ein.';
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  function showIdeas(ideas) {
+    const box = $('ai-ideas');
+    box.innerHTML = '';
+    ideas.forEach((idea, i) => {
+      const b = el('button', 'idea');
+      b.type = 'button';
+      b.setAttribute('aria-pressed', 'false');
+      b.append(el('b', null, idea.title), el('span', null, [idea.subtitle, idea.line].filter(Boolean).join(' · ')));
+      b.addEventListener('click', () => applyIdea(idea, i));
+      box.append(b);
+    });
+  }
+  function applyIdea(idea, i) {
+    setText(idea);
+    state.touched = true;
+    $('ai-ideas').querySelectorAll('.idea').forEach((b, k) => b.setAttribute('aria-pressed', k === i ? 'true' : 'false'));
+    refreshAll();
+  }
+
+  // ---------- Beispiel (nur wenn eingebettet) ----------
+
+  async function loadDemo(data) {
+    const img = src => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+    const dec = b64 => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const a = Object.assign({}, data.meta);
+    a.samples = data.samples.map(s => Object.assign({}, s, { rows: dec(s.rows) }));
+    a.frames = await Promise.all(data.frames.map(async f => {
+      const im = await img(f.src);
+      const cv = S.canvas(im.naturalWidth, im.naturalHeight);
+      cv.getContext('2d').drawImage(im, 0, 0);
+      return S.prepareFrame(cv, { t: f.t, key: f.key, score: f.score, sample: f.sample, scene: f.scene });
+    }));
+    S.finishAnalysis(a);
+    await fontsReady;
+    if (!state.a) useAnalysis(a, true, data.text);
+  }
+
+  // ---------- Android: geteilte Videos ----------
+
+  S.openShared = async function () {
+    if (!android || typeof window.Android.shared !== 'function') return;
+    const info = window.Android.shared();
+    if (!info) return;
+    try {
+      const items = JSON.parse(info).items || [];
+      toast('Geteilte Dateien werden geladen …', 15000);
+      const files = await Promise.all(items.map(async (it, i) => {
+        const blob = await fetch(it.url).then(r => { if (!r.ok) throw new Error('fetch'); return r.blob(); });
+        return new File([blob], it.name || `Datei-${i + 1}`, { type: it.type || blob.type });
+      }));
+      startFiles(files);
+    } catch (e) {
+      console.error(e);
+      toast('Die geteilte Datei ließ sich nicht öffnen.', 5000);
+    }
+  };
+
+  // Android-Zurücktaste: erst den Editor schließen, dann die App
+  S.back = function () {
+    if ($('editor').open) { closeEditor(); return true; }
+    return false;
+  };
+
+  // ---------- Start ----------
+
+  function init() {
+    buildFormats();
+    setupEditor();
+    $('save-all').textContent = android ? 'Alle in der Galerie speichern' : 'Alle als ZIP herunterladen';
+    for (const id of ['file', 'photos']) {
+      $(id).addEventListener('change', e => {
+        const files = Array.from(e.target.files || []);
+        e.target.value = '';
+        startFiles(files);
+      });
+    }
+    const drop = $('drop');
+    ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, () => drop.classList.add('is-over')));
+    ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, () => drop.classList.remove('is-over')));
+    window.addEventListener('dragover', e => e.preventDefault());
+    window.addEventListener('drop', e => {
+      e.preventDefault();
+      if (e.dataTransfer && e.dataTransfer.files) startFiles(e.dataTransfer.files);
+    });
+    for (const [id, key] of [['t-title', 'title'], ['t-sub', 'subtitle'], ['t-line', 'line']]) {
+      $(id).addEventListener('input', e => {
+        state.text[key] = e.target.value;
+        state.touched = true;
+        $('ai-ideas').querySelectorAll('.idea').forEach(b => b.setAttribute('aria-pressed', 'false'));
+        scheduleRefresh();
+      });
+    }
+    $('t-infos').addEventListener('change', e => {
+      state.text.infos = e.target.checked;
+      refreshAll();
+    });
+    $('save-all').addEventListener('click', saveAll);
+    $('more').addEventListener('click', moreIdeas);
+    $('save-frames').addEventListener('click', saveFrames);
+    $('ai-go').addEventListener('click', askClaude);
+    let lastW = window.innerWidth, resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if ($('editor').open) renderEditor();
+        if (Math.abs(window.innerWidth - lastW) > 40) { lastW = window.innerWidth; refreshAll(); }
+      }, 250);
+    });
+    showGhosts();
+    setButtons();
+    setupAI();
+    if (window.STANDBILD_DEMO) loadDemo(window.STANDBILD_DEMO).catch(e => console.error(e));
+    if (android) S.openShared();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();

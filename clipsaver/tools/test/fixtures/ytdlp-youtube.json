@@ -1,0 +1,260 @@
+{
+ "id": "abcdefghijk",
+ "title": "Alpen in 4K",
+ "uploader": "Mountain Views",
+ "channel": "Mountain Views",
+ "duration": 754,
+ "webpage_url": "https://www.youtube.com/watch?v=abcdefghijk",
+ "extractor_key": "Youtube",
+ "extractor": "youtube",
+ "thumbnail": "https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg",
+ "thumbnails": [
+  {
+   "url": "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg",
+   "preference": -7,
+   "width": 480,
+   "height": 360,
+   "id": "1"
+  },
+  {
+   "url": "https://i.ytimg.com/vi/abcdefghijk/sddefault.jpg",
+   "preference": -5,
+   "id": "2"
+  },
+  {
+   "url": "https://i.ytimg.com/vi_webp/abcdefghijk/maxresdefault.webp",
+   "preference": -2,
+   "id": "3"
+  },
+  {
+   "url": "https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg",
+   "preference": -1,
+   "id": "4"
+  }
+ ],
+ "formats": [
+  {
+   "format_id": "sb0",
+   "ext": "mhtml",
+   "vcodec": "none",
+   "acodec": "none",
+   "width": 160,
+   "height": 90,
+   "filesize": null,
+   "tbr": null,
+   "fps": null,
+   "abr": null,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=sb0",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   },
+   "format_note": "storyboard"
+  },
+  {
+   "format_id": "139",
+   "ext": "m4a",
+   "vcodec": "none",
+   "acodec": "mp4a.40.5",
+   "width": null,
+   "height": null,
+   "filesize": 4700000,
+   "tbr": 48.8,
+   "fps": null,
+   "abr": 48.8,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=139",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  },
+  {
+   "format_id": "140",
+   "ext": "m4a",
+   "vcodec": "none",
+   "acodec": "mp4a.40.2",
+   "width": null,
+   "height": null,
+   "filesize": 12100000,
+   "tbr": 129.5,
+   "fps": null,
+   "abr": 129.5,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=140",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  },
+  {
+   "format_id": "251",
+   "ext": "webm",
+   "vcodec": "none",
+   "acodec": "opus",
+   "width": null,
+   "height": null,
+   "filesize": 14300000,
+   "tbr": 152,
+   "fps": null,
+   "abr": 152,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=251",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  },
+  {
+   "format_id": "18",
+   "ext": "mp4",
+   "vcodec": "avc1.42001E",
+   "acodec": "mp4a.40.2",
+   "width": 640,
+   "height": 360,
+   "filesize": 40000000,
+   "tbr": 420,
+   "fps": 30,
+   "abr": null,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=18",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  },
+  {
+   "format_id": "137",
+   "ext": "mp4",
+   "vcodec": "avc1.640028",
+   "acodec": "none",
+   "width": 1920,
+   "height": 1080,
+   "filesize": 400000000,
+   "tbr": 4200,
+   "fps": 30,
+   "abr": null,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=137",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  },
+  {
+   "format_id": "248",
+   "ext": "webm",
+   "vcodec": "vp9",
+   "acodec": "none",
+   "width": 1920,
+   "height": 1080,
+   "filesize": 380000000,
+   "tbr": 4000,
+   "fps": 30,
+   "abr": null,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=248",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  },
+  {
+   "format_id": "399",
+   "ext": "mp4",
+   "vcodec": "av01.0.08M.08",
+   "acodec": "none",
+   "width": 1920,
+   "height": 1080,
+   "filesize": 300000000,
+   "tbr": 3100,
+   "fps": 30,
+   "abr": null,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=399",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  },
+  {
+   "format_id": "271",
+   "ext": "webm",
+   "vcodec": "vp9",
+   "acodec": "none",
+   "width": 2560,
+   "height": 1440,
+   "filesize": 900000000,
+   "tbr": 9500,
+   "fps": 30,
+   "abr": null,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=271",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  },
+  {
+   "format_id": "400",
+   "ext": "mp4",
+   "vcodec": "av01.0.12M.08",
+   "acodec": "none",
+   "width": 2560,
+   "height": 1440,
+   "filesize": 800000000,
+   "tbr": 8500,
+   "fps": 30,
+   "abr": null,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=400",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  },
+  {
+   "format_id": "313",
+   "ext": "webm",
+   "vcodec": "vp9",
+   "acodec": "none",
+   "width": 3840,
+   "height": 2160,
+   "filesize": 2200000000,
+   "tbr": 23000,
+   "fps": 30,
+   "abr": null,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=313",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  },
+  {
+   "format_id": "337",
+   "ext": "webm",
+   "vcodec": "vp09.02.51.10.01.09.16.09.00",
+   "acodec": "none",
+   "width": 3840,
+   "height": 2160,
+   "filesize": 2500000000,
+   "tbr": 26000,
+   "fps": 30,
+   "abr": null,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=337",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   },
+   "dynamic_range": "HDR10"
+  },
+  {
+   "format_id": "401",
+   "ext": "mp4",
+   "vcodec": "av01.0.13M.08",
+   "acodec": "none",
+   "width": 3840,
+   "height": 2160,
+   "filesize": 1900000000,
+   "tbr": 20000,
+   "fps": 30,
+   "abr": null,
+   "url": "https://rr1---sn.googlevideo.com/videoplayback?itag=401",
+   "protocol": "https",
+   "http_headers": {
+    "User-Agent": "Mozilla/5.0"
+   }
+  }
+ ]
+}

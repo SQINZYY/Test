@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lucide "orbit" (ISC-Lizenz), erzeugt von tools/make_glyphs.js -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M20.341 6.484 A10 10 0 0 1 10.266 21.85 M3.659 17.516 A10 10 0 0 1 13.74 2.152 M9 12 A3 3 0 1 0 15 12 A3 3 0 1 0 9 12 Z M17 5 A2 2 0 1 0 21 5 A2 2 0 1 0 17 5 Z M3 19 A2 2 0 1 0 7 19 A2 2 0 1 0 3 19 Z"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>
