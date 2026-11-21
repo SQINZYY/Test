@@ -3,6 +3,9 @@
 
 # SetupBuilder
 
+> Ebenfalls in diesem Repository: **[ClipSaver](clipsaver/README.md)** – Android-App zum Speichern von Videos (1080p/1440p/4K)
+> und Bildern von jeder Plattform (TikTok, YouTube, Instagram, X, Facebook, Reddit …) und von Werbung. APK: [`clipsaver/release/ClipSaver.apk`](clipsaver/release/ClipSaver.apk)
+
 Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die garantiert zusammenpassen, Teile vergleichen, Budget verwalten, den eigenen PC mit Freunden teilen und Upgrade-Tipps bekommen.
 
 > Ebenfalls in diesem Repo: **[Dark Fantasy Generator](darkfantasy/README.md)** – Fantasy-Charaktere mit zufälligen Namen, Klassen,

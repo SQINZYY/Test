@@ -1,0 +1,48 @@
+// Robolectric-Test: startet MainActivity, BrowserActivity und DownloadService auf dem PC (ohne Gerät).
+// Vorher ./tools/build.sh ausführen (liefert build/classes und build/base.apk).  Aufruf: ./tools/robotest/run.sh
+plugins { id 'java' }
+
+def mirror = 'https://maven-central.storage-download.googleapis.com/maven2'
+def root = file('../..')
+repositories {
+    maven { url mirror }
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation('org.robolectric:robolectric:4.17') {
+        exclude group: 'androidx.test', module: 'monitor'
+        exclude group: 'androidx.test.espresso'
+    }
+    testImplementation project(':monitor')
+    // wie bei Android-Gradle-Projekten auch zur Laufzeit; Robolectric lädt Android selbst in einer Sandbox
+    testImplementation files("$root/.build-tools/android-all-34.jar")
+    // App-Klassen samt youtubedl-android, Kotlin, Jackson … aus dem letzten Build
+    testImplementation files("$root/build/classes")
+}
+
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
+
+test {
+    systemProperty 'robolectric.dependency.repo.url', mirror
+    systemProperty 'robolectric.dependency.repo.id', 'central-mirror'
+    // Robolectric-MediaStore schreibt über FileDescriptor-Interna
+    jvmArgs '--add-opens', 'java.base/java.io=ALL-UNNAMED'
+    testLogging { events 'passed', 'failed'; exceptionFormat 'full'; showStandardStreams = true }
+}
+
+// Pfade zu Manifest, Ressourcen-APK und Assets wie bei einem Android-Gradle-Build
+tasks.register('testConfig') {
+    def out = file("$buildDir/generated/testconfig/com/android/tools/test_config.properties")
+    outputs.file out
+    doLast {
+        out.parentFile.mkdirs()
+        out.text = "android_merged_manifest=${root}/app/AndroidManifest.xml\n" +
+                "android_merged_assets=${root}/app/assets\n" +
+                "android_resource_apk=${root}/build/base.apk\n" +
+                "android_custom_package=de.clipsaver.app\n"
+    }
+}
+sourceSets.test.resources.srcDir "$buildDir/generated/testconfig"
+processTestResources.dependsOn testConfig

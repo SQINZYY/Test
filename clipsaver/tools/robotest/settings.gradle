@@ -1,0 +1,9 @@
+// Maven-Central-Spiegel von Google zuerst (repo.maven.apache.org drosselt viele Anfragen)
+pluginManagement {
+    repositories {
+        maven { url 'https://maven-central.storage-download.googleapis.com/maven2' }
+        gradlePluginPortal()
+    }
+}
+rootProject.name = 'clipsaver-robotest'
+include 'monitor'
