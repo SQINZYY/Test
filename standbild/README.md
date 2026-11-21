@@ -1,12 +1,14 @@
 # Standbild
 
+[← Alle Projekte](../README.md)
+
 Video oder Foto rein, Poster raus: Standbild schaut sich ein Video an (TikTok, YouTube Shorts oder längere Videos), sucht die
 stärksten Momente heraus und gestaltet daraus zwölf druckfertige Poster in verschiedenen Stilen. Fotos (eins oder bis zu 12)
 werden direkt zu Postern. Alles läuft auf dem Gerät, nichts wird hochgeladen.
 
-- **Android:** [`release/Standbild.apk`](../release/Standbild.apk) (ab Android 7, ca. 250 KB). Installation wie bei SetupBuilder:
+- **Android:** [`release/Standbild.apk`](release/Standbild.apk) (ab Android 7, ca. 250 KB). Installation wie bei SetupBuilder:
   APK aufs Handy laden, öffnen, „Unbekannte Apps installieren“ erlauben.
-- **PC (Browser):** [`release/Standbild.html`](../release/Standbild.html) herunterladen und doppelt anklicken. Eine einzige Datei mit
+- **PC (Browser):** [`release/Standbild.html`](release/Standbild.html) herunterladen und doppelt anklicken. Eine einzige Datei mit
   allen Schriften und Skripten, läuft offline in Chrome, Edge, Firefox und Safari.
 
 ## So funktioniert's
@@ -51,8 +53,8 @@ den Dateinamen, wenn er lesbar ist. Als Claude-Artifact geöffnet, kann zusätzl
 - `www/js/zip.js` – kleiner ZIP-Packer für „Alle herunterladen“
 - `www/fonts/` – Anton, Archivo Black, IBM Plex Sans/Mono, Instrument Serif, Shrikhand (SIL Open Font License, siehe `fonts/LICENSE.md`)
 - `android/` – WebView-Hülle: Video- und Fotoauswahl, geteilte Dateien, Speichern in der Galerie, Zurück-Taste
-- `build.sh` – baut `release/Standbild.apk` ohne Android SDK (gleiche Werkzeuge wie `tools/build.sh`)
-- `build-web.js` – baut `release/Standbild.html` für den PC: `node standbild/build-web.js`
+- `build.sh` – baut `standbild/release/Standbild.apk` ohne Android SDK (gleiche Werkzeuge wie `setupbuilder/tools/build.sh`)
+- `build-web.js` – baut `standbild/release/Standbild.html` für den PC: `node standbild/build-web.js`
 - `make_icons.py` – erzeugt die PNG-Launcher-Icons
 
 Welche Videos gehen, hängt vom Browser bzw. der Android-WebView ab: MP4 (H.264) und WebM klappen überall, HEVC/H.265 (iPhone-MOV)

@@ -1,8 +1,10 @@
 # DarkOS – Custom Handy-Launcher
 
+[← Alle Projekte](../README.md)
+
 Ein futuristischer Android-Launcher mit schwarzem Design, Neon-Akzenten, Widgets, Animationen und eigenen App-Icons.
 
-**APK:** [`release/DarkOS.apk`](../release/DarkOS.apk) (ab Android 7, ca. 330 KB)
+**APK:** [`release/DarkOS.apk`](release/DarkOS.apk) (ab Android 7, ca. 330 KB)
 
 ## Installieren
 
@@ -53,7 +55,7 @@ Internet wird nur für das Wetter genutzt. Alle Einstellungen bleiben auf dem Ge
 - `res/drawable/g_*.xml` – Neon-Symbole, erzeugt aus [Lucide](https://lucide.dev) (ISC) mit
   `node darkos/tools/make_glyphs.js <lucide-static>/icon-nodes.json`
 - `assets/fonts/` – Orbitron (SIL Open Font License), Lizenzen in `assets/licenses/`
-- `tools/build.sh` – baut `release/DarkOS.apk` ohne Android SDK (lädt aapt2, dx und die Android-Klassen von Maven Central)
+- `tools/build.sh` – baut `darkos/release/DarkOS.apk` ohne Android SDK (lädt aapt2, dx und die Android-Klassen von Maven Central)
 - `tools/make_icons.py` – PNG-Launcher-Icons für Android 7
 - `test/` – Robolectric-Tests mit Screenshots: `darkos/tools/build.sh && mvn -f darkos/test/pom.xml test`
   (Screenshots landen in `build/darkos/screenshots/`). `test/src/stubs` ersetzt die nur bei Google gehostete

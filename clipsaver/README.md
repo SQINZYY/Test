@@ -1,5 +1,7 @@
 # ClipSaver
 
+[← Alle Projekte](../README.md)
+
 Android-App zum Speichern von Videos und Bildern **von jeder Plattform**: TikTok, YouTube, Instagram, X/Twitter, Facebook, Reddit,
 Pinterest, Snapchat, Threads, Bluesky, Vimeo, Twitch, Tumblr und über 2000 weitere Seiten. Link einfügen (oder in der jeweiligen App auf
 **Teilen → ClipSaver**), bei Videos die Qualität wählen – **1080p, 1440p oder 4K** – und herunterladen. Beiträge, die nur aus Bildern

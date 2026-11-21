@@ -1,5 +1,7 @@
 # Arbeitszeit
 
+[← Alle Projekte](../README.md)
+
 Android-App zum Planen und Erfassen der Arbeitszeit: Plan-Zeiten eintragen, die tatsächlichen Zeiten
 (z. B. „schon um 6:57 statt 7:00 da“) festhalten und sehen, wie lange man am Tag da war bzw. da sein will.
 Die **Mittagspause (30 min) wird automatisch abgezogen**, das **Wochensoll ist 39 Stunden** (beides einstellbar).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Baut release/DarkFantasyGenerator.apk ohne Android SDK – nutzt dieselben Werkzeuge wie tools/build.sh
+# Baut darkfantasy/release/DarkFantasyGenerator.apk ohne Android SDK – nutzt dieselben Werkzeuge wie setupbuilder/tools/build.sh
 # (aapt2, dx, Android-Klassen von Maven Central) und dieselbe Signatur.
 set -euo pipefail
 
@@ -31,7 +31,7 @@ echo "Tests …"
 node "$APP/test.js"
 
 rm -rf "$OUT"
-mkdir -p "$OUT/classes" "$ROOT/release"
+mkdir -p "$OUT/classes" "$APP/release"
 
 echo "Ressourcen …"
 "$TOOLS/aapt2" compile --dir "$APP/res" -o "$OUT/res.zip"
@@ -48,7 +48,7 @@ java -cp "$TOOLS/dx.jar" com.android.dx.command.Main --dex --min-sdk-version=24 
   --output="$OUT/classes.dex" "$OUT/classes"
 
 echo "Packen & signieren …"
-python3 "$ROOT/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$ROOT/release/DarkFantasyGenerator.apk" \
+python3 "$ROOT/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$APP/release/DarkFantasyGenerator.apk" \
   "$ROOT/tools/debug-signing.p12" android
 
-echo "Fertig: release/DarkFantasyGenerator.apk ($(du -h "$ROOT/release/DarkFantasyGenerator.apk" | cut -f1))"
+echo "Fertig: darkfantasy/release/DarkFantasyGenerator.apk ($(du -h "$APP/release/DarkFantasyGenerator.apk" | cut -f1))"

@@ -1,10 +1,12 @@
 # Diashow Studio
 
+[← Alle Projekte](../README.md)
+
 Android-App, die aus deinen Fotos **Diashow-Videos (MP4)** macht – mit Übergängen, Zoom-Effekten, Farb-Looks,
 Titeln und eigener Musik. Dazu gibt es **Collagen**, einen **Foto-Editor** und **animierte GIFs**.
 Alles läuft auf dem Handy, ohne Internet und ohne Konto.
 
-**APK:** [`release/DiashowStudio.apk`](../release/DiashowStudio.apk) (ab Android 7, ca. 250 KB)
+**APK:** [`release/DiashowStudio.apk`](release/DiashowStudio.apk) (ab Android 7, ca. 250 KB)
 
 ## Installieren
 

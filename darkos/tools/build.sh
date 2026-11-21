@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Baut release/DarkOS.apk ohne Android Studio / Android SDK.
+# Baut darkos/release/DarkOS.apk ohne Android Studio / Android SDK.
 # Benötigt: Java (JDK 17+), Python 3 mit "cryptography", curl, unzip.
 # Die Werkzeuge (aapt2, dx, Android-Klassen) werden einmalig von Maven Central geladen.
 set -euo pipefail
@@ -30,7 +30,7 @@ if [ ! -x "$TOOLS/aapt2" ]; then
 fi
 
 rm -rf "$OUT"
-mkdir -p "$OUT/classes" "$OUT/gen" "$ROOT/release"
+mkdir -p "$OUT/classes" "$OUT/gen" "$APP/release"
 
 echo "Ressourcen …"
 "$TOOLS/aapt2" compile --dir "$APP/res" -o "$OUT/res.zip"
@@ -47,7 +47,7 @@ java -cp "$TOOLS/dx.jar" com.android.dx.command.Main --dex --min-sdk-version=24 
   --output="$OUT/classes.dex" "$OUT/classes"
 
 echo "Packen & signieren …"
-python3 "$ROOT/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$ROOT/release/DarkOS.apk" \
+python3 "$ROOT/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$APP/release/DarkOS.apk" \
   "$ROOT/tools/debug-signing.p12" android
 
-echo "Fertig: release/DarkOS.apk ($(du -h "$ROOT/release/DarkOS.apk" | cut -f1))"
+echo "Fertig: darkos/release/DarkOS.apk ($(du -h "$APP/release/DarkOS.apk" | cut -f1))"

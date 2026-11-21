@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Baut release/Standbild.apk ohne Android Studio / Android SDK – mit denselben Werkzeugen wie tools/build.sh.
+# Baut standbild/release/Standbild.apk ohne Android Studio / Android SDK – mit denselben Werkzeugen wie setupbuilder/tools/build.sh.
 # Benötigt: Java (JDK 17+), Python 3 mit "cryptography", curl, unzip.
 set -euo pipefail
 
@@ -28,7 +28,7 @@ if [ ! -x "$TOOLS/aapt2" ]; then
 fi
 
 rm -rf "$OUT"
-mkdir -p "$OUT/classes" "$OUT/assets" "$ROOT/release"
+mkdir -p "$OUT/classes" "$OUT/assets" "$APP/release"
 cp -r "$APP/www" "$OUT/assets/www"
 
 echo "Ressourcen …"
@@ -46,7 +46,7 @@ java -cp "$TOOLS/dx.jar" com.android.dx.command.Main --dex --min-sdk-version=24 
   --output="$OUT/classes.dex" "$OUT/classes"
 
 echo "Packen & signieren …"
-python3 "$ROOT/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$ROOT/release/Standbild.apk" \
+python3 "$ROOT/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$APP/release/Standbild.apk" \
   "$ROOT/tools/debug-signing.p12" android
 
-echo "Fertig: release/Standbild.apk ($(du -h "$ROOT/release/Standbild.apk" | cut -f1))"
+echo "Fertig: standbild/release/Standbild.apk ($(du -h "$APP/release/Standbild.apk" | cut -f1))"

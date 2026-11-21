@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Baut release/DiashowStudio.apk ohne Android Studio / Android SDK.
+# Baut diashow/release/DiashowStudio.apk ohne Android Studio / Android SDK.
 # Benötigt: Java (JDK 17+), Python 3 mit "cryptography", curl, unzip.
 # Die Werkzeuge (aapt2, dx, Android-Klassen) werden einmalig von Maven Central geladen
-# (gemeinsamer Cache mit SetupBuilder in ../.build-tools).
+# (gemeinsamer Cache aller Apps in .build-tools/ im Hauptordner).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(cd "$ROOT/.." && pwd)"
 TOOLS="$REPO/.build-tools"
 OUT="$ROOT/build"
-APK="$REPO/release/DiashowStudio.apk"
+APK="$ROOT/release/DiashowStudio.apk"
 VERSION_CODE="${VERSION_CODE:-1}"
 VERSION_NAME="${VERSION_NAME:-1.0}"
 MAVEN="https://repo1.maven.org/maven2"
@@ -31,7 +31,7 @@ if [ ! -x "$TOOLS/aapt2" ]; then
 fi
 
 rm -rf "$OUT"
-mkdir -p "$OUT/classes" "$REPO/release"
+mkdir -p "$OUT/classes" "$ROOT/release"
 
 echo "Ressourcen …"
 "$TOOLS/aapt2" compile --dir "$ROOT/app/res" -o "$OUT/res.zip"
@@ -51,4 +51,4 @@ echo "Packen & signieren …"
 python3 "$REPO/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$APK" \
   "$REPO/tools/debug-signing.p12" android
 
-echo "Fertig: release/DiashowStudio.apk ($(du -h "$APK" | cut -f1))"
+echo "Fertig: diashow/release/DiashowStudio.apk ($(du -h "$APK" | cut -f1))"

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Baut release/SetupBuilder.apk ohne Android Studio / Android SDK.
+# Baut setupbuilder/release/SetupBuilder.apk ohne Android Studio / Android SDK.
 # Benötigt: Java (JDK 17+), Python 3 mit "cryptography", curl, unzip.
 # Die Werkzeuge (aapt2, dx, Android-Klassen) werden einmalig von Maven Central geladen.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TOOLS="$ROOT/.build-tools"
-OUT="$ROOT/build"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"   # setupbuilder/
+REPO="$(cd "$ROOT/.." && pwd)"             # Repo-Wurzel (gemeinsame Werkzeuge in tools/ und .build-tools/)
+TOOLS="$REPO/.build-tools"
+OUT="$REPO/build/setupbuilder"
 VERSION_CODE="${VERSION_CODE:-7}"
 VERSION_NAME="${VERSION_NAME:-1.6}"
 MAVEN="https://repo1.maven.org/maven2"
@@ -45,7 +46,7 @@ java -cp "$TOOLS/dx.jar" com.android.dx.command.Main --dex --min-sdk-version=24 
   --output="$OUT/classes.dex" "$OUT/classes"
 
 echo "Packen & signieren …"
-python3 "$ROOT/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$ROOT/release/SetupBuilder.apk" \
-  "$ROOT/tools/debug-signing.p12" android
+python3 "$REPO/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$ROOT/release/SetupBuilder.apk" \
+  "$REPO/tools/debug-signing.p12" android
 
-echo "Fertig: release/SetupBuilder.apk ($(du -h "$ROOT/release/SetupBuilder.apk" | cut -f1))"
+echo "Fertig: setupbuilder/release/SetupBuilder.apk ($(du -h "$ROOT/release/SetupBuilder.apk" | cut -f1))"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Baut weckton/release/Weckton.apk ohne Android Studio / Android SDK.
 # Benötigt: Java (JDK 17+), Python 3 mit "cryptography", curl, unzip.
-# Nutzt dieselben Werkzeuge wie SetupBuilder (../tools/build.sh), geladen nach .build-tools im Repo.
+# Nutzt dieselben Werkzeuge wie SetupBuilder (setupbuilder/tools/build.sh), geladen nach .build-tools im Repo.
 set -euo pipefail
 
 APP="$(cd "$(dirname "$0")/.." && pwd)"

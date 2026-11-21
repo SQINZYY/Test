@@ -1,9 +1,11 @@
 # Dark Fantasy Generator
 
+[← Alle Projekte](../README.md)
+
 Android-App, die Fantasy-Charaktere mit zufälligen Namen, Klassen, Fähigkeiten, Seltenheiten und Lore erschafft – komplett offline,
 ohne Berechtigungen.
 
-**APK:** [`release/DarkFantasyGenerator.apk`](../release/DarkFantasyGenerator.apk) (ab Android 7, ca. 100 KB).
+**APK:** [`release/DarkFantasyGenerator.apk`](release/DarkFantasyGenerator.apk) (ab Android 7, ca. 100 KB).
 Installieren wie SetupBuilder: APK aufs Handy laden, öffnen, „Unbekannte Apps installieren“ erlauben.
 
 ## Funktionen
@@ -35,6 +37,6 @@ Installieren wie SetupBuilder: APK aufs Handy laden, öffnen, „Unbekannte Apps
 - `assets/www/data.js` – alle Inhalte, `generator.js` – Generator mit Seeds und Codes, `sigil.js` – Porträt-SVG, `app.js` – Oberfläche,
   `game.js` – Spiellogik der Arena, `arena.js` – Kampfbildschirm
 - `java/…/MainActivity.java` – WebView-Hülle: Speicher, Teilen, Zwischenablage, geteilte Codes empfangen
-- `build.sh` – baut die APK ohne Android SDK (gleiche Werkzeuge und Signatur wie `tools/build.sh`)
+- `build.sh` – baut die APK ohne Android SDK (gleiche Werkzeuge und Signatur wie `setupbuilder/tools/build.sh`)
 - `test.js` – Tests für Generator, Editor und Arena: `node darkfantasy/test.js`
 - `make_icons.py` – erzeugt die PNG-Icons

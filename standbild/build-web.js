@@ -1,10 +1,10 @@
-// Baut release/Standbild.html: die ganze App in einer Datei (Schriften und Skripte eingebettet).
+// Baut standbild/release/Standbild.html: die ganze App in einer Datei (Schriften und Skripte eingebettet).
 // Läuft per Doppelklick im Browser, auch ohne Internet.  Aufruf: node standbild/build-web.js
 const fs = require('fs');
 const path = require('path');
 
 const WWW = path.join(__dirname, 'www');
-const OUT = path.join(__dirname, '..', 'release', 'Standbild.html');
+const OUT = path.join(__dirname, 'release', 'Standbild.html');
 
 let html = fs.readFileSync(path.join(WWW, 'index.html'), 'utf8');
 let css = fs.readFileSync(path.join(WWW, 'style.css'), 'utf8');
@@ -19,4 +19,4 @@ html = html.replace(/<script src="(js\/[^"]+)"><\/script>/g, (m, f) => {
 html = html.replace(/\n?<!-- \/?(page|head|body) -->/g, '');
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 fs.writeFileSync(OUT, html);
-console.log(`Fertig: release/Standbild.html (${Math.round(fs.statSync(OUT).size / 1024)} KB)`);
+console.log(`Fertig: standbild/release/Standbild.html (${Math.round(fs.statSync(OUT).size / 1024)} KB)`);

@@ -1,9 +1,11 @@
 # Unterwegs – Routenplaner
 
+[← Alle Projekte](../README.md)
+
 Android-App, die eine Route von einer Adresse zu einer anderen berechnet – mit genau den Verkehrsmitteln, die du auswählst:
 **zu Fuß, Fahrrad, Auto, Bus, Bahn (S-/U-Bahn, Tram) und Zug (Regional- und Fernverkehr)**, auch kombiniert.
 
-**APK:** [`release/Unterwegs.apk`](../release/Unterwegs.apk) – Version 1.3 (ab Android 7, ca. 150 KB, braucht Internet).
+**APK:** [`release/Unterwegs.apk`](release/Unterwegs.apk) – Version 1.3 (ab Android 7, ca. 150 KB, braucht Internet).
 
 ## Installieren
 
@@ -91,7 +93,7 @@ Dienste geschickt; der Standort wird nur abgefragt, wenn du „Mein Standort“ 
   mit eigenem User-Agent), Standortfreigabe, Google Maps öffnen, Teilen, Links im Browser öffnen, Zurück-Taste
 - `app/java/de/unterwegs/app/Reminders.java` + `ReminderReceiver.java` – Losgeh-Erinnerungen: Wecker (AlarmManager, genau auf
   die Minute), Benachrichtigung mit „Navigation starten“, Neuplanung nach Neustart/Update
-- `tools/build.sh` – baut die APK ohne Android SDK (nutzt `tools/sign_apk.py` und den Schlüssel von SetupBuilder)
+- `tools/build.sh` – baut die APK ohne Android SDK (nutzt die gemeinsamen Werkzeuge `tools/sign_apk.py` und `tools/debug-signing.p12` im Hauptordner)
 - `tools/make_icons.py` – App-Icons
 - `tools/test.js` – Tests für Logik und Ausweichlösungen: `node unterwegs/tools/test.js`
 - `tools/ui-test.js` + `tools/fixtures.js` – Oberflächentest in Chromium mit nachgebauten Antworten der Dienste
@@ -100,7 +102,7 @@ Dienste geschickt; der Standort wird nur abgefragt, wenn du „Mein Standort“ 
 ## Bauen
 
 ```sh
-unterwegs/tools/build.sh          # → release/Unterwegs.apk
+unterwegs/tools/build.sh          # → unterwegs/release/Unterwegs.apk
 node unterwegs/tools/test.js
 node unterwegs/tools/ui-test.js   # braucht Playwright + Chromium
 ```

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Baut release/Unterwegs.apk ohne Android Studio / Android SDK.
+# Baut unterwegs/release/Unterwegs.apk ohne Android Studio / Android SDK.
 # Benötigt: Java (JDK 17+), Python 3 mit "cryptography", curl, unzip.
 # Nutzt dieselben Werkzeuge wie SetupBuilder (tools/sign_apk.py, .build-tools im Repo-Wurzelordner);
 # aapt2, dx und die Android-Klassen werden einmalig von Maven Central geladen.
@@ -30,7 +30,7 @@ if [ ! -x "$TOOLS/aapt2" ]; then
 fi
 
 rm -rf "$OUT"
-mkdir -p "$OUT/classes" "$OUT/gen" "$REPO/release"
+mkdir -p "$OUT/classes" "$OUT/gen" "$APP/release"
 
 echo "Ressourcen …"
 "$TOOLS/aapt2" compile --dir "$APP/app/res" -o "$OUT/res.zip"
@@ -47,7 +47,7 @@ java -cp "$TOOLS/dx.jar" com.android.dx.command.Main --dex --min-sdk-version=24 
   --output="$OUT/classes.dex" "$OUT/classes"
 
 echo "Packen & signieren …"
-python3 "$REPO/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$REPO/release/Unterwegs.apk" \
+python3 "$REPO/tools/sign_apk.py" "$OUT/base.apk" "$OUT/classes.dex" "$APP/release/Unterwegs.apk" \
   "$REPO/tools/debug-signing.p12" android
 
-echo "Fertig: release/Unterwegs.apk ($(du -h "$REPO/release/Unterwegs.apk" | cut -f1))"
+echo "Fertig: unterwegs/release/Unterwegs.apk ($(du -h "$APP/release/Unterwegs.apk" | cut -f1))"

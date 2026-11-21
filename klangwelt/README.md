@@ -1,5 +1,7 @@
 # Klangwelt
 
+[← Alle Projekte](../README.md)
+
 Musik-App im Stil von Spotify für **Windows (EXE)** und **Android (APK)**, gebaut auf dem
 [Spotify Tracks Dataset](https://huggingface.co/datasets/maharshipandya/spotify-tracks-dataset): **81.206 Songs** von rund
 30.000 Künstlern aus 114 Genres, mit Audio-Merkmalen (Tempo, Tonart, Energie, Tanzbarkeit, Stimmung …).
