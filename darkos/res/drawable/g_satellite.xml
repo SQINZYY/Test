@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lucide "satellite-dish" (ISC-Lizenz), erzeugt von tools/make_glyphs.js -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M18 12 a6 6 0 0 0 -6 -6 M2.824 10.459 a8 8 0 0 0 10.717 10.717 c0.558 -0.276 0.623 -1.012 0.183 -1.452 l-9.448 -9.448 c-0.44 -0.44 -1.176 -0.375 -1.452 0.183 M22 12 A10 10 0 0 0 12 2 M9 15 l4 -4"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

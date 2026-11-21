@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lucide "cloud-moon" (ISC-Lizenz), erzeugt von tools/make_glyphs.js -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M13 16 a3 3 0 0 1 0 6 H7 a5 5 0 1 1 4.9 -6 z M18.376 14.512 a6 6 0 0 0 3.461 -4.127 c0.148 -0.625 -0.659 -0.97 -1.248 -0.714 a4 4 0 0 1 -5.259 -5.26 c0.255 -0.589 -0.09 -1.395 -0.716 -1.248 a6 6 0 0 0 -4.594 5.36"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

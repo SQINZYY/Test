@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lucide "memory-stick" (ISC-Lizenz), erzeugt von tools/make_glyphs.js -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M12 12 v-2 M12 18 v-2 M16 12 v-2 M16 18 v-2 M2 11 h1.5 M20 18 v-2 M20.5 11 H22 M4 18 v-2 M8 12 v-2 M8 18 v-2 M4 6 H20 A2 2 0 0 1 22 8 V14 A2 2 0 0 1 20 16 H4 A2 2 0 0 1 2 14 V8 A2 2 0 0 1 4 6 Z"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

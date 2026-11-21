@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lucide "monitor-play" (ISC-Lizenz), erzeugt von tools/make_glyphs.js -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M15.033 9.44 a0.647 0.647 0 0 1 0 1.12 l-4.065 2.352 a0.645 0.645 0 0 1 -0.968 -0.56 V7.648 a0.645 0.645 0 0 1 0.967 -0.56 z M12 17 v4 M8 21 h8 M4 3 H20 A2 2 0 0 1 22 5 V15 A2 2 0 0 1 20 17 H4 A2 2 0 0 1 2 15 V5 A2 2 0 0 1 4 3 Z"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>
