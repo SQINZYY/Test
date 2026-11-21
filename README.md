@@ -98,3 +98,10 @@ VERSION_CODE=8 VERSION_NAME=1.7 ./tools/build.sh
 Signiert wird mit dem Debug-Schlüssel `tools/debug-signing.p12` (Passwort `android`), damit Updates sich über die alte Version installieren lassen. Für eine Veröffentlichung im Play Store einen eigenen, geheimen Schlüssel verwenden.
 
 Neue Teile kommen in `app/assets/www/data.js` (mit Suchbegriffen `k` für den Import); danach `node tools/test-engine.js` laufen lassen.
+
+## Weitere App im Repo: Standbild
+
+[`standbild/`](standbild/README.md) macht aus einem Video (TikTok, YouTube Shorts, längere Clips) oder aus Fotos Poster: Die App
+sucht die schärfsten, unterschiedlichsten Momente heraus und gestaltet daraus zwölf druckfertige Poster in verschiedenen Stilen, die
+man bearbeiten und einzeln oder gesammelt herunterladen kann. Android: [`release/Standbild.apk`](release/Standbild.apk)
+(`standbild/build.sh`), PC: [`release/Standbild.html`](release/Standbild.html) per Doppelklick (`node standbild/build-web.js`).
