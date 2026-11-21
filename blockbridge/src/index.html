@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob: data:">
+  <meta name="color-scheme" content="dark light">
+  <title>BlockBridge</title>
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M8 20 22 13l14 7-14 7z" fill="#7ad152"/>
+          <path d="M8 20v16l14 7V27z" fill="#8a5a33"/>
+          <path d="M22 27v16l14-7V20z" fill="#6b4426"/>
+          <path d="M28 38l14-7 14 7-14 7z" fill="#6cc3ef"/>
+          <path d="M28 38v16l14 7V45z" fill="#3b7fb8"/>
+          <path d="M42 45v16l14-7V38z" fill="#2c6596"/>
+          <path d="M40 12h10l-3-3m3 3-3 3M24 52H14l3 3m-3-3 3-3" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div>
+          <h1>BlockBridge</h1>
+          <p class="tag">Minecraft-Inhalte zwischen <b class="java">Java</b> und <b class="bedrock">Bedrock</b> umwandeln</p>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- 1: Datei wählen -->
+      <section id="pick" class="card">
+        <label id="drop" class="drop" tabindex="0">
+          <input id="file" type="file" multiple hidden>
+          <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="drop-title">Datei auswählen</span>
+          <span class="drop-sub">oder hierher ziehen – Mod, Ressourcenpaket, Datenpaket, Add-on oder Skin</span>
+          <span class="chips"><i>.jar</i><i>.zip</i><i>.mcpack</i><i>.mcaddon</i><i>.png</i></span>
+        </label>
+      </section>
+
+      <section id="busy" class="card busy" hidden>
+        <div class="spinner" aria-hidden="true"></div>
+        <p id="busy-text">Datei wird gelesen …</p>
+      </section>
+
+      <section id="error" class="card error" hidden>
+        <h2>Das hat nicht geklappt</h2>
+        <p id="error-text"></p>
+        <button class="btn" data-action="reset">Andere Datei wählen</button>
+      </section>
+
+      <!-- 2: Was ist das? -->
+      <section id="info" class="card" hidden>
+        <div class="info-head">
+          <div id="info-icon" class="pack-icon"></div>
+          <div class="info-title">
+            <span id="info-kind" class="kind"></span>
+            <h2 id="info-name"></h2>
+            <p id="info-desc" class="muted"></p>
+          </div>
+          <button class="link" data-action="reset">Andere Datei</button>
+        </div>
+        <dl id="info-facts" class="facts"></dl>
+        <div id="info-notes"></div>
+      </section>
+
+      <!-- 3: Ziel wählen -->
+      <section id="target" class="card" hidden>
+        <h3>Umwandeln für …</h3>
+        <div class="editions">
+          <button class="edition bedrock" data-edition="bedrock" type="button">
+            <span class="ed-icon"><svg viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+            <span class="ed-text"><b>Bedrock Edition</b><small>Handy (früher Pocket Edition), Windows, Xbox, PlayStation, Switch</small></span>
+            <span class="ed-out"></span>
+          </button>
+          <button class="edition java" data-edition="java" type="button">
+            <span class="ed-icon"><svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="12.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 20.5h8M12 16.5v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+            <span class="ed-text"><b>Java Edition</b><small>PC & Mac mit dem Minecraft Launcher</small></span>
+            <span class="ed-out"></span>
+          </button>
+        </div>
+        <p id="target-reason" class="reason" hidden></p>
+
+        <div id="options" class="options" hidden>
+          <div id="opt-version" class="field" hidden>
+            <label for="version">Minecraft-Version</label>
+            <select id="version"></select>
+            <input id="custom-rp" type="number" min="1" max="999" placeholder="pack_format, z. B. 75" hidden>
+          </div>
+          <div id="opt-model" class="field" hidden>
+            <label for="model">Skin-Modell</label>
+            <select id="model">
+              <option value="auto">Automatisch erkennen</option>
+              <option value="classic">Normal (Steve, 4 Pixel breite Arme)</option>
+              <option value="slim">Schmal (Alex, 3 Pixel breite Arme)</option>
+            </select>
+          </div>
+          <div id="opt-name" class="field">
+            <label for="name">Name</label>
+            <input id="name" type="text" maxlength="80" autocomplete="off">
+          </div>
+          <div id="opt-desc" class="field">
+            <label for="desc">Beschreibung</label>
+            <input id="desc" type="text" maxlength="200" autocomplete="off">
+          </div>
+          <fieldset id="opt-mod" class="field checks" hidden>
+            <legend>Aus der Mod übernehmen</legend>
+            <label><input id="mod-items" type="checkbox" checked> Items</label>
+            <label><input id="mod-blocks" type="checkbox" checked> Blöcke</label>
+            <label><input id="mod-recipes" type="checkbox" checked> Rezepte</label>
+          </fieldset>
+          <button id="convert" class="btn primary big" type="button">Umwandeln</button>
+        </div>
+      </section>
+
+      <!-- 4: Ergebnis -->
+      <section id="result" class="card" hidden>
+        <div class="done-head">
+          <span class="done-icon"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <div>
+            <h2>Fertig umgewandelt</h2>
+            <p id="result-file" class="muted"></p>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="btn-open" class="btn primary" type="button" hidden>In Minecraft öffnen</button>
+          <button id="btn-save" class="btn" type="button">Speichern</button>
+          <button id="btn-share" class="btn" type="button" hidden>Teilen</button>
+        </div>
+        <p id="result-status" class="status" hidden></p>
+        <p id="result-hint" class="hint"></p>
+        <div id="summary" class="summary"></div>
+        <div id="report" class="report"></div>
+        <button class="btn ghost" data-action="reset" type="button">Nächste Datei umwandeln</button>
+      </section>
+
+      <details class="card help">
+        <summary>Was kann BlockBridge umwandeln?</summary>
+        <table>
+          <thead><tr><th>Datei</th><th>→ Bedrock</th><th>→ Java</th></tr></thead>
+          <tbody>
+            <tr><td>Java-Ressourcenpaket (.zip)</td><td>✔ Texturen, Sounds, Schrift</td><td>✔ andere Java-Version (1.8 – 1.21)</td></tr>
+            <tr><td>Bedrock-Ressourcenpaket (.mcpack)</td><td>–</td><td>✔ Texturen (auch .tga), Sounds, Animationen</td></tr>
+            <tr><td>Java-Mod (.jar: Forge, NeoForge, Fabric, Quilt)</td><td>◐ Items, Blöcke, Pflanzen, Namen, Rezepte</td><td>–</td></tr>
+            <tr><td>Java-Datenpaket (.zip)</td><td>◐ Funktionen (Befehle übersetzt), Rezepte</td><td>✔ andere Java-Version</td></tr>
+            <tr><td>Bedrock-Add-on / Verhaltenspaket</td><td>–</td><td>◐ Texturen, Funktionen, Rezepte</td></tr>
+            <tr><td>Skins (.png) / Skinpaket</td><td>✔ Skinpaket</td><td>✔ PNG (64×64)</td></tr>
+          </tbody>
+        </table>
+        <p class="muted">◐ = teilweise. Mods bestehen größtenteils aus Java-Programmcode – Maschinen, Kreaturen, neue Dimensionen oder Effekte lassen sich nicht automatisch übertragen. Welten wandelt das kostenlose Programm „Chunker“ um. Nach jeder Umwandlung zeigt BlockBridge genau, was übernommen wurde und was nicht.</p>
+        <p class="muted">Alles passiert auf deinem Gerät – es wird nichts hochgeladen.</p>
+      </details>
+    </main>
+
+    <footer class="foot">
+      <span>BlockBridge <span id="app-version">1.0</span></span>
+      <span>Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.</span>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

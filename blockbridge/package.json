@@ -1,0 +1,21 @@
+{
+  "name": "blockbridge",
+  "productName": "BlockBridge",
+  "version": "1.0.0",
+  "description": "Minecraft-Inhalte zwischen Java Edition und Bedrock Edition umwandeln",
+  "author": "BlockBridge",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:web": "node tools/build-web.mjs",
+    "test": "node --test test/*.test.mjs",
+    "build:win": "bash tools/build-win.sh",
+    "build:apk": "bash tools/build-apk.sh",
+    "build": "npm test && bash tools/build-win.sh && bash tools/build-apk.sh"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10",
+    "fflate": "0.8.2"
+  }
+}

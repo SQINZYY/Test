@@ -1,3 +1,12 @@
+# Apps in diesem Repository
+
+- **[BlockBridge](blockbridge/README.md)** – wandelt Minecraft-Inhalte (Mods, Ressourcen- und Datenpakete, Add-ons, Skins) zwischen
+  Java Edition und Bedrock/Pocket Edition um. Windows: [`release/BlockBridge.exe`](release/BlockBridge.exe),
+  Android: [`release/BlockBridge.apk`](release/BlockBridge.apk)
+- **SetupBuilder** (unten) – Android-App zum Planen von Gaming-PCs und Setups: [`release/SetupBuilder.apk`](release/SetupBuilder.apk)
+
+---
+
 # SetupBuilder
 
 Android-App zum Planen von Gaming-PCs und Setups: Komponenten auswählen, die garantiert zusammenpassen, Teile vergleichen, Budget verwalten, den eigenen PC mit Freunden teilen und Upgrade-Tipps bekommen.

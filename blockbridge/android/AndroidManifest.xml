@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="de.blockbridge.app">
+
+    <!-- Keine Berechtigungen nötig: Dateien kommen über die Dateiauswahl, gespeichert wird über den Speichern-Dialog -->
+    <queries>
+        <package android:name="com.mojang.minecraftpe" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/octet-stream" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Mods, Pakete und Skins mit BlockBridge öffnen oder an BlockBridge teilen -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/java-archive" />
+                <data android:mimeType="application/x-java-archive" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/*" />
+                <data android:mimeType="image/png" />
+            </intent-filter>
+        </activity>
+
+        <!-- Stellt fertige Dateien für Minecraft und zum Teilen bereit (nur lesend, nur aus dem Cache) -->
+        <provider
+            android:name=".FilesProvider"
+            android:authorities="de.blockbridge.app.files"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>

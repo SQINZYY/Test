@@ -1,0 +1,5 @@
+node_modules/
+dist/
+build/
+windows/web/
+windows/rsrc_windows_amd64.syso
